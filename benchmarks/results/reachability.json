@@ -4027,33 +4027,39 @@
       "status": "unresolved_symbol_dispatch"
     },
     {
-      "symbol": "gen_zero.capability.descriptor._freeze",
+      "symbol": "gen_zero.capability.descriptor._canon_str",
       "file": "python/gen_zero/capability/descriptor.py",
       "line": 50,
       "status": "unresolved_symbol_dispatch"
     },
     {
+      "symbol": "gen_zero.capability.descriptor._freeze",
+      "file": "python/gen_zero/capability/descriptor.py",
+      "line": 59,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
       "symbol": "gen_zero.capability.descriptor._thaw",
       "file": "python/gen_zero/capability/descriptor.py",
-      "line": 86,
+      "line": 97,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.capability.descriptor._restore_thawed",
       "file": "python/gen_zero/capability/descriptor.py",
-      "line": 106,
+      "line": 117,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.capability.descriptor._typed",
       "file": "python/gen_zero/capability/descriptor.py",
-      "line": 123,
+      "line": 134,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.capability.descriptor.CapabilityDescriptor",
       "file": "python/gen_zero/capability/descriptor.py",
-      "line": 151,
+      "line": 169,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -4071,25 +4077,25 @@
     {
       "symbol": "gen_zero.capability.descriptor.__post_init__",
       "file": "python/gen_zero/capability/descriptor.py",
-      "line": 167,
+      "line": 185,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.capability.descriptor.to_dict",
       "file": "python/gen_zero/capability/descriptor.py",
-      "line": 173,
+      "line": 204,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.capability.descriptor.from_dict",
       "file": "python/gen_zero/capability/descriptor.py",
-      "line": 192,
+      "line": 223,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.capability.descriptor.digest",
       "file": "python/gen_zero/capability/descriptor.py",
-      "line": 210,
+      "line": 241,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -6435,25 +6441,25 @@
     {
       "symbol": "gen_zero.causal.feature_space.source_space_from_info",
       "file": "python/gen_zero/causal/feature_space.py",
-      "line": 52,
+      "line": 51,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.feature_space._validate_space_dict",
       "file": "python/gen_zero/causal/feature_space.py",
-      "line": 93,
+      "line": 92,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.feature_space.load_source_space",
       "file": "python/gen_zero/causal/feature_space.py",
-      "line": 103,
+      "line": 102,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.feature_space._load_source_space_from_open",
       "file": "python/gen_zero/causal/feature_space.py",
-      "line": 124,
+      "line": 123,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -9429,91 +9435,91 @@
     {
       "symbol": "gen_zero.cli.cmd_stream",
       "file": "python/gen_zero/cli.py",
-      "line": 269,
+      "line": 292,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.cmd_grep",
       "file": "python/gen_zero/cli.py",
-      "line": 310,
+      "line": 333,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.cmd_compact",
       "file": "python/gen_zero/cli.py",
-      "line": 338,
+      "line": 361,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.cmd_mcp",
       "file": "python/gen_zero/cli.py",
-      "line": 397,
+      "line": 420,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.cmd_semantic",
       "file": "python/gen_zero/cli.py",
-      "line": 417,
+      "line": 440,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.cmd_anchor",
       "file": "python/gen_zero/cli.py",
-      "line": 427,
+      "line": 450,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli._load_block",
       "file": "python/gen_zero/cli.py",
-      "line": 491,
+      "line": 514,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.cmd_manifold_fit",
       "file": "python/gen_zero/cli.py",
-      "line": 497,
+      "line": 520,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.cmd_candidate_prior",
       "file": "python/gen_zero/cli.py",
-      "line": 597,
+      "line": 620,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.cmd_manifold_fuse",
       "file": "python/gen_zero/cli.py",
-      "line": 631,
+      "line": 654,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.cmd_status",
       "file": "python/gen_zero/cli.py",
-      "line": 689,
+      "line": 712,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.cmd_replay_status",
       "file": "python/gen_zero/cli.py",
-      "line": 716,
+      "line": 739,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.cmd_harness",
       "file": "python/gen_zero/cli.py",
-      "line": 737,
+      "line": 760,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.build_cli_parser",
       "file": "python/gen_zero/cli.py",
-      "line": 765,
+      "line": 788,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.main",
       "file": "python/gen_zero/cli.py",
-      "line": 944,
+      "line": 967,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -9543,13 +9549,13 @@
     {
       "symbol": "gen_zero.client._VisionEngineExtractor",
       "file": "python/gen_zero/client.py",
-      "line": 450,
+      "line": 460,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.GenZero",
       "file": "python/gen_zero/client.py",
-      "line": 465,
+      "line": 475,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -9585,595 +9591,595 @@
     {
       "symbol": "gen_zero.client.__init__",
       "file": "python/gen_zero/client.py",
-      "line": 453,
+      "line": 463,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.is_loaded",
       "file": "python/gen_zero/client.py",
-      "line": 457,
+      "line": 467,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.__call__",
       "file": "python/gen_zero/client.py",
-      "line": 461,
+      "line": 471,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.__init__",
       "file": "python/gen_zero/client.py",
-      "line": 468,
+      "line": 478,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.load_dual_head_checkpoint",
       "file": "python/gen_zero/client.py",
-      "line": 762,
+      "line": 772,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client._sync_scorer_after_checkpoint",
       "file": "python/gen_zero/client.py",
-      "line": 784,
+      "line": 794,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client._mark_untrained",
       "file": "python/gen_zero/client.py",
-      "line": 792,
+      "line": 802,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.sync_model_to_scorer",
       "file": "python/gen_zero/client.py",
-      "line": 812,
+      "line": 824,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.prepare_inference_state",
       "file": "python/gen_zero/client.py",
-      "line": 828,
+      "line": 840,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client._execute_expert_distribution",
       "file": "python/gen_zero/client.py",
-      "line": 837,
+      "line": 849,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.record_transition",
       "file": "python/gen_zero/client.py",
-      "line": 1196,
+      "line": 1224,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.decide",
       "file": "python/gen_zero/client.py",
-      "line": 1213,
+      "line": 1241,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client._constraint_formal_status",
       "file": "python/gen_zero/client.py",
-      "line": 1663,
+      "line": 1756,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client._apply_action_constraints",
       "file": "python/gen_zero/client.py",
-      "line": 1670,
+      "line": 1763,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client._adaptive_transition",
       "file": "python/gen_zero/client.py",
-      "line": 1719,
+      "line": 1812,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client._adaptive_transition_tuple",
       "file": "python/gen_zero/client.py",
-      "line": 1777,
+      "line": 1870,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.simulate",
       "file": "python/gen_zero/client.py",
-      "line": 1782,
+      "line": 1875,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.what_if",
       "file": "python/gen_zero/client.py",
-      "line": 1798,
+      "line": 1891,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.audit_action",
       "file": "python/gen_zero/client.py",
-      "line": 1820,
+      "line": 1913,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client._validate_candidates",
       "file": "python/gen_zero/client.py",
-      "line": 1888,
+      "line": 1981,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.plan_path",
       "file": "python/gen_zero/client.py",
-      "line": 1896,
+      "line": 1989,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.plan_bidirectional",
       "file": "python/gen_zero/client.py",
-      "line": 1911,
+      "line": 2004,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.evolve_round",
       "file": "python/gen_zero/client.py",
-      "line": 1928,
+      "line": 2021,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.decide_continuous",
       "file": "python/gen_zero/client.py",
-      "line": 1945,
+      "line": 2038,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.decide_visual",
       "file": "python/gen_zero/client.py",
-      "line": 1982,
+      "line": 2075,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.decide_streaming",
       "file": "python/gen_zero/client.py",
-      "line": 2066,
+      "line": 2161,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.reset_stream",
       "file": "python/gen_zero/client.py",
-      "line": 2097,
+      "line": 2192,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.decide_cpu_extreme",
       "file": "python/gen_zero/client.py",
-      "line": 2101,
+      "line": 2196,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.decide_step",
       "file": "python/gen_zero/client.py",
-      "line": 2159,
+      "line": 2254,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.decide_batch",
       "file": "python/gen_zero/client.py",
-      "line": 2253,
+      "line": 2348,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.start_rsi_daemon",
       "file": "python/gen_zero/client.py",
-      "line": 2391,
+      "line": 2486,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.stop_rsi_daemon",
       "file": "python/gen_zero/client.py",
-      "line": 2397,
+      "line": 2492,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.run_daemon_cycle",
       "file": "python/gen_zero/client.py",
-      "line": 2401,
+      "line": 2496,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.get_daemon_telemetry",
       "file": "python/gen_zero/client.py",
-      "line": 2405,
+      "line": 2500,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.attribute_counterfactual",
       "file": "python/gen_zero/client.py",
-      "line": 2409,
+      "line": 2504,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.run_invariant_distillation",
       "file": "python/gen_zero/client.py",
-      "line": 2451,
+      "line": 2546,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.augment_synthetic_counterfactuals",
       "file": "python/gen_zero/client.py",
-      "line": 2459,
+      "line": 2554,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.register_tool",
       "file": "python/gen_zero/client.py",
-      "line": 2476,
+      "line": 2571,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.execute_tool",
       "file": "python/gen_zero/client.py",
-      "line": 2499,
+      "line": 2594,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.execute_workflow",
       "file": "python/gen_zero/client.py",
-      "line": 2529,
+      "line": 2624,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.analyze_opponent_intent",
       "file": "python/gen_zero/client.py",
-      "line": 2536,
+      "line": 2631,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.solve_causal_game",
       "file": "python/gen_zero/client.py",
-      "line": 2559,
+      "line": 2654,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.run_league_evolution_cycle",
       "file": "python/gen_zero/client.py",
-      "line": 2578,
+      "line": 2673,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.score",
       "file": "python/gen_zero/client.py",
-      "line": 2594,
+      "line": 2689,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.decide_alignment",
       "file": "python/gen_zero/client.py",
-      "line": 2675,
+      "line": 2770,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.guard_input",
       "file": "python/gen_zero/client.py",
-      "line": 2691,
+      "line": 2786,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.guard_output",
       "file": "python/gen_zero/client.py",
-      "line": 2700,
+      "line": 2795,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.interlock_tool_pre",
       "file": "python/gen_zero/client.py",
-      "line": 2709,
+      "line": 2804,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.interlock_tool_post",
       "file": "python/gen_zero/client.py",
-      "line": 2718,
+      "line": 2813,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.rerank",
       "file": "python/gen_zero/client.py",
-      "line": 2727,
+      "line": 2822,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.semantic_find_line",
       "file": "python/gen_zero/client.py",
-      "line": 2736,
+      "line": 2831,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.verify_citation",
       "file": "python/gen_zero/client.py",
-      "line": 2744,
+      "line": 2839,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.slot_evidence",
       "file": "python/gen_zero/client.py",
-      "line": 2757,
+      "line": 2852,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.dispatch_call",
       "file": "python/gen_zero/client.py",
-      "line": 2765,
+      "line": 2860,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.recover_structure",
       "file": "python/gen_zero/client.py",
-      "line": 2774,
+      "line": 2869,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.evaluate_with_fail_closed",
       "file": "python/gen_zero/client.py",
-      "line": 2781,
+      "line": 2876,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.in_process_prefill_scan",
       "file": "python/gen_zero/client.py",
-      "line": 2789,
+      "line": 2884,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.optimize_cost_sensitive_roc",
       "file": "python/gen_zero/client.py",
-      "line": 2796,
+      "line": 2891,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.generate_contrastive_perturbations",
       "file": "python/gen_zero/client.py",
-      "line": 2807,
+      "line": 2902,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.route_mcp",
       "file": "python/gen_zero/client.py",
-      "line": 2815,
+      "line": 2910,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.compact_context",
       "file": "python/gen_zero/client.py",
-      "line": 2837,
+      "line": 2932,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.inspect_firewall",
       "file": "python/gen_zero/client.py",
-      "line": 2849,
+      "line": 2944,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.review_diff",
       "file": "python/gen_zero/client.py",
-      "line": 2868,
+      "line": 2963,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.process_streaming_utterance",
       "file": "python/gen_zero/client.py",
-      "line": 2876,
+      "line": 2971,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.confirm_workflow_draft",
       "file": "python/gen_zero/client.py",
-      "line": 2893,
+      "line": 2988,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.dismiss_workflow_draft",
       "file": "python/gen_zero/client.py",
-      "line": 2897,
+      "line": 2992,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.render_workflow_graph",
       "file": "python/gen_zero/client.py",
-      "line": 2901,
+      "line": 2996,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.create_browser_harness",
       "file": "python/gen_zero/client.py",
-      "line": 2907,
+      "line": 3002,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.observe_browser",
       "file": "python/gen_zero/client.py",
-      "line": 2923,
+      "line": 3018,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.step_browser",
       "file": "python/gen_zero/client.py",
-      "line": 2942,
+      "line": 3037,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.run_autonomous_browser",
       "file": "python/gen_zero/client.py",
-      "line": 2957,
+      "line": 3052,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.decide_canvas",
       "file": "python/gen_zero/client.py",
-      "line": 2971,
+      "line": 3066,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.route_hdt",
       "file": "python/gen_zero/client.py",
-      "line": 3138,
+      "line": 3233,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.pre_aggregate_events",
       "file": "python/gen_zero/client.py",
-      "line": 3155,
+      "line": 3250,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.micro_audit_pr",
       "file": "python/gen_zero/client.py",
-      "line": 3165,
+      "line": 3260,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.evaluate_confidence_floor",
       "file": "python/gen_zero/client.py",
-      "line": 3174,
+      "line": 3269,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.calibrate_multilingual_invariance",
       "file": "python/gen_zero/client.py",
-      "line": 3192,
+      "line": 3287,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.imagine_world_model",
       "file": "python/gen_zero/client.py",
-      "line": 3213,
+      "line": 3308,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.encode_lossless_vector",
       "file": "python/gen_zero/client.py",
-      "line": 3239,
+      "line": 3334,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.decode_lossless_vector",
       "file": "python/gen_zero/client.py",
-      "line": 3250,
+      "line": 3345,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.save_nanocore_checkpoint",
       "file": "python/gen_zero/client.py",
-      "line": 3268,
+      "line": 3363,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.load_nanocore_checkpoint",
       "file": "python/gen_zero/client.py",
-      "line": 3278,
+      "line": 3373,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.create_fleet_scheduler",
       "file": "python/gen_zero/client.py",
-      "line": 3287,
+      "line": 3382,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.create_compact_replay_buffer",
       "file": "python/gen_zero/client.py",
-      "line": 3306,
+      "line": 3401,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.create_golden_snapshot_manager",
       "file": "python/gen_zero/client.py",
-      "line": 3324,
+      "line": 3419,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.create_constraint_compiler",
       "file": "python/gen_zero/client.py",
-      "line": 3336,
+      "line": 3431,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.load_manifold_anchor_artifact",
       "file": "python/gen_zero/client.py",
-      "line": 3350,
+      "line": 3445,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.project_hidden_to_nanocore_state",
       "file": "python/gen_zero/client.py",
-      "line": 3355,
+      "line": 3450,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.generate_nanocore_ask_payload",
       "file": "python/gen_zero/client.py",
-      "line": 3363,
+      "line": 3458,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.register_nanocore",
       "file": "python/gen_zero/client.py",
-      "line": 3373,
+      "line": 3468,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.unregister_nanocore",
       "file": "python/gen_zero/client.py",
-      "line": 3421,
+      "line": 3516,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.decide_nanocore",
       "file": "python/gen_zero/client.py",
-      "line": 3427,
+      "line": 3522,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.state_legal_actions",
       "file": "python/gen_zero/client.py",
-      "line": 1132,
+      "line": 1160,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.eval_fn",
       "file": "python/gen_zero/client.py",
-      "line": 1141,
+      "line": 1169,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.run_forward_pass",
       "file": "python/gen_zero/client.py",
-      "line": 3070,
+      "line": 3165,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.extract_probs",
       "file": "python/gen_zero/client.py",
-      "line": 3101,
+      "line": 3196,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.is_goal",
       "file": "python/gen_zero/client.py",
-      "line": 1051,
+      "line": 1073,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.get_neighbors",
       "file": "python/gen_zero/client.py",
-      "line": 1057,
+      "line": 1079,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.client.h_fn",
       "file": "python/gen_zero/client.py",
-      "line": 1072,
+      "line": 1094,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -11265,235 +11271,235 @@
     {
       "symbol": "gen_zero.gate.constraint_compiler.LossyNumericConversionError",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 102,
+      "line": 103,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.SchemaMismatchError",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 116,
+      "line": 117,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.Tristate",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 132,
+      "line": 133,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.CompiledConstraintRule",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 160,
+      "line": 161,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.CompilationReport",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 195,
+      "line": 196,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.ASTConstraintParser",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 217,
+      "line": 218,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.ConstraintLinearProjectionCompiler",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 338,
+      "line": 339,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.__bool__",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 147,
+      "line": 148,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.to_dict",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 178,
+      "line": 179,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.to_dict",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 205,
+      "line": 206,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler._safe_threshold",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 230,
+      "line": 231,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.parse_single_comparison",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 252,
+      "line": 253,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.parse_expression",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 278,
+      "line": 279,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.__init__",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 341,
+      "line": 342,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.num_action_constraints",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 368,
+      "line": 371,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.num_rules",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 372,
+      "line": 375,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.num_propositions",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 376,
+      "line": 379,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.projection_matrix",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 380,
+      "line": 383,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.projection_bias",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 384,
+      "line": 387,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.schema_fingerprint",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 388,
+      "line": 391,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.compile_rules",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 400,
+      "line": 403,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler._generate_orthonormal_basis",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 667,
+      "line": 670,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler._verify_orthonormality",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 678,
+      "line": 681,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler._reject_lossy_integers",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 696,
+      "line": 699,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler._validate_latent",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 893,
+      "line": 896,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler._bind_latent",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 908,
+      "line": 911,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.project_latent_propositions",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 947,
+      "line": 950,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler._evaluate_sub_condition",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 974,
+      "line": 977,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler._evaluate_proposition",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 1043,
+      "line": 1046,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.evaluate_condition",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 1064,
+      "line": 1067,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.solve_safest_action",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 1105,
+      "line": 1108,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.compile_action_constraints",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 1296,
+      "line": 1301,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.project_probabilities",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 1304,
+      "line": 1309,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.resolve_disabled_actions",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 1308,
+      "line": 1313,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.formal_verification_status",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 1314,
+      "line": 1319,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler._check_scalar",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 773,
+      "line": 776,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler._check_ndarray",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 818,
+      "line": 821,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler._walk",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 862,
+      "line": 865,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.constraint_compiler.rejected",
       "file": "python/gen_zero/gate/constraint_compiler.py",
-      "line": 1226,
+      "line": 1229,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -11529,31 +11535,31 @@
     {
       "symbol": "gen_zero.gate.cpsat_formal_solver.CPSATVerdict",
       "file": "python/gen_zero/gate/cpsat_formal_solver.py",
-      "line": 21,
+      "line": 22,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.cpsat_formal_solver.CPSATFormalSolver",
       "file": "python/gen_zero/gate/cpsat_formal_solver.py",
-      "line": 42,
+      "line": 43,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.cpsat_formal_solver.to_dict",
       "file": "python/gen_zero/gate/cpsat_formal_solver.py",
-      "line": 30,
+      "line": 31,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.cpsat_formal_solver.__init__",
       "file": "python/gen_zero/gate/cpsat_formal_solver.py",
-      "line": 45,
+      "line": 46,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.cpsat_formal_solver.solve_safest_optimal_action",
       "file": "python/gen_zero/gate/cpsat_formal_solver.py",
-      "line": 54,
+      "line": 57,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -11637,115 +11643,115 @@
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.SafetyProjectionResult",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 44,
+      "line": 79,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.InfeasibleConstraintError",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 71,
+      "line": 110,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.project_simplex_with_bounds",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 75,
+      "line": 114,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.DifferentiableSafetyLayer",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 113,
+      "line": 152,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.to_dict",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 57,
+      "line": 94,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.__init__",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 116,
+      "line": 164,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.update_constraints",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 152,
+      "line": 200,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer._validate_constraints",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 157,
+      "line": 205,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.forward",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 178,
+      "line": 226,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.barrier_loss_gradient",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 329,
+      "line": 407,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.backward",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 340,
+      "line": 418,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.PyTorchDifferentiableSafetyFunction",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 360,
+      "line": 447,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.PyTorchDifferentiableSafetyModule",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 429,
+      "line": 516,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.PyTorchDifferentiableSafetyFunction",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 439,
+      "line": 526,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.PyTorchDifferentiableSafetyModule",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 442,
+      "line": 529,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.forward",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 364,
+      "line": 451,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.backward",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 392,
+      "line": 479,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.__init__",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 432,
+      "line": 519,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.forward",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 436,
+      "line": 523,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -14853,97 +14859,97 @@
     {
       "symbol": "gen_zero.mcp.server._describe_bad_number",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 616,
+      "line": 609,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server._validate_zero_stream_arguments",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 623,
+      "line": 616,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server.execute_zero_stream",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 727,
+      "line": 720,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server.execute_zero_grep",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 779,
+      "line": 772,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server.execute_zero_compact",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 990,
+      "line": 983,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server.resolve_zero_stream_mode",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 1178,
+      "line": 1171,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server.execute_zero",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 1197,
+      "line": 1190,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server.MCPServer",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 1297,
+      "line": 1290,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server.run_server",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 1484,
+      "line": 1477,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server.main",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 1525,
+      "line": 1518,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server.__init__",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 1306,
+      "line": 1299,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server._acquire_stream_engine",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 1320,
+      "line": 1313,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server._evict_expired_stream_sessions_locked",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 1365,
+      "line": 1358,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server._evict_lru_stream_session_locked",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 1376,
+      "line": 1369,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server.handle_request",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 1387,
+      "line": 1380,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.mcp.server._sync_query",
       "file": "python/gen_zero/mcp/server.py",
-      "line": 918,
+      "line": 911,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -18117,115 +18123,115 @@
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.SafetyInterlockError",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 78,
+      "line": 79,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.NanoCoreClusterStatus",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 91,
+      "line": 92,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.ImaginedStepTelemetry",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 116,
+      "line": 117,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.WorldModelOrchestrationResult",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 137,
+      "line": 138,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.WorldModelNanoCoreOrchestrator",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 182,
+      "line": 183,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.__init__",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 81,
+      "line": 82,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.to_dict",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 102,
+      "line": 103,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.to_dict",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 125,
+      "line": 126,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.interlocked",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 157,
+      "line": 158,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.to_dict",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 160,
+      "line": 161,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.__init__",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 185,
+      "line": 186,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.reset",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 245,
+      "line": 247,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator._encode_to_latent",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 254,
+      "line": 256,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator._pseudo_embed",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 345,
+      "line": 347,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.imagine_and_orchestrate",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 366,
+      "line": 368,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator._checked_safety_probability",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 697,
+      "line": 714,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator._compute_latent_distance",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 710,
+      "line": 727,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.compile_safety_rules",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 733,
+      "line": 750,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.nanocore.world_model_orchestrator.to_numpy",
       "file": "python/gen_zero/nanocore/world_model_orchestrator.py",
-      "line": 712,
+      "line": 729,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -18783,13 +18789,13 @@
     {
       "symbol": "gen_zero.planner.engines.cpsat_formal_engine._solver_status",
       "file": "python/gen_zero/planner/engines/cpsat_formal_engine.py",
-      "line": 159,
+      "line": 170,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.planner.engines.cpsat_formal_engine.filter_by_barrier",
       "file": "python/gen_zero/planner/engines/cpsat_formal_engine.py",
-      "line": 162,
+      "line": 173,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -19431,103 +19437,103 @@
     {
       "symbol": "gen_zero.router.adaptive_router.ModelTier",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 26,
+      "line": 39,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.ThinkingEffort",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 33,
+      "line": 46,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.AdaptiveRouteDecision",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 49,
+      "line": 62,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.SessionLockedRouter",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 76,
+      "line": 89,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.SubagentTierRouter",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 157,
+      "line": 170,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.ThinkingEffortGate",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 184,
+      "line": 197,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.ToolSchemaPruningGate",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 224,
+      "line": 237,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.ZeroRouterMiddleware",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 260,
+      "line": 284,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.to_dict",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 61,
+      "line": 74,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.__init__",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 79,
+      "line": 92,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.assess_initial_model",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 83,
+      "line": 96,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.resolve_main_model",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 104,
+      "line": 117,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.evaluate_subagent_tier",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 160,
+      "line": 173,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.evaluate_effort",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 187,
+      "line": 200,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.prune_tools",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 227,
+      "line": 251,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.__init__",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 263,
+      "line": 287,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.router.adaptive_router.route",
       "file": "python/gen_zero/router/adaptive_router.py",
-      "line": 269,
+      "line": 293,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -20223,139 +20229,139 @@
     {
       "symbol": "gen_zero.runtime.pickle_budget.PickleRefusedError",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 85,
+      "line": 99,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.MemoryBoundExceededError",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 91,
+      "line": 105,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.UnpickleCost",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 101,
+      "line": 115,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget._Tag",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 115,
+      "line": 129,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget._is_plain_scalar_dtype",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 141,
+      "line": 155,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.scan_pickle",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 152,
+      "line": 166,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.__init__",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 95,
+      "line": 109,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.__init__",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 120,
+      "line": 134,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.refuse",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 181,
+      "line": 195,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.take",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 184,
+      "line": 198,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.uint",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 192,
+      "line": 206,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.pop",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 195,
+      "line": 209,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.pop_mark",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 200,
+      "line": 214,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.top",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 215,
+      "line": 229,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.over_limit",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 220,
+      "line": 234,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.charge",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 227,
+      "line": 241,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.grow",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 233,
+      "line": 247,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.push",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 244,
+      "line": 258,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.create",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 248,
+      "line": 262,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.varsize",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 256,
+      "line": 270,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.small_tuple",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 274,
+      "line": 288,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.short_str",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 277,
+      "line": 291,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.pickle_budget.reduce",
       "file": "python/gen_zero/runtime/pickle_budget.py",
-      "line": 280,
+      "line": 294,
       "status": "unresolved_symbol_dispatch"
     },
     {
