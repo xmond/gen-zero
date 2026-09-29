@@ -1,0 +1,19 @@
+{
+  "source_paths": [
+    "/ebs/data/extracted_features/llama70b/boolq.npz",
+    "/ebs/data/extracted_features/qwen72b/boolq.npz"
+  ],
+  "n_fit": 500,
+  "n_eval": 200,
+  "paired_ids_verified": true,
+  "gcca_width": 128,
+  "anchor_width": 128,
+  "per_sample_reload_error_max": 0.0,
+  "distortion": {
+    "pairwise_cosine_correlation": 1.0,
+    "energy_retained_ratio": 1.0
+  },
+  "unbound_bridge_rejection": "artifact lacks complete source -> GCCA -> anchor -> core identity",
+  "live_core_executed": false,
+  "claim": "transform contract verification only, not task accuracy or generalization"
+}

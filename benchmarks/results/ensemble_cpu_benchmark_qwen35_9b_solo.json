@@ -1,0 +1,27 @@
+{
+  "n_records": 200,
+  "models": [
+    "qwen35_9b"
+  ],
+  "per_model": {
+    "qwen35_9b": {
+      "n_records": 200,
+      "macro_accuracy": 0.6712763260131681,
+      "micro_accuracy": 0.65,
+      "per_task_accuracy": {
+        "apps_execution_prediction": 0.37777777777777777,
+        "arc_challenge_train": 0.9696969696969697,
+        "arc_easy_train": 0.9473684210526315,
+        "mmlu_pro_test": 0.46153846153846156,
+        "banking77": 0.6
+      },
+      "latency_ms": {
+        "median": 371.8512775376439,
+        "p90": 661.0310388728975,
+        "max": 2130.8564599603415
+      }
+    }
+  },
+  "ensemble": null,
+  "warning": "only 1 model(s) supplied; ensemble fusion needs >=2 independent adapters, skipping ensemble metrics"
+}

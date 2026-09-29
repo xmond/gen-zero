@@ -1,0 +1,18 @@
+{
+  "command": [
+    "python",
+    "-u",
+    "benchmarks/eval_deepswe_enhanced_prm.py",
+    "prepare",
+    "--partition",
+    "heldout",
+    "--output",
+    "benchmarks/artifacts/deepswe_prm/heldout_features.pt"
+  ],
+  "returncode": 0,
+  "seconds": 34.73383641242981,
+  "environment": {
+    "OPENBLAS_NUM_THREADS": "4",
+    "OMP_NUM_THREADS": "4"
+  }
+}

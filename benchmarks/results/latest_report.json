@@ -1,0 +1,101 @@
+{
+  "timestamp": "2026-09-26T16:38:34.529072",
+  "provenance": {
+    "repo_head": "59d4215",
+    "binary_path": "/ebs/pj/gen-zero/target/release/gen-zero",
+    "binary_sha256": "8bae5609a8527b0d0d8a782f4287f876b0b051e34d32cebb658a0a1b7065f0c2",
+    "binary_mtime": "2026-09-21T11:06:15.278102",
+    "loadavg_1m_5m_15m": [
+      19.568359375,
+      21.22119140625,
+      16.7626953125
+    ]
+  },
+  "total_elapsed_seconds": 3.32,
+  "latency_throughput": {
+    "is_synthetic": true,
+    "notice": "Measured CLI latency on generated candidate contexts; no task accuracy was measured. External competitor rows remain unverified provenance.",
+    "iterations": 50,
+    "mean_latency_us": 9287.3,
+    "p50_latency_us": 8247.85,
+    "p90_latency_us": 11925.48,
+    "p95_latency_us": 15170.21,
+    "p99_latency_us": 22425.85,
+    "cli_throughput_qps": 107.63,
+    "in_engine_reflex_latency_us": "not_measured",
+    "in_engine_mcts_latency_ms": "not_measured",
+    "competitors_comparison": [
+      {
+        "model": "Gen-Zero (Rust CLI, measured)",
+        "throughput_qps": 107.63,
+        "latency_ms": 9.287,
+        "acc": "not_measured",
+        "ece": "not_measured",
+        "size": "5.2MB binary",
+        "provenance": "measured_this_run_cli_subprocess"
+      },
+      {
+        "model": "s1-qwen38-27b",
+        "throughput_qps": 2.4,
+        "latency_ms": 416.0,
+        "acc": 0.758,
+        "ece": 0.121,
+        "size": "27B (DGX API)",
+        "provenance": "external_unverified_not_reproduced_here"
+      },
+      {
+        "model": "s1-distill-26b",
+        "throughput_qps": 3.7,
+        "latency_ms": 270.0,
+        "acc": 0.749,
+        "ece": 0.166,
+        "size": "26B (Local GPU)",
+        "provenance": "external_unverified_not_reproduced_here"
+      },
+      {
+        "model": "reflex-4b",
+        "throughput_qps": 7.2,
+        "latency_ms": 138.0,
+        "acc": 0.719,
+        "ece": 0.085,
+        "size": "4B (Local GPU)",
+        "provenance": "external_unverified_not_reproduced_here"
+      },
+      {
+        "model": "decider-2b",
+        "throughput_qps": 27.0,
+        "latency_ms": 37.0,
+        "acc": 0.703,
+        "ece": 0.114,
+        "size": "2B (Local GPU, Contaminated)",
+        "provenance": "external_unverified_not_reproduced_here"
+      }
+    ]
+  },
+  "permutation_equivariance": {
+    "is_synthetic": true,
+    "notice": "Empirical permutation checks use generated fixed candidate pools and contexts; this is not an equivariance proof.",
+    "num_trials": 30,
+    "shuffles_per_trial": 10,
+    "seed": 0,
+    "valid_comparisons": 280,
+    "observed_flips": 0,
+    "flip_rate_percent": 0.0,
+    "error_samples": 2,
+    "skipped_shuffles_after_base_failure": 20,
+    "error_details": [
+      {
+        "trial": "0",
+        "order": "execute_transfer,flag_risk,request_mfa,audit_log",
+        "reason": "base call failed: response has no non-empty meta.chosen_action (is_error=True, tier=Escalate)"
+      },
+      {
+        "trial": "19",
+        "order": "allow_packet,drop_packet,throttle_bandwidth,deep_inspect",
+        "reason": "base call failed: response has no non-empty meta.chosen_action (is_error=True, tier=Escalate)"
+      }
+    ],
+    "status": "partial_errors",
+    "scope": "5 fixed candidate pools of 4, one context per trial; empirical count only, no equivariance proof is claimed"
+  }
+}

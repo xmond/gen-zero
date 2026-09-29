@@ -1,0 +1,51 @@
+[
+  {
+    "name": "constraints_ortools_retry",
+    "command": [
+      "/tmp/b3-eval-venv/bin/python",
+      "python/gen_zero/scripts/benchmark_issue_76_constraint_compiler.py"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 14.103575229644775,
+    "log": "benchmarks/results/b3_evidence/constraints_ortools_retry.log",
+    "environment": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "PYTHONPATH": "python"
+    }
+  },
+  {
+    "name": "supplemental_retry",
+    "command": [
+      "/tmp/b3-eval-venv/bin/python",
+      "benchmarks/b3_measure.py"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 13.463600397109985,
+    "log": "benchmarks/results/b3_evidence/supplemental_retry.log",
+    "environment": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "PYTHONPATH": "python"
+    }
+  },
+  {
+    "name": "focused_tests",
+    "command": [
+      "/tmp/b3-eval-venv/bin/python",
+      "-m",
+      "pytest",
+      "-q",
+      "python/gen_zero/tests/test_issue_76_constraint_compiler.py",
+      "python/gen_zero/tests/test_league_arena.py"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 18.584858417510986,
+    "log": "benchmarks/results/b3_evidence/focused_tests.log",
+    "environment": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "PYTHONPATH": "python"
+    }
+  }
+]

@@ -1,0 +1,50 @@
+{
+  "task": "boolq",
+  "generated_at_utc": "2026-09-25T02:40:18Z",
+  "provenance": {
+    "script": "benchmarks/suites/run_qwen72b_downstream_eval.py",
+    "args": {
+      "tasks": [
+        "boolq"
+      ],
+      "data_dir": "/ebs/pj/gen-zero/data/extracted_features/qwen72b",
+      "probe": true,
+      "probe_c": 0.01,
+      "max_iter": 2000,
+      "reference_npz": null,
+      "out": "benchmarks/results/qwen72b_linear_probe_boolq_report.json",
+      "task": "boolq"
+    },
+    "numpy_version": "2.4.6",
+    "sklearn_version": "1.9.1",
+    "python_version": "3.11.16"
+  },
+  "linear_probe": {
+    "task": "boolq",
+    "model": "qwen72b",
+    "feature_dim": 8192,
+    "K": 2,
+    "n_train": 9264,
+    "n_test": 300,
+    "probe_C": 0.01,
+    "fit_info": {
+      "device": "cpu",
+      "solver": "sklearn-lbfgs",
+      "max_iter": 2000,
+      "fit_seconds": 13.127854347229004
+    },
+    "train_accuracy": 0.961139896373057,
+    "test_accuracy": 0.88,
+    "majority_class_baseline_test_accuracy": 0.58,
+    "confusion_matrix": [
+      [
+        112,
+        14
+      ],
+      [
+        22,
+        152
+      ]
+    ]
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "-p",
+    "gen-zero-gate",
+    "--lib",
+    "--locked"
+  ],
+  "cwd": "/ebs/pj/gen-zero",
+  "exit_code": 0,
+  "log": "/tmp/gen-zero-audit-20260927/gate-rust.log"
+}

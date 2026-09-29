@@ -1,0 +1,21 @@
+      ┌─────────┐  mr boxington
+     ╱ ═══════ ╱│
+    ╱─────────╱ │
+    │ •    (◉)│≡│
+    │  ◟▄▄▄◞  │ ╱
+    │   ◀◆▶   │╱
+    └─────────┘
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.53s
+     Running unittests src/lib.rs (target/debug/deps/gen_zero_service-18f5cf21428e0ee2)
+
+running 7 tests
+test imagine::tests::oracle_failure_aborts_the_search ... ok
+test imagine::tests::dirichlet_sample_is_a_distribution ... ok
+test imagine::tests::confident_prior_with_confident_continuation_does_not_starve_the_root ... ok
+test imagine::tests::search_explores_every_feasible_root_action ... ok
+test imagine::tests::infeasible_actions_never_enter_the_plan ... ok
+test imagine::tests::root_noise_is_seeded_and_reported ... ok
+test imagine::tests::lookahead_prefers_the_sequence_with_higher_joint_likelihood ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 125 filtered out; finished in 0.00s
+

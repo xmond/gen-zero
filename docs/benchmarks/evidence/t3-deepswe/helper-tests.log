@@ -1,0 +1,14 @@
+test_all_edits_are_validated_before_writing (test_deepswe_adapter.SandboxBoundaryTests.test_all_edits_are_validated_before_writing) ... ok
+test_empty_submission_and_unknown_action_fail (test_deepswe_adapter.SandboxBoundaryTests.test_empty_submission_and_unknown_action_fail) ... ok
+test_large_source_does_not_use_shell_argument_transport (test_deepswe_adapter.SandboxBoundaryTests.test_large_source_does_not_use_shell_argument_transport) ... ok
+test_missing_provider_credential_exits_without_fallback (test_deepswe_adapter.SandboxBoundaryTests.test_missing_provider_credential_exits_without_fallback) ... ok
+test_new_file_is_in_standard_diff (test_deepswe_adapter.SandboxBoundaryTests.test_new_file_is_in_standard_diff) ... ok
+test_path_escape_and_symlink_fail (test_deepswe_adapter.SandboxBoundaryTests.test_path_escape_and_symlink_fail) ... ok
+test_real_search_read_apply_and_git_diff (test_deepswe_adapter.SandboxBoundaryTests.test_real_search_read_apply_and_git_diff) ... ok
+test_stale_hash_fails_without_mutation (test_deepswe_adapter.SandboxBoundaryTests.test_stale_hash_fails_without_mutation) ... ok
+test_test_mutation_and_dirty_start_fail (test_deepswe_adapter.SandboxBoundaryTests.test_test_mutation_and_dirty_start_fail) ... ok
+
+----------------------------------------------------------------------
+Ran 9 tests in 3.164s
+
+OK

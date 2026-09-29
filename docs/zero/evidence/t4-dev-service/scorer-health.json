@@ -1,0 +1,1 @@
+{"service":"gen-zero-semantic","version":"1.13.0","endpoints":["/v1/semantic_ask","/v1/semantic_route","/v1/semantic_risk"],"backbone_loaded":false}

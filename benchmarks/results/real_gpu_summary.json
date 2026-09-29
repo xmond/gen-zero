@@ -1,0 +1,121 @@
+{
+  "timestamp": "2026-09-21T11:32:14Z",
+  "hardware": "NVIDIA A100 80GB PCIe",
+  "model": "Qwen3.5-2B (decider-2b) Native PyTorch CUDA Forward",
+  "total_samples": 390,
+  "total_correct": 254,
+  "overall_accuracy_pct": 65.13,
+  "latency_metrics": {
+    "mean_ms": 79.18,
+    "p50_ms": 74.66,
+    "p90_ms": 94.48,
+    "p99_ms": 133.34
+  },
+  "task_breakdown": {
+    "aegis_safety": {
+      "samples": 30,
+      "correct": 25,
+      "accuracy_pct": 83.33,
+      "avg_latency_ms": 69.24,
+      "avg_confidence": 0.8529,
+      "avg_entropy": 0.3456
+    },
+    "arc_challenge": {
+      "samples": 30,
+      "correct": 26,
+      "accuracy_pct": 86.67,
+      "avg_latency_ms": 72.01,
+      "avg_confidence": 0.8256,
+      "avg_entropy": 0.5158
+    },
+    "boolq": {
+      "samples": 30,
+      "correct": 22,
+      "accuracy_pct": 73.33,
+      "avg_latency_ms": 77.87,
+      "avg_confidence": 0.806,
+      "avg_entropy": 0.4385
+    },
+    "civil_comments": {
+      "samples": 30,
+      "correct": 28,
+      "accuracy_pct": 93.33,
+      "avg_latency_ms": 69.63,
+      "avg_confidence": 0.8511,
+      "avg_entropy": 0.3745
+    },
+    "gsm8k": {
+      "samples": 30,
+      "correct": 3,
+      "accuracy_pct": 10.0,
+      "avg_latency_ms": 74.76,
+      "avg_confidence": 0.392,
+      "avg_entropy": 1.2824
+    },
+    "massive_de": {
+      "samples": 30,
+      "correct": 17,
+      "accuracy_pct": 56.67,
+      "avg_latency_ms": 74.75,
+      "avg_confidence": 0.7617,
+      "avg_entropy": 0.7353
+    },
+    "massive_en": {
+      "samples": 30,
+      "correct": 19,
+      "accuracy_pct": 63.33,
+      "avg_latency_ms": 75.05,
+      "avg_confidence": 0.7454,
+      "avg_entropy": 0.8012
+    },
+    "multinli": {
+      "samples": 30,
+      "correct": 27,
+      "accuracy_pct": 90.0,
+      "avg_latency_ms": 71.98,
+      "avg_confidence": 0.875,
+      "avg_entropy": 0.3805
+    },
+    "paws": {
+      "samples": 30,
+      "correct": 23,
+      "accuracy_pct": 76.67,
+      "avg_latency_ms": 78.88,
+      "avg_confidence": 0.8229,
+      "avg_entropy": 0.4024
+    },
+    "pubmedqa": {
+      "samples": 30,
+      "correct": 23,
+      "accuracy_pct": 76.67,
+      "avg_latency_ms": 94.08,
+      "avg_confidence": 0.81,
+      "avg_entropy": 0.5183
+    },
+    "squad2": {
+      "samples": 30,
+      "correct": 16,
+      "accuracy_pct": 53.33,
+      "avg_latency_ms": 84.79,
+      "avg_confidence": 0.7935,
+      "avg_entropy": 0.4297
+    },
+    "summeval": {
+      "samples": 30,
+      "correct": 7,
+      "accuracy_pct": 23.33,
+      "avg_latency_ms": 109.33,
+      "avg_confidence": 0.2766,
+      "avg_entropy": 1.5429
+    },
+    "vitaminc": {
+      "samples": 30,
+      "correct": 18,
+      "accuracy_pct": 60.0,
+      "avg_latency_ms": 76.93,
+      "avg_confidence": 0.7884,
+      "avg_entropy": 0.5263
+    }
+  },
+  "error_count": 136
+}

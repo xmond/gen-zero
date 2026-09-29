@@ -1,0 +1,160 @@
+{
+  "implemented": [
+    "349 temporal geometry features and 16384 pooled embedding coordinates",
+    "Task-grouped cross-validation and regularized pairwise ranking training over 30372 steps / 298 trajectories / 75 tasks",
+    "Frozen heldout scoring and independently verified metrics for 151 trajectories / 38 tasks"
+  ],
+  "unverified": [
+    "Causal identification from embedding geometry",
+    "Generalization to new datasets or online deployment",
+    "Statistically significant superiority to CLM-8B"
+  ],
+  "unfinished": [
+    "BoN=4 >=32/38: actual 29/38, below baseline 31/38",
+    "Improved AUC/Spearman: both deteriorated",
+    "Geometry improvement: semantic-only model won training CV"
+  ],
+  "actual_acceptance_returncode": 1,
+  "source": "benchmarks/eval_deepswe_enhanced_prm.py",
+  "weight_path": "benchmarks/artifacts/deepswe_prm/enhanced_rank_head.pt",
+  "weight_sha256": "8c039e3fe48cc671797af3cfc0b8c75a6482a4c38b88760ce6c0e26ed4d51a17",
+  "report": "benchmarks/results/deepswe_prm_enhanced_results.json",
+  "execution": [
+    {
+      "command": [
+        "python",
+        "-u",
+        "benchmarks/eval_deepswe_enhanced_prm.py",
+        "prepare",
+        "--partition",
+        "train",
+        "--output",
+        "benchmarks/artifacts/deepswe_prm/train_features.pt"
+      ],
+      "returncode": 0,
+      "seconds": 66.66185402870178,
+      "environment": {
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4"
+      },
+      "raw_log": "benchmarks/results/deepswe_prm_evidence/prepare_train.txt"
+    },
+    {
+      "command": [
+        "python",
+        "-u",
+        "benchmarks/eval_deepswe_enhanced_prm.py",
+        "train",
+        "--features",
+        "benchmarks/artifacts/deepswe_prm/train_features.pt",
+        "--output",
+        "benchmarks/artifacts/deepswe_prm/enhanced_head.pt"
+      ],
+      "returncode": 0,
+      "seconds": 27.15724205970764,
+      "environment": {
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4"
+      },
+      "raw_log": "benchmarks/results/deepswe_prm_evidence/train.txt"
+    },
+    {
+      "command": [
+        "python",
+        "-u",
+        "benchmarks/eval_deepswe_enhanced_prm.py",
+        "train",
+        "--features",
+        "benchmarks/artifacts/deepswe_prm/train_features.pt",
+        "--output",
+        "benchmarks/artifacts/deepswe_prm/enhanced_rank_head.pt"
+      ],
+      "returncode": 0,
+      "seconds": 51.01057028770447,
+      "environment": {
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4"
+      },
+      "raw_log": "benchmarks/results/deepswe_prm_evidence/train_rank_weights.txt"
+    },
+    {
+      "command": [
+        "python",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "benchmarks/tests",
+        "-p",
+        "test_deepswe_enhanced_prm.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "seconds": 5.104767322540283,
+      "raw_log": "benchmarks/results/deepswe_prm_evidence/tests_final.txt"
+    },
+    {
+      "command": [
+        "python",
+        "-u",
+        "benchmarks/eval_deepswe_enhanced_prm.py",
+        "prepare",
+        "--partition",
+        "heldout",
+        "--output",
+        "benchmarks/artifacts/deepswe_prm/heldout_features.pt"
+      ],
+      "returncode": 0,
+      "seconds": 34.73383641242981,
+      "environment": {
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4"
+      },
+      "raw_log": "benchmarks/results/deepswe_prm_evidence/prepare_heldout.txt"
+    },
+    {
+      "command": [
+        "python",
+        "-u",
+        "benchmarks/eval_deepswe_enhanced_prm.py",
+        "evaluate",
+        "--features",
+        "benchmarks/artifacts/deepswe_prm/heldout_features.pt",
+        "--checkpoint",
+        "benchmarks/artifacts/deepswe_prm/enhanced_rank_head.pt",
+        "--output",
+        "benchmarks/results/deepswe_prm_enhanced_results.json"
+      ],
+      "returncode": 0,
+      "seconds": 23.16189217567444,
+      "environment": {
+        "OPENBLAS_NUM_THREADS": "4",
+        "OMP_NUM_THREADS": "4"
+      },
+      "raw_log": "benchmarks/results/deepswe_prm_evidence/evaluate.txt"
+    },
+    {
+      "command": [
+        "python",
+        "benchmarks/tests/verify_deepswe_prm_report.py",
+        "--report",
+        "benchmarks/results/deepswe_prm_enhanced_results.json",
+        "--reference-repo",
+        "/tmp/clmrepro/repo"
+      ],
+      "returncode": 0,
+      "seconds": 4.986593246459961,
+      "raw_log": "benchmarks/results/deepswe_prm_evidence/verify.txt"
+    },
+    {
+      "command": [
+        "python",
+        "-c",
+        "import json,sys; r=json.load(open('benchmarks/results/deepswe_prm_enhanced_results.json')); passed=r['enhanced']['bon']['4']['solved_task_equivalents']>=32; print('PASS' if passed else 'FAIL: target >=32/38 not achieved; actual='+str(r['enhanced']['bon']['4']['solved_task_equivalents'])+'/38'); sys.exit(0 if passed else 1)"
+      ],
+      "returncode": 1,
+      "seconds": 0.05163741111755371,
+      "raw_log": "benchmarks/results/deepswe_prm_evidence/acceptance.txt"
+    }
+  ]
+}

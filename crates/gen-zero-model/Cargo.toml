@@ -1,0 +1,14 @@
+[package]
+name = "gen-zero-model"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Set-attention masks, shared position IDs, choice head, and prompt sanitization for Gen-Zero."
+readme = "README.md"
+
+[dependencies]
+gen-zero-core = { workspace = true }
+thiserror = { workspace = true }

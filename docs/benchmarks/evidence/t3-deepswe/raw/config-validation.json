@@ -1,0 +1,20 @@
+[
+  {
+    "case": "missing_binary",
+    "passed": true,
+    "exception": "FileNotFoundError",
+    "message": "[Errno 2] No such file or directory: '/missing-t3-binary'"
+  },
+  {
+    "case": "empty_query",
+    "passed": true,
+    "exception": "ValueError",
+    "message": "query must be nonempty literal text without NUL"
+  },
+  {
+    "case": "relative_repo",
+    "passed": true,
+    "exception": "ValueError",
+    "message": "repo_dir must be an absolute sandbox path"
+  }
+]

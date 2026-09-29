@@ -1,0 +1,49 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.1.1, pluggy-1.6.0
+rootdir: /ebs/pj/gen-zero-worktree/wire-deepswe
+configfile: pytest.ini
+plugins: anyio-4.12.1
+collected 22 items
+
+benchmarks/tests/test_deepswe_adapter_genzero_integration.py .....F..... [ 50%]
+...........                                                              [100%]
+
+=================================== FAILURES ===================================
+____________ test_dangerous_candidates_never_reach_scoring[action5] ____________
+
+action = {'action': 'edit', 'files': [{'path': 'module.py', 'content': "import shutil\nshutil.rmtree('tests')\n", 'old_sha256': None}]}
+
+    @pytest.mark.parametrize("action", [
+        candidate("tests/test_value.py"), candidate("evaluation/harness.py"),
+        candidate("../escape.py"), candidate("/tmp/escape.py"), candidate(".git/config"),
+        candidate(content="import shutil\nshutil.rmtree('tests')\n"),
+        {"action": "command", "command": "rm -rf /app"},
+        {"action": "command", "command": "sudo chmod 777 /"},
+        {"action": "shell", "command": "true"},
+        candidate(content="def broken(:"), candidate("module.rs"),
+    ])
+    def test_dangerous_candidates_never_reach_scoring(action):
+        evidence = []
+        def forbidden(_):
+            pytest.fail("dangerous candidate reached semantic service")
+        gate = DeepSWEGate(evidence.append, forbidden)
+>       assert not gate.check(action, "repair value", semantic=True)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+benchmarks/tests/test_deepswe_adapter_genzero_integration.py:83: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+benchmarks/deepswe_genzero_gate.py:129: in check
+    evidence = self.service({"operation": "assess", "instruction": instruction, "candidate": action})
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+_ = {'operation': 'assess', 'instruction': 'repair value', 'candidate': {'action': 'edit', 'files': [{'path': 'module.py', 'content': "import shutil\nshutil.rmtree('tests')\n", 'old_sha256': None}]}}
+
+    def forbidden(_):
+>       pytest.fail("dangerous candidate reached semantic service")
+E       Failed: dangerous candidate reached semantic service
+
+benchmarks/tests/test_deepswe_adapter_genzero_integration.py:81: Failed
+=========================== short test summary info ============================
+FAILED benchmarks/tests/test_deepswe_adapter_genzero_integration.py::test_dangerous_candidates_never_reach_scoring[action5]
+========================= 1 failed, 21 passed in 7.82s =========================

@@ -1,0 +1,3 @@
+COMMAND benchmarks/eval_deepswe_enhanced_prm.py prepare --partition train --output benchmarks/artifacts/deepswe_prm/train_features.pt
+DEVICE cpu (explicit); no GPU requested or fallback
+{"partition": "train", "steps": 30372, "trajectories": 298, "tasks": 75, "feature_shapes": [[298, 349], [298, 16384]]}

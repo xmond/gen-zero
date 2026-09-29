@@ -1,0 +1,8 @@
+b7e7bdb feat(planner): implement real normal-form Regret Matching for CFR, direct flow sampling for GFlowNet, and CP-SAT status reporting
+f99d99b feat(p7): implement true temporal CEM with independent per-step distributions and geometric discount
+2d2d151 feat(planner): implement genuine multi-step A* graph search with heuristic cost-to-go and closed set
+a719c40 feat(planner): implement genuine multi-step PUCT MCTS with ancestor backpropagation, rollout horizon, and geometric discount
+1f57da6 feat(planner): implement lock-free typed arena allocation and widen ActionId to CompactTreeNode
+b961a98 feat(planner): penetrate active_context and hazard_detected throughout ProductionPipeline, fail-closed on invalid entropy
+8f42c3b fix(p2): enforce strict numeric safety across all engines preventing NaN/Inf swallow
+0a8acf9 fix(p1): fix gate integer overflow with checked arithmetic and active context validation

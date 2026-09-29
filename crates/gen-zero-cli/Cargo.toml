@@ -1,0 +1,30 @@
+[package]
+name = "gen-zero-cli"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Command-line entry point (`gen-zero` binary) for the Gen-Zero decision engine."
+readme = "README.md"
+
+[[bin]]
+name = "gen-zero"
+path = "src/main.rs"
+
+[dependencies]
+gen-zero-service = { workspace = true }
+clap = { workspace = true }
+tokio = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+anyhow = { workspace = true }
+serde_json = { workspace = true }
+rand = { workspace = true }
+
+[dev-dependencies]
+axum = { workspace = true }
+gen-zero-core = { workspace = true }
+gen-zero-nanocore = { workspace = true, features = ["test-fixtures"] }
+gen-zero-worldmodel = { workspace = true }

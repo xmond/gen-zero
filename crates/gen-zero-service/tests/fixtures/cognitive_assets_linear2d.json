@@ -1,0 +1,23 @@
+{
+  "schema": "gen-zero/cognitive-assets/v1",
+  "provenance": "hand-written analytic test generator dh/dt = -h + u on a 2-D Poincare ball; not trained, not extracted from any model",
+  "dim": 2,
+  "curvature": 1.0,
+  "generator": {
+    "a": [[-1.0, 0.0], [0.0, -1.0]],
+    "b": [[1.0, 0.0], [0.0, 1.0]]
+  },
+  "gate": {
+    "max_steps": 20000,
+    "residual_limit": 1e-9,
+    "numeric_error": 1e-12,
+    "step_fraction": 1.0,
+    "pin_weight": 1.0
+  },
+  "scan": {
+    "max_growth": 1000000.0,
+    "max_state_norm": 1000000.0,
+    "threads": 4
+  },
+  "decision_temperature": 0.1
+}

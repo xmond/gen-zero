@@ -1,0 +1,6 @@
+?? benchmarks/suites/run_download_mistral123b.bat
+?? docs/research/
+?? docs/zero/31-dense-fleet-manifold-anchor-t4-sys-design.md
+?? docs/zero/31-multiscale-dense-resonance-etf-dual-process-plan.md
+?? docs/zero/evidence/b0927c-t1-geom/
+?? docs/zero/evidence/b0927c-t3-multi/

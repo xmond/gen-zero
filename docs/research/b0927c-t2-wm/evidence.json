@@ -1,0 +1,81 @@
+[
+  {
+    "name": "01-workspace",
+    "argv": [
+      "git",
+      "status",
+      "--short"
+    ],
+    "exit_code": 0,
+    "log": "01-workspace.log",
+    "sha256": "fe49dabd243a868a00e1ec8c91b1d77184513f6a64edf3a1eb2420c365323454"
+  },
+  {
+    "name": "02-head",
+    "argv": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "exit_code": 0,
+    "log": "02-head.log",
+    "sha256": "584191c0a717968104d71d5e7115948d2e68189db199b7019e49c18c0df923ad"
+  },
+  {
+    "name": "03-contracts",
+    "argv": [
+      "rg",
+      "-n",
+      "pub type FullLatent|fn step_batch|fn safety_estimate|world_model.step|struct MctsNode",
+      "crates/gen-zero-core/src",
+      "crates/gen-zero-planner/src/engine.rs"
+    ],
+    "exit_code": 0,
+    "log": "03-contracts.log",
+    "sha256": "7632db2a3c75e02bb221c0a72b9ff85e89e21cce10d88b3c94e4bad1b3ca4c80"
+  },
+  {
+    "name": "04-mounts",
+    "argv": [
+      "rg",
+      "-n",
+      "world_model: Arc::new|execute_pipeline|SymplecticWorldModelDynamics::default|as_dyn|neural_dynamics_model|dynamics_model=None",
+      "crates/gen-zero-service/src/zero.rs",
+      "crates/gen-zero-service/src/worldsim.rs",
+      "crates/gen-zero-service/src/pipeline_verb.rs",
+      "python/gen_zero/client.py"
+    ],
+    "exit_code": 0,
+    "log": "04-mounts.log",
+    "sha256": "8009de617517995289e7e0ba341878856a89cf7beabeb18ec53eead3039b927c"
+  },
+  {
+    "name": "05-python-risks",
+    "argv": [
+      "rg",
+      "-n",
+      "rng.uniform|rng.randn|Pad or truncate|hash\\(action\\)|r_hat <|weights_loaded|load_checkpoint",
+      "python/gen_zero/world_model/hamiltonian_dynamics.py",
+      "python/gen_zero/world_model/neural_dynamics.py"
+    ],
+    "exit_code": 0,
+    "log": "05-python-risks.log",
+    "sha256": "bb075382eb1deb6b7acd9f59bf2eb9d78e47de6f07cbd5ade82a38b52ca97113"
+  },
+  {
+    "name": "06-data",
+    "argv": [
+      "rg",
+      "-n",
+      "NPZ_KEYS|TASKS =|privileged|no neural training|safe-successor|lookahead:|is-goal",
+      "benchmarks/suites/gpu_extract_llama405b_13tasks.py",
+      "benchmarks/suites/grand_challenge_data.py",
+      "benchmarks/suites/evaluate_full_suite_cpu_dynamics.py",
+      "benchmarks/suites/benchmark_world_model_mcts_ablation.py",
+      "scripts/extract_trajectories.py"
+    ],
+    "exit_code": 0,
+    "log": "06-data.log",
+    "sha256": "d0fe5b7c6369239365ef2dacda12926f300ffe08f0f313570cfa545773053d1c"
+  }
+]

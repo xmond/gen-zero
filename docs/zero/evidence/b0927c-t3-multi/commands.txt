@@ -1,0 +1,26 @@
+# b0927c-t3-multi evidence. Base HEAD acb2c0ccf3f30a708cd9a4f638248973c4709188, 2026-09-27 JST.
+# Every command below was run as written; exit codes and tails are in the matching .log file.
+
+## 1. Train-only OOF complementarity probe (70B + 72B, no test labels read)
+cd /tmp/b0927c && (time python3 probe.py) > probe.log 2>&1; echo EXIT=$?
+EXIT=0   # real 2m22.773s, loadavg at start 13.53 9.47 8.76 (shared box)
+# probe.py == oof_complementarity_probe.py (byte copy). Output: oof_complementarity_probe.json
+
+## 2. ai server facts (ssh ai, 2026-09-27 ~15:30 JST)
+dir /s D:\models\mistral123b
+  15:30  39,895,636,768  Mistral-Large-Instruct-2407-Q3_K_M-00001-of-00002.gguf
+  15:30  19,207,142,496  Mistral-Large-Instruct-2407-Q3_K_M-00002-of-00002.gguf   (total 59,102,779,264 B)
+Get-ChildItem D:\models  -> no falcon180b / Llama-3.1-405B files present
+nvidia-smi -> NVIDIA A100 80GB PCIe, 81920 MiB
+Win32_ComputerSystem.TotalPhysicalMemory/1GB -> 127.62
+Get-PSDrive -> C free 36.0 GB, D free 938.5 GB
+D:\genz\logs\download_mistral123b.log tail -> "Fetching 2 files: 0%" (log not refreshed; shard sizes above show completion)
+
+## 3. Measured 70B/72B extraction cost (sum of info_json *_seconds / *_tokens over 13 npz)
+llama70b rows 35211 seconds 12746 (3.54 h) s/row 0.362 tokens 5978586 tok/s 469.0
+qwen72b  rows 35211 seconds 17139 (4.76 h) s/row 0.487 tokens 6047987 tok/s 352.9
+llama70b tokens: train_full 5196181, test_full 782065, cands 340; train tokens beyond a 1000-row cap 2174968
+
+## 4. Router wiring
+grep -rn "DynamicKMoERouter|RoutingTier" crates/*/src (outside planner) -> crates/gen-zero-cli/src/main.rs:39,42
+grep -rln gen_zero_planner crates/gen-zero-service/src -> worldsim.rs, pipeline_verb.rs

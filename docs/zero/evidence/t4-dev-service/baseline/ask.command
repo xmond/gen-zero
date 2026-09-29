@@ -1,0 +1,1 @@
+curl --silent --show-error --fail-with-body --max-time 120 -D t4-evidence/baseline/ask.headers -o t4-evidence/baseline/ask.body.json -w %\{http_code\}\\n -X POST -H Content-Type:\ application/json --data-binary @t4-evidence/ask.json http://127.0.0.1:8080/v1/decisions 

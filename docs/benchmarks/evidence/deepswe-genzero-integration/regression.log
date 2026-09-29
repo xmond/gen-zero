@@ -1,0 +1,14 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.1.1, pluggy-1.6.0
+rootdir: /ebs/pj/gen-zero-worktree/wire-deepswe
+configfile: pytest.ini
+plugins: anyio-4.12.1
+collected 65 items
+
+benchmarks/tests/test_deepswe_adapter.py .........                       [ 13%]
+python/gen_zero/tests/test_latent_mcts.py ............                   [ 32%]
+python/gen_zero/tests/test_vectorized_latent_mcts.py .............       [ 52%]
+python/gen_zero/tests/test_policy_evidence_gate.py ..................... [ 84%]
+..........                                                               [100%]
+
+============================= 65 passed in 13.35s ==============================

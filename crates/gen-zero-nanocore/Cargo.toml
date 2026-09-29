@@ -1,0 +1,25 @@
+[package]
+name = "gen-zero-nanocore"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Quantized nanocore fleet, Mixture-of-Vectors fusion, watchdog, and RAM-bounded scheduler for Gen-Zero."
+readme = "README.md"
+
+[dependencies]
+gen-zero-core = { workspace = true }
+gen-zero-model = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+zstd = { workspace = true }
+
+[features]
+# Synthetic sin/cos cores for tests. Enable only from `[dev-dependencies]`.
+test-fixtures = []
+
+[dev-dependencies]
+serde_json = { workspace = true }

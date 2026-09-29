@@ -1,0 +1,194 @@
+      ┌─────────┐  mr boxington
+     ╱ ═══════ ╱│
+    ╱─────────╱ │
+    │ •    (◉)│≡│
+    │  ◟▄▄▄◞  │ ╱
+    │   ◀◆▶   │╱
+    └─────────┘
+    Blocking waiting for file lock on build directory
+   Compiling gen-zero-core v0.1.0 (/ebs/pj/gen-zero/crates/gen-zero-core)
+   Compiling gen-zero-lod v0.1.0 (/ebs/pj/gen-zero/crates/gen-zero-lod)
+   Compiling gen-zero-worldmodel v0.1.0 (/ebs/pj/gen-zero/crates/gen-zero-worldmodel)
+   Compiling gen-zero-gate v0.1.0 (/ebs/pj/gen-zero/crates/gen-zero-gate)
+   Compiling gen-zero-planner v0.1.0 (/ebs/pj/gen-zero/crates/gen-zero-planner)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.77s
+     Running unittests src/lib.rs (target/debug/deps/gen_zero_gate-1458be4e182bf692)
+
+running 51 tests
+test constraint::tests::extreme_coefficients_do_not_wrap_or_panic ... ok
+test constraint::tests::test_linear_constraints ... ok
+test dual_track::tests::retention_threshold_is_not_rounded_up ... ok
+test policy::tests::configured_heat_certificate_rejects_high_risk_action ... ok
+test policy::tests::certificate_from_looser_tolerance_is_rejected ... ok
+test policy::tests::invalid_entropy_and_thresholds_fail_closed ... ok
+test dual_track::tests::test_dual_track_gate_criteria ... ok
+test policy::tests::every_registered_requirement_checks_the_same_terminal_state ... ok
+test policy::tests::empty_registration_differs_from_missing_certificate ... ok
+test risk::tests::bare_rm_rf_root_escalates_under_recalibrated_threshold ... ok
+test risk::tests::maps_probability_bands_to_tiers ... ok
+test policy::tests::malformed_certificates_fail_closed ... ok
+test policy::tests::repaired_terminal_state_reaches_every_lower_tier_verdict ... ok
+test policy::tests::test_policy_gate_cascade ... ok
+test policy::tests::residual_violation_is_rejected_without_repair_even_with_forged_diagnostics ... ok
+test sheaf_gate::tests::certify_rejects_non_finite_candidate_state ... ok
+test sheaf_gate::tests::check_uncertain_energy_detects_a_deliberately_wrong_prediction ... ok
+test sheaf_gate::tests::certify_keeps_pinned_node_fixed_across_relaxation ... ok
+test sheaf_gate::tests::certify_with_default_budget_classifies_obstruction_as_stalled ... ok
+test risk::tests::unassessed_or_malformed_risk_fails_closed ... ok
+test sheaf_gate::tests::laplacian_relaxation_strictly_decreases_energy ... ok
+test sheaf_gate::tests::manifold_guard_rejects_hyperbolic_domain_violation ... ok
+test sheaf_gate::tests::manifold_guard_rejects_spherical_cut_locus ... ok
+test sheaf_gate::tests::manifold_requires_unit_sphere_in_f64 ... ok
+test sheaf_gate::tests::maximum_pin_index_returns_shape_error ... ok
+test sheaf_gate::tests::degenerate_laplacian_rejected_at_construction ... ok
+test sheaf_gate::tests::non_finite_pin_anchor_rejected_as_non_finite_not_fiber_mismatch ... ok
+test sheaf_gate::tests::public_operators_fail_closed_on_wrong_dimensions ... ok
+test sheaf_gate::tests::certify_converges_to_zero_residual_on_reachable_target ... ok
+test sheaf_gate::tests::ill_conditioned_spectrum_does_not_hide_unresolved_residual ... ok
+test sheaf_gate::tests::invalid_tolerances_fail_before_certification ... ok
+test sheaf_gate::tests::certify_rejects_residual_exceeded_when_budget_exhausted ... ok
+test sheaf_gate::tests::half_squared_norm_avoids_unnecessary_energy_overflow ... ok
+test sheaf_gate::tests::window_budget_stall_and_invalid_inputs_are_explicit ... ok
+test sheaf_gate::tests::certify_rejects_eta_at_or_above_safe_bound ... ok
+test sheaf_gate::tests::small_observation_weight_keeps_scaled_difference_finite ... ok
+test sheaf_gate::tests::zero_weight_observations_are_inert_even_when_difference_overflows ... ok
+test sheaf_gate::tests::stable_norm_preserves_extreme_magnitudes ... ok
+test sheaf_gate::tests::window_relaxes_to_affine_trajectory_and_checks_each_step ... ok
+test sheaf_gate::tests::weighted_quadratics_preserve_representable_extreme_scales ... ok
+test sheaf_gate::tests::certify_rejects_fiber_dimension_mismatch ... ok
+test sheaf_gate::tests::certify_rejects_epoch_mismatch ... ok
+test sheaf_gate::tests::certify_rejects_pinned_node_that_already_moved ... ok
+test sheaf_gate::tests::explicit_overflow_and_nan_crosscheck_fail_closed ... ok
+test sheaf_gate::tests::relax_step_with_unsafe_eta_actually_raises_energy ... ok
+test sheaf_gate::tests::taylor_identity_avoids_step_size_square_overflow ... ok
+test sheaf_gate::tests::safe_eta_bound_matches_two_over_lambda_max ... ok
+test sheaf_gate::tests::certify_detects_stalled_harmonic_obstruction ... ok
+test sheaf_gate::tests::window_operator_matches_independent_dense_quadratic_and_finite_differences ... ok
+test sheaf_gate::tests::tiny_residual_cannot_converge_or_verify_above_tolerance ... ok
+test sheaf_gate::tests::long_window_uses_local_operators_and_zero_weight_observations ... ok
+
+test result: ok. 51 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+     Running unittests src/lib.rs (target/debug/deps/gen_zero_planner-ec30db8b5a7998f7)
+
+running 26 tests
+test config::tests::default_matches_the_engines_own_defaults ... ok
+test engine::tests::boltzmann_entropy_is_zero_for_one_action_and_one_for_ties ... ok
+test config::tests::deserializes_a_partial_object_over_defaults ... ok
+test engine::tests::cem_excludes_blocked_actions_from_every_rollout_and_entropy ... ok
+test engine::tests::cem_uniform_is_deterministic_and_in_unit_interval ... ok
+test engine::tests::cfr_entropy_matches_positive_regrets_and_uniform_fallback ... ok
+test engine::tests::sample_categorical_follows_cumulative_mass ... ok
+test engine::tests::cem_discounts_by_depth_and_stops_at_terminal ... ok
+test engine::tests::mcts_visits_unexplored_actions_even_with_large_rewards ... ok
+test router::tests::test_router_tier_classification ... ok
+test tree::tests::rejects_capacity_above_index_limit_before_allocation - should panic ... ok
+test tree::tests::rejects_layout_above_addressable_range - should panic ... ok
+test tree::tests::test_compact_tree_node_layout_and_operations ... ok
+test tree::tests::rejects_byte_size_overflow_before_allocation - should panic ... ok
+test config::tests::validate_rejects_degenerate_and_inverted_values ... ok
+test tree::tests::zero_sized_items_are_supported ... ok
+test engine::tests::blocked_candidates_do_not_change_cfr_baseline_or_entropy ... ok
+test tree::tests::test_typed_arena_bump_allocation ... ok
+test tree::tests::rejects_zero_capacity - should panic ... ok
+test tests::test_decision_engine_integration ... ok
+test engine::tests::gflow_entropy_matches_softmax_and_handles_ties_and_singletons ... ok
+test tree::tests::reset_and_drop_destroy_items_once_and_allow_reuse ... ok
+test tree::tests::test_alloc_stops_advancing_the_cursor_once_full ... ok
+test engine::tests::cem_learns_different_actions_at_different_positions ... ok
+mbx[progress]: 15s elapsed; 0 hits, 2 misses, 0 bypassed, 0 not looked up; ~0.0s compiler work saved
+test engine::tests::test_all_six_engines ... ok
+test tree::tests::concurrent_allocations_publish_only_initialized_items ... ok
+
+test result: ok. 26 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/fail_closed_numeric_tests.rs (target/debug/deps/fail_closed_numeric_tests-35418e8ca99d17bd)
+
+running 13 tests
+test astar_rejects_nonfinite_input_successor_reward_and_costs ... ok
+test cpsat_filter_verdicts_preserves_blocked_candidates ... ok
+test pipeline_rejects_nonfinite_astar_transition_and_return_overflow ... ok
+test cpsat_rejects_nonfinite_values_before_nan_can_win_best_action ... ok
+test cem_rejects_nonfinite_transitions_and_accumulated_reward ... ok
+test cem_zero_parameters_are_rejected_before_sampling ... ok
+test direct_router_rejects_invalid_entropy_instead_of_rerouting ... ok
+test mcts_cfr_and_gflow_reject_invalid_inputs_and_transitions ... ok
+test mcts_rejects_invalid_configuration_and_value_overflow ... ok
+test validated_engines_preserve_world_model_errors ... ok
+test rollout_blocks_later_action_before_evaluating_its_invalid_transition ... ok
+test duplicate_actions_cannot_inflate_policy_mass_or_entropy ... ok
+test unanimous_committee_reports_zero_vote_entropy_despite_uncertain_input ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/latent_world_model_planner_tests.rs (target/debug/deps/latent_world_model_planner_tests-888895ce0fb4e522)
+
+running 5 tests
+test nonfinite_input_is_refused_by_every_engine ... ok
+test all_blocked_frame_is_refused_by_every_engine_and_tier ... ok
+test nonfinite_input_is_refused_on_every_tier ... ok
+test latent_world_model_plans_through_planner_context_on_every_tier ... ok
+test engines_never_pick_a_blocked_action ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.09s
+
+     Running tests/planner_config_tests.rs (target/debug/deps/planner_config_tests-8394a39bc1facf4a)
+
+running 6 tests
+test configured_pipeline_selects_gflownet_and_cfr_nash_from_the_request ... ok
+test high_c_puct_flips_the_decision_away_from_the_reward_optimum ... ok
+test high_uncertainty_weight_picks_the_calmer_lower_reward_action ... ok
+test low_c_puct_converges_to_the_highest_reward_action ... ok
+test new_with_config_refuses_an_invalid_config ... ok
+test zero_uncertainty_weight_picks_the_higher_reward_despite_displacement ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/production_pipeline_tests.rs (target/debug/deps/production_pipeline_tests-42222a9063a7a460)
+
+running 28 tests
+test audit_refuses_invalid_warn_risk ... ok
+test audit_refuses_a_model_without_safety_estimates ... ok
+test audit_rejects_a_gate_hard_stop_without_imagining_it ... ok
+test audit_continuation_follows_the_greedy_policy_and_drops_blocked_actions ... ok
+test audit_rejects_the_trap_action_as_lethal ... ok
+test decide_refuses_malformed_requests ... ok
+test decide_fails_closed_when_no_action_is_legal ... ok
+test audit_warns_on_a_confirm_tier_action ... ok
+test audit_approves_a_calm_action_and_says_the_estimate_is_uncalibrated ... ok
+test decide_reports_a_confirm_tier_choice ... ok
+test graph_revocation_prunes_candidate_before_engine_dispatch ... ok
+test decide_mode_parses_all_names_and_refuses_others ... ok
+test every_method_refuses_a_divergent_state ... ok
+test simulate_stops_at_death_and_reports_it ... ok
+test simulate_rejects_gate_blocked_steps ... ok
+test simulate_truncates_to_a_shorter_horizon ... ok
+test what_if_excludes_gate_blocked_candidates ... ok
+test what_if_fails_closed_on_empty_blocked_or_malformed_candidates ... ok
+test simulate_replays_the_plan_through_the_real_world_model ... ok
+test simulate_refuses_bad_horizons_and_empty_plans ... ok
+test what_if_flags_every_candidate_when_all_are_trapped ... ok
+test heat_certificate_failure_prunes_high_risk_action ... ok
+test what_if_detects_the_trap_and_picks_the_escape ... ok
+test decide_runs_every_mode_on_its_own_engine ... ok
+test decide_returns_the_chosen_actions_trajectory_on_request ... ok
+test audit_warns_when_the_state_hugs_the_boundary ... ok
+test decide_auto_routes_by_entropy ... ok
+test decide_prunes_hard_stops_before_any_engine_runs ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+
+   Doc-tests gen_zero_gate
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests gen_zero_planner
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+mbx[cache]: 0 hits, 2 misses, 11 incremental, 2 bypassed; 0 B downloaded, 0 B uploaded, 0 B stored locally
+mbx[savings]: 1.7 TiB logical of files removed by collection so far

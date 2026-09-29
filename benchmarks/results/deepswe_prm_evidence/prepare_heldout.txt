@@ -1,0 +1,3 @@
+COMMAND benchmarks/eval_deepswe_enhanced_prm.py prepare --partition heldout --output benchmarks/artifacts/deepswe_prm/heldout_features.pt
+DEVICE cpu (explicit); no GPU requested or fallback
+{"partition": "heldout", "steps": 14037, "trajectories": 151, "tasks": 38, "feature_shapes": [[151, 349], [151, 16384]]}

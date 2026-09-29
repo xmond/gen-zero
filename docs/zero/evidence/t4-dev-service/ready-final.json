@@ -1,0 +1,1 @@
+{"cognitive_assets":{"detail":"mount version 1 carries no cognitive assets; publish them with POST /v1/mounts or start with --mount-assets","status":"unavailable"},"semantic_bridge":{"backbone_loaded":true,"endpoint":"http://127.0.0.1:8995","probed_at_ms":1790432782092,"status":"ready"},"service":"gen-zero","status":"degraded"}

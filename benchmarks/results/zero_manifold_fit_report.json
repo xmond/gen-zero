@@ -1,0 +1,35 @@
+{
+  "artifact": "/ebs/pj/gen-zero/benchmarks/artifacts/zero/zero_manifold_v1.npz",
+  "manifold_sha256": "670539b71f384e17db05e1f1e94c1b8796569d66d83b2c783ecc04289ca52de3",
+  "encoder_id": "zero-qwen2.5-0.5b-trunk:int8:last-token",
+  "calibration_file": "/ebs/pj/gen-zero/benchmarks/data/calibration_clean_16.jsonl",
+  "calibration_sha256": "bd45f4df430ee7c74440afca44b7880ac033e24013a34345ce4e54f1583efa4a",
+  "records": 312,
+  "states": 1944,
+  "hidden": 896,
+  "manifold_dim": 64,
+  "energy_kept": 0.9519559018266768,
+  "mean_pairwise_cosine_raw": 0.5876462425690656,
+  "mean_pairwise_cosine_manifold": -0.00011709187023440845,
+  "forward_ms": {
+    "n": 312,
+    "mean": 1895.4374875622586,
+    "p50": 1501.8558071460575,
+    "p90": 3316.917769983411,
+    "max": 8387.091420125216
+  },
+  "wall_seconds": 592.7759847347625,
+  "rss_after_bytes": 1168379904,
+  "peak_rss_bytes": 1242411008,
+  "environment": {
+    "hostname": "luy-open-box",
+    "cpu": "x86_64",
+    "logical_cores": 24,
+    "torch": "2.14.0+cpu",
+    "torch_threads": 1,
+    "torch_interop_threads": 1,
+    "cuda_available": false,
+    "python": "3.11.16",
+    "transformers_imported": false
+  }
+}

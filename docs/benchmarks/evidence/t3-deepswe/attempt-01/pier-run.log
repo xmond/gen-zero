@@ -1,0 +1,35 @@
+DeepSWE fail-closed: ValueError: Target functions must be grounded in instruction text
+  1/1 F2P: 0.000 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0:00:48 0:00:00
+adhoc • gen-zero-deepswe • ark-code-latest
+┏━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━┓
+┃ Tria… ┃ Exce… ┃   F2P ┃ F2P_… ┃ F2P_… ┃   P2P ┃ P2P_… ┃ P2P_… ┃ Part… ┃ Rew… ┃
+┡━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━┩
+│     1 │     1 │ 0.000 │ 0.000 │ 60.0… │ 1.000 │ 964.… │ 964.… │ 0.941 │ 0.0… │
+└───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴──────┘
+
+┏━━━━━━━━━━━━┳━━━━━━━┓
+┃ Reward     ┃ Count ┃
+┡━━━━━━━━━━━━╇━━━━━━━┩
+│ 0          │     1 │
+│ 60         │     1 │
+│ 0          │     1 │
+│ 964        │     1 │
+│ 964        │     1 │
+│ 0.0        │     1 │
+│ 1.0        │     1 │
+│ 0.94140625 │     1 │
+└────────────┴───────┘
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┓
+┃ Exception                 ┃ Count ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━┩
+│ NonZeroAgentExitCodeError │     1 │
+└───────────────────────────┴───────┘
+
+Job Info
+Total runtime: 48s
+Results written to 
+/home/user/benchmarks/t3-r3-live-01/jobs/t3-deepswe-r3-20260926T144805Z/result.js
+on
+Inspect results by running `pier view /home/user/benchmarks/t3-r3-live-01/jobs`
+

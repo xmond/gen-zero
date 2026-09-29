@@ -1,0 +1,774 @@
+{
+  "overall_passed": false,
+  "status": "incomplete_targets_fail_closed",
+  "workspace": "/ebs/pj/gen-zero-worktree/rm-r4-planners",
+  "base_head": "478699c079bf4a053b953bb83b7e7f310eae4922",
+  "environment": {
+    "python": "3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]",
+    "executable": "/tmp/r4-planners-venv/bin/python",
+    "ortools": "9.15.6755",
+    "numpy": "2.4.6",
+    "platform": "Linux-7.0.0-31-generic-x86_64-with-glibc2.39",
+    "logical_cpus": 24,
+    "affinity": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23
+    ]
+  },
+  "implemented": [
+    "CEM benchmark uses the required state and discrete candidate arguments; reward-sensitive regression passes.",
+    "Client bidirectional API invokes the actual bidirectional engine method; returned path regression passes.",
+    "CP-SAT uses one worker, compact Boolean protobuf model, exactly-one constraint, presolve enabled, probing/symmetry/linearization disabled.",
+    "Ordinal utility coefficients preserve exact single-choice ordering without four-decimal truncation.",
+    "No argmax release on timeout, unknown solver status, missing dependency or solver exception; return is_safe=false with explicit error/status.",
+    "Latent validation is included in timing; unknown compound conditions cannot borrow a random projection as a proof.",
+    "QR allocation uses the actual proposition count instead of a dense latent-dimension square.",
+    "Benchmark preserves all 1000 wall timings, verdicts, scenarios, safety oracle, rejection counts and process exit codes.",
+    "League uses observed Elo window stability, preserves training state during historical evaluation, and no longer asserts 85% wins or prints monotonic certification.",
+    "116 focused and expanded regression tests passed with raw exit code 0."
+  ],
+  "unverified": [
+    "A trained dual-head Reflex checkpoint was not supplied; random-init weights are explicitly not accepted.",
+    "No live GPU arbiter acceptance or production deployment was performed.",
+    "Finite synthetic runs do not certify universal safety, arbitrary natural-language reasoning, Nash equilibrium or hard real-time scheduling.",
+    "The user-reported historical 103/1000 timeouts has no original log in this task and is not presented as a reproduced measurement."
+  ],
+  "incomplete": [
+    "12/12 target: final strict run passed 10/12; process exit code 1.",
+    "2.0ms / zero-fallback target: 127/1000 fallbacks and 127/1000 wall deadline misses; process exit code 1.",
+    "Shared-host scheduler delay remains observable; solver parameters alone do not establish a hard completion-time bound."
+  ],
+  "commands_and_raw_exit_codes": {
+    "planners_before": {
+      "command": "python python/gen_zero/scripts/run_12_planners_benchmark.py",
+      "exit_code": 1,
+      "timeout": false,
+      "elapsed_s": 8.249012231826782
+    },
+    "constraints_before": {
+      "command": "python python/gen_zero/scripts/benchmark_issue_76_constraint_compiler.py",
+      "exit_code": 0,
+      "timeout": false,
+      "elapsed_s": 97.06045055389404
+    },
+    "league_before": {
+      "command": "python python/gen_zero/run_league_benchmark.py",
+      "exit_code": 1,
+      "timeout": false,
+      "elapsed_s": 3.4403867721557617
+    },
+    "constraints_original_audited": {
+      "command": [
+        "/tmp/r4-planners-venv/bin/python",
+        "benchmarks/results/r4_evidence/compare_original.py"
+      ],
+      "cwd": "/ebs/pj/gen-zero-worktree/rm-r4-planners",
+      "exit_code": 1,
+      "elapsed_s": 131.20986413955688,
+      "log": "/ebs/pj/gen-zero-worktree/rm-r4-planners/benchmarks/results/r4_evidence/constraints_original_audited.log",
+      "environment": {
+        "PYTHONPATH": "python",
+        "OPENBLAS_NUM_THREADS": null,
+        "OMP_NUM_THREADS": null
+      }
+    },
+    "constraints_after": {
+      "command": [
+        "/tmp/r4-planners-venv/bin/python",
+        "python/gen_zero/scripts/benchmark_issue_76_constraint_compiler.py"
+      ],
+      "cwd": "/ebs/pj/gen-zero-worktree/rm-r4-planners",
+      "exit_code": 1,
+      "elapsed_s": 10.062097787857056,
+      "log": "/ebs/pj/gen-zero-worktree/rm-r4-planners/benchmarks/results/r4_evidence/constraints_after.log",
+      "environment": {
+        "PYTHONPATH": "python",
+        "OPENBLAS_NUM_THREADS": null,
+        "OMP_NUM_THREADS": null
+      }
+    },
+    "planners_after": {
+      "command": [
+        "/tmp/r4-planners-venv/bin/python",
+        "python/gen_zero/scripts/run_12_planners_benchmark.py"
+      ],
+      "cwd": "/ebs/pj/gen-zero-worktree/rm-r4-planners",
+      "exit_code": 1,
+      "elapsed_s": 10.963953018188477,
+      "log": "/ebs/pj/gen-zero-worktree/rm-r4-planners/benchmarks/results/r4_evidence/planners_after.log",
+      "environment": {
+        "PYTHONPATH": "python",
+        "OPENBLAS_NUM_THREADS": null,
+        "OMP_NUM_THREADS": null
+      }
+    },
+    "league_after": {
+      "command": [
+        "/tmp/r4-planners-venv/bin/python",
+        "python/gen_zero/run_league_benchmark.py"
+      ],
+      "cwd": "/ebs/pj/gen-zero-worktree/rm-r4-planners",
+      "exit_code": 0,
+      "elapsed_s": 3.234768867492676,
+      "log": "/ebs/pj/gen-zero-worktree/rm-r4-planners/benchmarks/results/r4_evidence/league_after.log",
+      "environment": {
+        "PYTHONPATH": "python",
+        "OPENBLAS_NUM_THREADS": null,
+        "OMP_NUM_THREADS": null
+      }
+    },
+    "tests_after": {
+      "command": [
+        "/tmp/r4-planners-venv/bin/python",
+        "-m",
+        "pytest",
+        "python/gen_zero/tests/test_issue_76_constraint_compiler.py",
+        "python/gen_zero/tests/test_league_arena.py",
+        "python/gen_zero/tests/test_issue_93_orthogonal_6_planner_engines.py",
+        "python/gen_zero/tests/test_r4_planner_constraint_regressions.py",
+        "-q"
+      ],
+      "cwd": "/ebs/pj/gen-zero-worktree/rm-r4-planners",
+      "exit_code": 0,
+      "elapsed_s": 23.584654808044434,
+      "log": "/ebs/pj/gen-zero-worktree/rm-r4-planners/benchmarks/results/r4_evidence/tests_after.log",
+      "environment": {
+        "PYTHONPATH": "python",
+        "OPENBLAS_NUM_THREADS": null,
+        "OMP_NUM_THREADS": null
+      }
+    },
+    "tests_final": {
+      "command": [
+        "/tmp/r4-planners-venv/bin/python",
+        "-m",
+        "pytest",
+        "python/gen_zero/tests/test_issue_76_constraint_compiler.py",
+        "python/gen_zero/tests/test_league_arena.py",
+        "python/gen_zero/tests/test_issue_93_orthogonal_6_planner_engines.py",
+        "python/gen_zero/tests/test_r4_planner_constraint_regressions.py",
+        "python/gen_zero/tests/test_fail_closed_service.py",
+        "python/gen_zero/tests/test_round12_contract.py",
+        "python/gen_zero/tests/test_f4_fail_closed.py",
+        "-q"
+      ],
+      "cwd": "/ebs/pj/gen-zero-worktree/rm-r4-planners",
+      "exit_code": 1,
+      "elapsed_s": 51.707507371902466,
+      "log": "/ebs/pj/gen-zero-worktree/rm-r4-planners/benchmarks/results/r4_evidence/tests_final.log",
+      "environment": {
+        "PYTHONPATH": "python",
+        "OPENBLAS_NUM_THREADS": null,
+        "OMP_NUM_THREADS": null
+      }
+    },
+    "tests_verified": {
+      "command": [
+        "/tmp/r4-planners-venv/bin/python",
+        "-m",
+        "pytest",
+        "python/gen_zero/tests/test_issue_76_constraint_compiler.py",
+        "python/gen_zero/tests/test_league_arena.py",
+        "python/gen_zero/tests/test_issue_93_orthogonal_6_planner_engines.py",
+        "python/gen_zero/tests/test_r4_planner_constraint_regressions.py",
+        "python/gen_zero/tests/test_fail_closed_service.py",
+        "python/gen_zero/tests/test_round12_contract.py",
+        "python/gen_zero/tests/test_f4_fail_closed.py",
+        "-q"
+      ],
+      "cwd": "/ebs/pj/gen-zero-worktree/rm-r4-planners",
+      "exit_code": 0,
+      "elapsed_s": 39.06069731712341,
+      "log": "/ebs/pj/gen-zero-worktree/rm-r4-planners/benchmarks/results/r4_evidence/tests_verified.log",
+      "environment": {
+        "PYTHONPATH": "python",
+        "OPENBLAS_NUM_THREADS": null,
+        "OMP_NUM_THREADS": null
+      }
+    }
+  },
+  "constraint_comparison": {
+    "is_synthetic": true,
+    "notice": "Compiler comparisons use updated audited synthetic scenarios; timings are real measurements of the solver on those fixtures.",
+    "same_scenario_oracle_and_environment": true,
+    "comparison_note": "Original HEAD compiler and final compiler use the updated audited synthetic scenarios with real OR-Tools; shared host load is not controlled.",
+    "user_reported_historical_fallbacks": {
+      "count": 103,
+      "trials": 1000,
+      "independently_verified": false
+    },
+    "original_audited": {
+      "source": {
+        "git_head": "478699c079bf4a053b953bb83b7e7f310eae4922",
+        "path": "python/gen_zero/gate/constraint_compiler.py",
+        "sha256": "9d94a2c5260a13a4d420cf02030d2d16142a6927edcbc165bc483936f291db87"
+      },
+      "audit": {
+        "status_counts": {
+          "CPSAT_NO_SOLUTION_FALLBACK:UNKNOWN": 294,
+          "CP_SAT_OPTIMAL": 643,
+          "0_1_ILP_FEASIBLE": 61,
+          "TIMEOUT_EARLY_FALLBACK": 2
+        },
+        "fallback_count": 296,
+        "timeout_count": 296,
+        "rejected_count": 0,
+        "wall_deadline_misses": 939,
+        "max_wall_ms": 644.5970509957988,
+        "passed": false
+      },
+      "time": {
+        "avg_compilation_latency_ms": 5820.045,
+        "p99_compilation_latency_ms": 11278.665,
+        "target_compilation_ms": 2.0,
+        "passed_compilation_target": false,
+        "avg_cpsat_solve_latency_ms": 6.236,
+        "p99_cpsat_solve_latency_ms": 18.75,
+        "target_solve_ms": 1.5,
+        "passed_solve_target": false,
+        "dynamic_rule_injection_ms": 4965.564
+      },
+      "safety": {
+        "before_unconstrained_violations": 227,
+        "before_violation_rate_pct": 22.7,
+        "after_cpsat_violations": 0,
+        "after_violation_rate_pct": 0.0,
+        "hard_blocking_rate_pct": 100.0,
+        "target_blocking_rate_pct": 100.0,
+        "passed_hard_safety_target": true
+      }
+    },
+    "final": {
+      "audit": {
+        "status_counts": {
+          "TIMEOUT_EARLY_FALLBACK": 55,
+          "CP_SAT_DEADLINE_EXCEEDED": 62,
+          "CP_SAT_OPTIMAL": 873,
+          "CPSAT_NO_OPTIMUM:UNKNOWN": 10
+        },
+        "fallback_count": 127,
+        "timeout_count": 127,
+        "rejected_count": 127,
+        "wall_deadline_misses": 127,
+        "max_wall_ms": 40.51382400211878,
+        "passed": false
+      },
+      "time": {
+        "avg_compilation_latency_ms": 1.731,
+        "p99_compilation_latency_ms": 4.746,
+        "target_compilation_ms": 2.0,
+        "passed_compilation_target": true,
+        "avg_cpsat_solve_latency_ms": 1.651,
+        "p99_cpsat_solve_latency_ms": 9.84,
+        "target_solve_ms": 1.5,
+        "passed_solve_target": false,
+        "dynamic_rule_injection_ms": 1.73
+      },
+      "safety": {
+        "before_unconstrained_violations": 227,
+        "before_violation_rate_pct": 22.7,
+        "after_cpsat_violations": 0,
+        "after_violation_rate_pct": 0.0,
+        "hard_blocking_rate_pct": 100.0,
+        "target_blocking_rate_pct": 100.0,
+        "passed_hard_safety_target": true
+      },
+      "adaptation": {
+        "neural_parameters_added": 0,
+        "retraining_epochs": 0,
+        "weights_evaluated": false,
+        "immediate_hot_activation": true,
+        "verification_verdict": {
+          "selected_action": "HOLD",
+          "is_safe": true,
+          "solve_time_ms": 1.188554015243426,
+          "timed_out": false,
+          "fallback_used": false,
+          "solver_status": "CP_SAT_OPTIMAL",
+          "applied_constraints": [
+            "RULE_004: ALLOW SCALE_UP ONLY IF cpu_utilization >= 0.70",
+            "RULE_009: FORBID THROTTLE IF thermal_pressure < 0.20"
+          ]
+        }
+      }
+    },
+    "worst_final_trial": {
+      "index": 505,
+      "wall_ms": 40.51382400211878,
+      "thread_cpu_ms": 1.1897000000002933,
+      "verdict": {
+        "selected_action": "HOLD",
+        "is_safe": false,
+        "solve_time_ms": 40.48992498428561,
+        "timed_out": true,
+        "fallback_used": true,
+        "solver_status": "CP_SAT_DEADLINE_EXCEEDED",
+        "applied_constraints": [
+          "RULE_003: FORBID FLUSH_CACHE IF dirty_pages > 5000.0",
+          "RULE_004 [ALLOW_VIOLATION]: ALLOW SCALE_UP ONLY IF cpu_utilization >= 0.70",
+          "RULE_007: io_wait > 0.60 -> BAN BATCH_WRITE"
+        ]
+      }
+    },
+    "median_wall_ms": 1.1356559989508241,
+    "median_thread_cpu_ms": 1.0925499999996369,
+    "full_before_trials": "benchmarks/results/r4_evidence/constraints_original_audited_report.json",
+    "full_after_trials": "benchmarks/results/r4_evidence/constraints_after_report.json"
+  },
+  "planners": {
+    "is_synthetic": true,
+    "notice": "Algorithm fixture runs on generated scenarios; they do not establish learned-model quality.",
+    "scope": "algorithm fixtures; does not establish learned-model quality",
+    "passed_count": 10,
+    "total_count": 12,
+    "metrics": {
+      "1. Reflex Fast Prior": {
+        "mean_ms": 10.192,
+        "p95_ms": 19.427,
+        "p99_ms": 70.167,
+        "success_rate": 0.0,
+        "category": "System 1 Fast",
+        "passed": false,
+        "iterations": 50,
+        "degradation_reasons": [
+          "untrained_weights_fallback"
+        ]
+      },
+      "2. Uncertainty A* Graph": {
+        "mean_ms": 0.053,
+        "p95_ms": 0.079,
+        "p99_ms": 0.16,
+        "success_rate": 1.0,
+        "category": "Graph Search",
+        "passed": true,
+        "iterations": 50
+      },
+      "3. Bidirectional Search": {
+        "mean_ms": 0.059,
+        "p95_ms": 0.077,
+        "p99_ms": 0.108,
+        "success_rate": 1.0,
+        "category": "Dual Graph",
+        "passed": true,
+        "iterations": 50
+      },
+      "4. PUCT MCTS": {
+        "mean_ms": 0.224,
+        "p95_ms": 0.298,
+        "p99_ms": 0.361,
+        "success_rate": 1.0,
+        "category": "System 2 Search",
+        "passed": true,
+        "iterations": 50
+      },
+      "5. Text World Model": {
+        "mean_ms": 0.028,
+        "p95_ms": 0.071,
+        "p99_ms": 0.092,
+        "success_rate": 1.0,
+        "category": "Model-Based",
+        "passed": true,
+        "iterations": 50
+      },
+      "6. MPC-CEM Trajectory": {
+        "mean_ms": 1.852,
+        "p95_ms": 2.39,
+        "p99_ms": 4.084,
+        "success_rate": 1.0,
+        "category": "Continuous Control",
+        "passed": true,
+        "iterations": 50
+      },
+      "7. GFlowNet Sampler": {
+        "mean_ms": 34.433,
+        "p95_ms": 40.599,
+        "p99_ms": 107.067,
+        "success_rate": 1.0,
+        "category": "Diverse Exploration",
+        "passed": true,
+        "iterations": 50
+      },
+      "8. Causal CFR Regret": {
+        "mean_ms": 0.136,
+        "p95_ms": 0.164,
+        "p99_ms": 0.221,
+        "success_rate": 1.0,
+        "category": "Game Theory",
+        "passed": true,
+        "iterations": 50
+      },
+      "9. CP-SAT Formal Solver": {
+        "mean_ms": 1.056,
+        "p95_ms": 1.993,
+        "p99_ms": 3.922,
+        "success_rate": 0.96,
+        "category": "Hard Constraints",
+        "passed": false,
+        "iterations": 50
+      },
+      "10. Continuous Latent MPC": {
+        "mean_ms": 3.808,
+        "p95_ms": 4.301,
+        "p99_ms": 5.108,
+        "success_rate": 1.0,
+        "category": "High-Dim Latent",
+        "passed": true,
+        "iterations": 50
+      },
+      "11. PRM Safety Barrier": {
+        "mean_ms": 0.001,
+        "p95_ms": 0.002,
+        "p99_ms": 0.009,
+        "success_rate": 1.0,
+        "category": "Process Verifier",
+        "passed": true,
+        "iterations": 50
+      },
+      "12. D-SCM Bluff Detector": {
+        "mean_ms": 0.036,
+        "p95_ms": 0.057,
+        "p99_ms": 0.119,
+        "success_rate": 1.0,
+        "category": "Multi-Agent Causal",
+        "passed": true,
+        "iterations": 50
+      }
+    }
+  },
+  "league": {
+    "is_synthetic": true,
+    "notice": "Seeded simulated LeagueArena payoff game; not evidence from real agents or a real-world task distribution.",
+    "seed": 42,
+    "generations": 100,
+    "matches_per_agent": 12,
+    "domain": "LeagueArena simulated payoff game",
+    "initial_elo": 1200.0,
+    "final_elo": 1090.3657583044358,
+    "elo_gain": -109.63424169556424,
+    "convergence": {
+      "passed": true,
+      "window": 20,
+      "score_tolerance": 0.05,
+      "elo_equivalence_margin": 34.86007028756008,
+      "drift_elo": 0.8799999999998818,
+      "drift_ci95": [
+        -6.61213220556926,
+        8.372132205569024
+      ],
+      "late_elo_std": 12.310723727068641,
+      "limitation": "descriptive interval; training samples are serially correlated"
+    },
+    "historical_evaluation": {
+      "tested_historical_snapshots": 100,
+      "rounds_per_opponent": 100,
+      "mean_win_rate": 0.4946,
+      "min_win_rate": 0.38,
+      "max_win_rate": 0.62,
+      "elo_delta": 17.218442020383463,
+      "win_rates": [
+        0.46,
+        0.5,
+        0.5,
+        0.55,
+        0.5,
+        0.58,
+        0.56,
+        0.48,
+        0.56,
+        0.5,
+        0.42,
+        0.47,
+        0.5,
+        0.48,
+        0.45,
+        0.56,
+        0.54,
+        0.43,
+        0.57,
+        0.51,
+        0.54,
+        0.43,
+        0.44,
+        0.57,
+        0.46,
+        0.55,
+        0.48,
+        0.41,
+        0.49,
+        0.52,
+        0.6,
+        0.5,
+        0.5,
+        0.48,
+        0.49,
+        0.5,
+        0.45,
+        0.49,
+        0.48,
+        0.51,
+        0.52,
+        0.49,
+        0.38,
+        0.57,
+        0.51,
+        0.54,
+        0.42,
+        0.48,
+        0.53,
+        0.58,
+        0.53,
+        0.47,
+        0.45,
+        0.47,
+        0.49,
+        0.49,
+        0.58,
+        0.41,
+        0.55,
+        0.45,
+        0.6,
+        0.45,
+        0.55,
+        0.4,
+        0.4,
+        0.53,
+        0.43,
+        0.42,
+        0.49,
+        0.44,
+        0.49,
+        0.5,
+        0.45,
+        0.47,
+        0.52,
+        0.5,
+        0.45,
+        0.46,
+        0.43,
+        0.46,
+        0.45,
+        0.48,
+        0.43,
+        0.53,
+        0.47,
+        0.41,
+        0.54,
+        0.62,
+        0.56,
+        0.47,
+        0.46,
+        0.44,
+        0.48,
+        0.5,
+        0.59,
+        0.51,
+        0.59,
+        0.56,
+        0.51,
+        0.5
+      ]
+    },
+    "passed": true
+  },
+  "parameter_experiments": {
+    "is_synthetic": true,
+    "notice": "Parameter sweeps use generated exactly-one CP-SAT fixtures.",
+    "tune_cpsat": [
+      {
+        "workers": 0,
+        "presolve": true,
+        "compressed": false,
+        "deadline_misses": 985,
+        "not_optimal": 995,
+        "p50_ms": 5.177804996492341,
+        "p99_ms": 24.007996980799362,
+        "max_ms": 71.4342130231671
+      },
+      {
+        "workers": 1,
+        "presolve": true,
+        "compressed": false,
+        "deadline_misses": 102,
+        "not_optimal": 98,
+        "p50_ms": 1.2544530036393553,
+        "p99_ms": 6.876541010569781,
+        "max_ms": 83.65815100842156
+      },
+      {
+        "workers": 1,
+        "presolve": true,
+        "compressed": true,
+        "deadline_misses": 48,
+        "not_optimal": 48,
+        "p50_ms": 1.1475560022518039,
+        "p99_ms": 3.3720729988999665,
+        "max_ms": 36.88321198569611
+      },
+      {
+        "workers": 1,
+        "presolve": false,
+        "compressed": true,
+        "deadline_misses": 43,
+        "not_optimal": 41,
+        "p50_ms": 1.1209579824935645,
+        "p99_ms": 3.2245779875665903,
+        "max_ms": 30.339958000695333
+      },
+      {
+        "workers": 2,
+        "presolve": true,
+        "compressed": true,
+        "deadline_misses": 977,
+        "not_optimal": 754,
+        "p50_ms": 4.370335984276608,
+        "p99_ms": 17.87162700202316,
+        "max_ms": 77.95526401605457
+      },
+      {
+        "workers": 2,
+        "presolve": false,
+        "compressed": true,
+        "deadline_misses": 963,
+        "not_optimal": 666,
+        "p50_ms": 4.096344986464828,
+        "p99_ms": 15.770106023410335,
+        "max_ms": 34.74799101240933
+      }
+    ],
+    "tune_compact": [
+      {
+        "presolve": false,
+        "probing": 0,
+        "symmetry": 0,
+        "misses": 35,
+        "p50_ms": 0.9244649845641106,
+        "p99_ms": 2.5300030247308314,
+        "max_ms": 40.36865898524411
+      },
+      {
+        "presolve": true,
+        "probing": 0,
+        "symmetry": 0,
+        "misses": 33,
+        "p50_ms": 0.8575670071877539,
+        "p99_ms": 2.4884050071705133,
+        "max_ms": 40.536952001275495
+      },
+      {
+        "presolve": true,
+        "probing": 2,
+        "symmetry": 2,
+        "misses": 40,
+        "p50_ms": 1.0170610039494932,
+        "p99_ms": 2.7989929949399084,
+        "max_ms": 42.278586013708264
+      }
+    ]
+  },
+  "source_evidence": [
+    {
+      "location": "python/gen_zero/client.py:1613",
+      "sha256": "f0a3d5715ee6b8cdb5a7a3f8618f5d3e05f7c95431707451c1c8c5ad7bad9f96"
+    },
+    {
+      "location": "python/gen_zero/scripts/run_12_planners_benchmark.py:177",
+      "sha256": "3a5b883e0ccff2de0708745871e1e2be339b39e495207148bfd5abf71be569ac"
+    },
+    {
+      "location": "python/gen_zero/gate/constraint_compiler.py:537",
+      "sha256": "ed8f1c3f6d0165926c8f2a7e11ca50b72b9136d02c6f33013ca4c67577cdcecc"
+    },
+    {
+      "location": "python/gen_zero/gate/constraint_compiler.py:684",
+      "sha256": "ed8f1c3f6d0165926c8f2a7e11ca50b72b9136d02c6f33013ca4c67577cdcecc"
+    },
+    {
+      "location": "python/gen_zero/scripts/benchmark_issue_76_constraint_compiler.py:275",
+      "sha256": "389b1e1d1364e41ee2eb00ffdda43f3083e6133f1ffd9869cee2c37309a132b4"
+    },
+    {
+      "location": "python/gen_zero/run_league_benchmark.py:18",
+      "sha256": "71ca04479574cc7ef5bb36cc0fe6ac342fd360b512fc43224f42ad5672176c19"
+    },
+    {
+      "location": "python/gen_zero/multiagent/league_arena.py:291",
+      "sha256": "f149f389d9c0e3089ebe76fa44ce8dac8387fc678104350995bec324a3b7134c"
+    },
+    {
+      "location": "python/gen_zero/tests/test_r4_planner_constraint_regressions.py:45",
+      "sha256": "d5e11451a4b51fc0db66ae0f4323b4152b3f7f220a59cb1a7b3cb5e847954f77"
+    }
+  ],
+  "compatibility_changes": [
+    "Compiler failures no longer release an argmax fallback as is_safe=true. Callers must respect is_safe and fallback_used.",
+    "Ambiguous normalized action IDs and nonfinite utilities now raise ValueError.",
+    "Unsupported conditions fail closed even when a latent vector is supplied.",
+    "Historical robustness removes zero_elo_degradation; callers receive measured elo_delta and win_rates instead.",
+    "Full repository test suite and other OR-Tools versions were not tested."
+  ],
+  "evidence_sha256": {
+    "benchmarks/results/r4_evidence/README.md": "fe3e0af26746531f4858068ed438bd75a1d02b2f485760968bb7d0524e60ae29",
+    "benchmarks/results/r4_evidence/assemble_report.py": "038b1328aa0728e77c54bb3bd64cfb95273972f35127e353907b314fea8766e2",
+    "benchmarks/results/r4_evidence/compare_original.py": "ac56496d95f72a3e7c77aca42a6eba360989b4d5cee8b90897bd766262184e21",
+    "benchmarks/results/r4_evidence/constraints_after.json": "7f3daff820ce034bf7ec5e082ebc393a4ae45362945c65d35ec5814b338153e1",
+    "benchmarks/results/r4_evidence/constraints_after.log": "0bbe30cab4da6393fd0cb8f1af71f6a682375a948684d4417a74cbcc4059b3fc",
+    "benchmarks/results/r4_evidence/constraints_after_report.json": "4069d5c0c00f198e3ac77bfddc4776bfb7c38b13c49146ff92157701e0c39a4b",
+    "benchmarks/results/r4_evidence/constraints_before.json": "bd2b63df57873868d468ae684ba3fa542142ee8deb315c4684eda0249dba6f5b",
+    "benchmarks/results/r4_evidence/constraints_before.log": "6a89a99a2f688968a3ac7c619c08f000d8b86aeeffeac3b5032f4eb154f0d81b",
+    "benchmarks/results/r4_evidence/constraints_compact.log": "01d771cf169d222b2165f21bfbd77ae14a52f7a793b4db94f42da8629e46c9c5",
+    "benchmarks/results/r4_evidence/constraints_first_tuned.log": "5143ecd73ef924d0fad51555eb3e109692d5dcea2d85dd23aaaa563e799c7f04",
+    "benchmarks/results/r4_evidence/constraints_original_audited.json": "6cda68ae624f89a56486694d2d8f88e1f845d2b9919135ad0fdb244618698fbe",
+    "benchmarks/results/r4_evidence/constraints_original_audited.log": "c7170cfd626a3b5d67d7c02f9816334407a05f18ab7c18faa65184b03cde1c52",
+    "benchmarks/results/r4_evidence/constraints_original_audited_report.json": "9e3c68b6d4c38b2711e6ff1b9da0a8a41ed72f1805d454d1c1a96b3159952a14",
+    "benchmarks/results/r4_evidence/constraints_tuned.log": "953aa03c779017c45e965b343e8fe76f63abe25744be383239d48e0ab2f82ec0",
+    "benchmarks/results/r4_evidence/constraints_validated_once.log": "ea4ec522a52700d2360da6f11358929d4eb86b095723412e27d26e6aa7324595",
+    "benchmarks/results/r4_evidence/league_after.json": "d2f577fa84e278d78063657a07a4eed485079295e7bcc652df46899e4ccb23f5",
+    "benchmarks/results/r4_evidence/league_after.log": "b56f943d1579f344744494d700f6a07213a0db900ebb6d9f95ced35b2594bbb3",
+    "benchmarks/results/r4_evidence/league_after_report.json": "79d6defe24464b46be9dbba8bd20faa52f3f35bd2d17ff34a75a5c8928c453a2",
+    "benchmarks/results/r4_evidence/league_before.json": "2c5ba71d38c59795204e97a0a4b7458773104ea4b476018de9f85ea3def2343c",
+    "benchmarks/results/r4_evidence/league_before.log": "e29b9e14aa60443df6b21dd560449d03cfda311094badb4e64dca71e09b1e494",
+    "benchmarks/results/r4_evidence/league_tuned.log": "b56f943d1579f344744494d700f6a07213a0db900ebb6d9f95ced35b2594bbb3",
+    "benchmarks/results/r4_evidence/planners_after.json": "0c3c47c42b2793ed72a6fa8bd355c4d9780fe6fb08a3a39071ac3e91423bd083",
+    "benchmarks/results/r4_evidence/planners_after.log": "20d2e2dade36220059d99a422539c966c16efb796fc86163d7c775d051498ed3",
+    "benchmarks/results/r4_evidence/planners_after_report.json": "df72fc2656de84df1c56bb471c3fc31ef1a72945d97bc15c0c80068dd6e388a7",
+    "benchmarks/results/r4_evidence/planners_before.json": "6de84722fbbe5a0eedc0ecff397132abe7b8999126fccc71696dead484aaa699",
+    "benchmarks/results/r4_evidence/planners_before.log": "3e146009802ed265c49cfdcab3f4c98192190f82da193bb69797e9163522ee7a",
+    "benchmarks/results/r4_evidence/planners_tuned.log": "d3d88a169f53e96be445e40d14b257f8073fec06e2b13a35a84e1590a401cfab",
+    "benchmarks/results/r4_evidence/run_recorded.py": "256e705a91d2dedd28fdf391700c973361b2e37e1db1a87e06db8b88cfbed218",
+    "benchmarks/results/r4_evidence/tests_after.json": "30e9f3a298f07e9b1098fe9f474abcb7a2ef8ca5302f0c3d6dc655ed5516ace1",
+    "benchmarks/results/r4_evidence/tests_after.log": "5d010718d921aa3135cf3d23236614fa1c6a3c92594127dafc74a272d1c8b7ec",
+    "benchmarks/results/r4_evidence/tests_final.json": "ae20e065482cc6c43c3e1b789579dc06e6b1ee0721c0b0f494d29be902d338b6",
+    "benchmarks/results/r4_evidence/tests_final.log": "051107a2fe479c62bc1bad3bb094bbfa1297adfcaa1bba652209586363540925",
+    "benchmarks/results/r4_evidence/tests_first.log": "08d318122fde5fd6cbcb1a67c52c53b578ca58fb020db0277a509192c1df6941",
+    "benchmarks/results/r4_evidence/tests_verified.json": "ec8022b81e7c799b4479e081bcb187aa863169fc54c21225ec30a1774e4289ca",
+    "benchmarks/results/r4_evidence/tests_verified.log": "056b9b2d8b0874c2a742c67c7752ab8f5348dfd8e890cd30d111ca525136d5a3",
+    "benchmarks/results/r4_evidence/tune_compact.json": "70af8aeb8bce88da399ce3918d0b343b5b6b8576a34604c73f9d8be82fe90b45",
+    "benchmarks/results/r4_evidence/tune_compact.log": "8039509f80c52a501774b20f221554356e38f19eda694c18913c96c9d8d430b4",
+    "benchmarks/results/r4_evidence/tune_compact.py": "b3eecfb4391a073956553ae3e34aedb67a750fbeff05a61e23d99ae52c195b71",
+    "benchmarks/results/r4_evidence/tune_cpsat.json": "56610655517ce926eb9b5578f62887389f80ada1e5c4a8188ad31ef5a80ab981",
+    "benchmarks/results/r4_evidence/tune_cpsat.log": "f107927c20117decfa7cd5963b9eb4e7577a79fbb4a3530d0534b36da6a7c143",
+    "benchmarks/results/r4_evidence/tune_cpsat.py": "69d7940696e205cb21f976dbeef3295e524d0bf732b5598404ef69bdbaf32fe1"
+  }
+}

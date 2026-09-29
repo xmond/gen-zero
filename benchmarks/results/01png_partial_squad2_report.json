@@ -1,0 +1,185 @@
+{
+ "title": "01.PNG grand challenge: 13 public benchmarks, 3,880 test records",
+ "generated_utc": "2026-09-23T15:54:40Z",
+ "command": "python3 benchmarks/suites/benchmark_01png_grand_challenge.py all",
+ "host": {
+  "platform": "Windows-10-10.0.26200-SP0",
+  "cpu_count": 24,
+  "loadavg_at_eval_start": [
+   0.0,
+   0.0,
+   0.0
+  ],
+  "loadavg_at_eval_end": [
+   1.46,
+   0.31,
+   0.1
+  ],
+  "note": "shared box; latency is indicative, not a clean-room number"
+ },
+ "protocol": {
+  "encoder": "D:\\models\\Qwen2.5-0.5B",
+  "encoder_precision": "fp32",
+  "device": "cpu",
+  "pooling": [
+   "mean@layer12",
+   "last@layer18"
+  ],
+  "max_tokens": 256,
+  "truncation": "first 64 + last 192 tokens",
+  "train_records_per_task_max": 1000,
+  "early_stop_fraction_of_train": 0.15,
+  "optimizer": {
+   "name": "AdamW",
+   "lr": 0.001,
+   "weight_decay": 0.01,
+   "batch": 32,
+   "max_epochs": 80,
+   "patience": 10,
+   "seed": 0
+  },
+  "configs": {
+   "baseline": "ParallelRNNSetAdapter d=256 rank=16 T=6, 1 set layer x 4 heads; query = pooled whole context",
+   "deep_wide": "DeepWideRNNSetAdapter d=512 rank=16 T=6, 3 residual RNN layers rho_max 0.95/0.85/0.75, 2 set layers x 8 heads SwiGLU; query = cross-difference of separately encoded fields on multinli/paws/vitaminc, pooled whole context elsewhere"
+  },
+  "scoring": "argmax over the task's candidate list vs ground_truth, exact match",
+  "comparability_caveat": "Nimble and Jev in 01.PNG are zero-shot judges; both configs here are per-task heads supervised on public train splits (leakage-gated). Laya numbers are copied from its A100 report, not re-run."
+ },
+ "aggregate": {
+  "baseline": {
+   "macro_avg_13": null,
+   "macro_avg_evaluated": 58.19,
+   "micro_acc": 58.19,
+   "delta_macro_vs_nimble": null,
+   "delta_macro_vs_jev": null,
+   "tasks_beating_best_01png": [],
+   "tasks_beating_best_01png_AND_majority": [],
+   "head_latency_ms_median_over_tasks": 1.1254999990342185
+  },
+  "deep_wide": {
+   "macro_avg_13": null,
+   "macro_avg_evaluated": 58.19,
+   "micro_acc": 58.19,
+   "delta_macro_vs_nimble": null,
+   "delta_macro_vs_jev": null,
+   "tasks_beating_best_01png": [],
+   "tasks_beating_best_01png_AND_majority": [],
+   "head_latency_ms_median_over_tasks": 13.67749999917578
+  },
+  "majority_class_macro": 49.83,
+  "laya_a100_reported_macro_13": null,
+  "png_reference_avg": {
+   "nimble": 74.8,
+   "jev": 76.0
+  }
+ },
+ "tasks": {
+  "squad2": {
+   "dataset": "SQuAD 2.0",
+   "n": 299,
+   "n_expected_01png": 299,
+   "nimble": 80.6,
+   "jev": 82.9,
+   "best_01png": 82.9,
+   "laya_a100_reported": 66.22,
+   "test_file": {
+    "path": "D:\\genz\\benchmarks\\data\\full_13\\squad2.jsonl",
+    "sha256": "e1a3708586e0825f7be4b63798a61137a8c2cb7816f351aebaca926ce3028f36",
+    "lines": 299
+   },
+   "leakage_gate": {
+    "scanned": 1000,
+    "kept": 1000,
+    "id_overlap": 0,
+    "text_overlap": 0,
+    "family_overlap": 0,
+    "label_counts": {
+     "true": 676,
+     "false": 324
+    }
+   },
+   "majority_class_train_prior_acc": 49.83,
+   "pair_cross_difference_used": false,
+   "encoder_latency_ms_batch1": {
+    "whole_context_median": 403.59745000023395,
+    "pair_fields_median": null,
+    "probe_n": 16
+   },
+   "encoder_batch_seconds": {
+    "train_full": 223.4,
+    "test_full": 75.73,
+    "cands": 0.08
+   },
+   "configs": {
+    "baseline": {
+     "correct": 174,
+     "accuracy": 58.19,
+     "wilson95": [
+      52.53,
+      63.65
+     ],
+     "delta_vs_nimble": -22.41,
+     "delta_vs_jev": -24.71,
+     "delta_vs_best_01png": -24.71,
+     "head_latency_ms": {
+      "median": 1.1254999990342185,
+      "p95": 1.4998500060755757,
+      "mean": 1.159287959841052
+     },
+     "torch_numpy_argmax_agreement": 1.0,
+     "pred_counts": [
+      103,
+      196
+     ],
+     "best_epoch": 7,
+     "epochs_run": 17,
+     "early_stop_acc": 71.15,
+     "n_params": 1067008,
+     "n_train": 844,
+     "train_seconds": 11.9
+    },
+    "deep_wide": {
+     "correct": 174,
+     "accuracy": 58.19,
+     "wilson95": [
+      52.53,
+      63.65
+     ],
+     "delta_vs_nimble": -22.41,
+     "delta_vs_jev": -24.71,
+     "delta_vs_best_01png": -24.71,
+     "head_latency_ms": {
+      "median": 13.67749999917578,
+      "p95": 15.97823000338394,
+      "mean": 13.78988695728443
+     },
+     "torch_numpy_argmax_agreement": 1.0,
+     "pred_counts": [
+      55,
+      244
+     ],
+     "best_epoch": 1,
+     "epochs_run": 11,
+     "early_stop_acc": 71.79,
+     "n_params": 10720768,
+     "n_train": 844,
+     "train_seconds": 72.6,
+     "layer_spectral_radii": [
+      0.537062,
+      0.472088,
+      0.393986
+     ]
+    }
+   },
+   "gold_counts": [
+    150,
+    149
+   ],
+   "mcnemar_baseline_vs_deep_wide": {
+    "only_baseline_correct": 37,
+    "only_deep_wide_correct": 37,
+    "p_value": 1.0
+   }
+  }
+ }
+}

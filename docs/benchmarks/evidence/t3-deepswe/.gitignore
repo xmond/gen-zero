@@ -1,0 +1,7 @@
+# Raw benchmark evidence must remain reviewable despite repository-wide ignores.
+!**/*.log
+!**/*.jsonl
+!**/*.err
+!**/*.out
+!**/artifacts/
+!**/artifacts/**

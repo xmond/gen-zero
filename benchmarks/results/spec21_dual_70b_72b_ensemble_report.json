@@ -1,0 +1,791 @@
+{
+  "title": "13-task Qwen-72B + Llama-70B ridge-probe probability ensemble",
+  "generated_utc": "2026-09-25T04:21:07.578633+00:00",
+  "command": "benchmarks/suites/evaluate_dual_70b_72b_ensemble.py",
+  "protocol": {
+    "folds": 5,
+    "seed": 20260925,
+    "projection": "Gaussian random projection, 256 dimensions per source, label-free",
+    "head": "standardized ridge one-hot classifier",
+    "alpha": 100.0,
+    "weight_grid_qwen": [
+      0.0,
+      0.25,
+      0.5,
+      0.75,
+      1.0
+    ],
+    "weight_selection": "training OOF accuracy; tie order 0.5,0.25,0.75,0,1",
+    "probability": "softmax of ridge scores divided by OOF score standard deviation",
+    "baseline_caveat": "Spec21 references use different selected expert families and are not matched head comparisons."
+  },
+  "published_single_model_reference": {
+    "qwen72b": 81.06977998246526,
+    "llama70b": 81.08932315286758
+  },
+  "aggregate_macro": {
+    "qwen_probe": {
+      "accuracy": 79.91484100963342,
+      "balanced_accuracy": 70.20714652061925,
+      "macro_f1": 68.89422035818022
+    },
+    "llama_probe": {
+      "accuracy": 79.73658809338228,
+      "balanced_accuracy": 68.8507054491204,
+      "macro_f1": 68.87131034544952
+    },
+    "equal_fusion": {
+      "accuracy": 80.85850712436437,
+      "balanced_accuracy": 70.90583168813906,
+      "macro_f1": 70.29448115820031
+    },
+    "oof_weight_fusion": {
+      "accuracy": 80.81649979258951,
+      "balanced_accuracy": 70.8946349852932,
+      "macro_f1": 70.32335315579304
+    }
+  },
+  "tasks": {
+    "massive_en": {
+      "n_train": 1000,
+      "n_test": 350,
+      "K": 18,
+      "weight_qwen": 0.5,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 89.9,
+        "0.25": 90.3,
+        "0.5": 91.0,
+        "0.75": 90.60000000000001,
+        "1.0": 88.9
+      },
+      "oof_logit_scale": [
+        0.1929800423156898,
+        0.19702225149678482
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/massive_en.npz": "6bf96fd909a0883d26d58fcec2ed3c3e6234b831f0885093bac92b6a4fb6c1a8",
+        "/ebs/data/extracted_features/llama70b/massive_en.npz": "bbb91c2a9a579a04e5ae97224e3be8af34ed18a0c7659f470a55477894aca7ef"
+      },
+      "test_file_sha256": "a6115226dd88711000d8ba7259cc9d9431a8c062b9fea93ca29f1a75816b92a5",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 88.85714285714286,
+          "balanced_accuracy": 89.43420644401178,
+          "macro_f1": 88.86329011242175,
+          "correct": 311,
+          "n": 350
+        },
+        "llama_probe": {
+          "accuracy": 89.71428571428571,
+          "balanced_accuracy": 89.95548641112256,
+          "macro_f1": 90.17585914810647,
+          "correct": 314,
+          "n": 350
+        },
+        "equal_fusion": {
+          "accuracy": 89.14285714285714,
+          "balanced_accuracy": 89.57234464867047,
+          "macro_f1": 89.42969891153774,
+          "correct": 312,
+          "n": 350
+        },
+        "oof_weight_fusion": {
+          "accuracy": 89.14285714285714,
+          "balanced_accuracy": 89.57234464867047,
+          "macro_f1": 89.42969891153774,
+          "correct": 312,
+          "n": 350
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 89.71428571428571,
+        "llama70b": 89.14285714285714
+      },
+      "equal_fusion_minus_best_published_pp": -0.5714285714285694
+    },
+    "massive_de": {
+      "n_train": 11247,
+      "n_test": 350,
+      "K": 18,
+      "weight_qwen": 0.5,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 90.27296167866987,
+        "0.25": 90.64639459411399,
+        "0.5": 90.64639459411399,
+        "0.75": 90.53080821552413,
+        "1.0": 89.93509380279185
+      },
+      "oof_logit_scale": [
+        0.19584576489306488,
+        0.19700713142298254
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/massive_de.npz": "522db7e482cf5aa65cbb3aa99a5d441e6c608f8e2633392f5e35e917766a168c",
+        "/ebs/data/extracted_features/llama70b/massive_de.npz": "62bb38bc9e080d95f372d1206de2c4a21376bed95fc42f25fef1f679026d7baa"
+      },
+      "test_file_sha256": "7539497efc6f40a176c6dbaf982a9abd5f45865903298c9ef603b073430c90f1",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 89.14285714285714,
+          "balanced_accuracy": 89.46904267019129,
+          "macro_f1": 89.24293532512938,
+          "correct": 312,
+          "n": 350
+        },
+        "llama_probe": {
+          "accuracy": 88.28571428571429,
+          "balanced_accuracy": 88.0354437244931,
+          "macro_f1": 88.15192335515847,
+          "correct": 309,
+          "n": 350
+        },
+        "equal_fusion": {
+          "accuracy": 89.42857142857143,
+          "balanced_accuracy": 89.08575655854958,
+          "macro_f1": 89.58785526625603,
+          "correct": 313,
+          "n": 350
+        },
+        "oof_weight_fusion": {
+          "accuracy": 89.42857142857143,
+          "balanced_accuracy": 89.08575655854958,
+          "macro_f1": 89.58785526625603,
+          "correct": 313,
+          "n": 350
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 91.14285714285714,
+        "llama70b": 91.42857142857143
+      },
+      "equal_fusion_minus_best_published_pp": -2.0
+    },
+    "multinli": {
+      "n_train": 1000,
+      "n_test": 299,
+      "K": 3,
+      "weight_qwen": 0.75,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 80.10000000000001,
+        "0.25": 84.5,
+        "0.5": 86.3,
+        "0.75": 88.0,
+        "1.0": 87.5
+      },
+      "oof_logit_scale": [
+        0.39233467835260083,
+        0.3730870866211494
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/multinli.npz": "53fcfbee86975b7110147179d6c9a0813e881631889a7c618434a7d01eea8728",
+        "/ebs/data/extracted_features/llama70b/multinli.npz": "1b8165fe5c72e6e8859d24b4f9c7d0065147c92336ae46a2d994c4e210fe4504"
+      },
+      "test_file_sha256": "f6bbf79b5b7e8e06dd4cabbbe098310ea9cac1d5f49f2049fbb942cef1985bdc",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 87.62541806020067,
+          "balanced_accuracy": 87.59204992538326,
+          "macro_f1": 87.57753571505759,
+          "correct": 262,
+          "n": 299
+        },
+        "llama_probe": {
+          "accuracy": 83.27759197324414,
+          "balanced_accuracy": 83.25844525844526,
+          "macro_f1": 83.20154310242168,
+          "correct": 249,
+          "n": 299
+        },
+        "equal_fusion": {
+          "accuracy": 86.95652173913044,
+          "balanced_accuracy": 86.88414055080722,
+          "macro_f1": 86.8999902238733,
+          "correct": 260,
+          "n": 299
+        },
+        "oof_weight_fusion": {
+          "accuracy": 88.62876254180601,
+          "balanced_accuracy": 88.51797585130919,
+          "macro_f1": 88.50100266009794,
+          "correct": 265,
+          "n": 299
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 88.29431438127091,
+        "llama70b": 86.2876254180602
+      },
+      "equal_fusion_minus_best_published_pp": -1.337792642140471
+    },
+    "pubmedqa": {
+      "n_train": 750,
+      "n_test": 250,
+      "K": 3,
+      "weight_qwen": 0.75,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 76.4,
+        "0.25": 79.60000000000001,
+        "0.5": 80.26666666666667,
+        "0.75": 80.66666666666666,
+        "1.0": 79.33333333333333
+      },
+      "oof_logit_scale": [
+        0.3795261727983187,
+        0.3717073487463225
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/pubmedqa.npz": "aa07455d2972410bc77e0fb075e0ba606421f398a7f5595b8fb0bee3eca0b6b1",
+        "/ebs/data/extracted_features/llama70b/pubmedqa.npz": "8c2980c43d71d4409b6d7dc6c6eedc80c5a8c74a03793d5e338f5329a67f606d"
+      },
+      "test_file_sha256": "ad0de7785564bceadfbbd50828b3a87017aa079081a669521696f672e63a3fbd",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 73.6,
+          "balanced_accuracy": 56.90789473684211,
+          "macro_f1": 52.55012028869287,
+          "correct": 184,
+          "n": 250
+        },
+        "llama_probe": {
+          "accuracy": 73.6,
+          "balanced_accuracy": 58.36059743954481,
+          "macro_f1": 56.4902622645245,
+          "correct": 184,
+          "n": 250
+        },
+        "equal_fusion": {
+          "accuracy": 76.0,
+          "balanced_accuracy": 59.0619284698232,
+          "macro_f1": 55.66595059076261,
+          "correct": 190,
+          "n": 250
+        },
+        "oof_weight_fusion": {
+          "accuracy": 75.2,
+          "balanced_accuracy": 58.89275553749237,
+          "macro_f1": 55.30958510952602,
+          "correct": 188,
+          "n": 250
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 73.2,
+        "llama70b": 76.4
+      },
+      "equal_fusion_minus_best_published_pp": -0.4000000000000057
+    },
+    "vitaminc": {
+      "n_train": 1000,
+      "n_test": 599,
+      "K": 3,
+      "weight_qwen": 0.75,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 81.6,
+        "0.25": 82.6,
+        "0.5": 82.8,
+        "0.75": 83.1,
+        "1.0": 81.6
+      },
+      "oof_logit_scale": [
+        0.38298200537740107,
+        0.3823448215057278
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/vitaminc.npz": "93cc2f1482ac513e7a12f87309554fe80fea6f31126d2738224e5dc8be19bba9",
+        "/ebs/data/extracted_features/llama70b/vitaminc.npz": "7687fc0dfdd2358a0693f36a87f078cdf406b78ef57dabe36d91680d9a3fe6f0"
+      },
+      "test_file_sha256": "f2756bc9af363762d6d195c96574f624dcad1fab04fff92bd452a50134947e76",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 83.30550918196995,
+          "balanced_accuracy": 72.26418440331832,
+          "macro_f1": 74.06302652992505,
+          "correct": 499,
+          "n": 599
+        },
+        "llama_probe": {
+          "accuracy": 81.46911519198665,
+          "balanced_accuracy": 71.43940551117777,
+          "macro_f1": 73.11504150982313,
+          "correct": 488,
+          "n": 599
+        },
+        "equal_fusion": {
+          "accuracy": 84.80801335559266,
+          "balanced_accuracy": 75.72552191637998,
+          "macro_f1": 77.1230552398448,
+          "correct": 508,
+          "n": 599
+        },
+        "oof_weight_fusion": {
+          "accuracy": 83.80634390651085,
+          "balanced_accuracy": 73.8122721081823,
+          "macro_f1": 75.4017514051967,
+          "correct": 502,
+          "n": 599
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 84.64106844741235,
+        "llama70b": 83.47245409015025
+      },
+      "equal_fusion_minus_best_published_pp": 0.16694490818031227
+    },
+    "boolq": {
+      "n_train": 9264,
+      "n_test": 300,
+      "K": 2,
+      "weight_qwen": 0.5,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 90.77072538860104,
+        "0.25": 91.2348877374784,
+        "0.5": 91.40759930915371,
+        "0.75": 91.213298791019,
+        "1.0": 90.8678756476684
+      },
+      "oof_logit_scale": [
+        0.4269941674693802,
+        0.42641499703793884
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/boolq.npz": "0b5bb874e4905ff62574294f646d0a5eef15c8a6e7bb3518938615e6b0897f2c",
+        "/ebs/data/extracted_features/llama70b/boolq.npz": "d3b0172849c785016ee76ea01dde4f3c05c448e2ae49a29be9e2c88080d0da8b"
+      },
+      "test_file_sha256": "8f62171280a7104852a8ae77f14284f07f0984b7d9459b574542c9c434127aec",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 87.33333333333333,
+          "balanced_accuracy": 87.4384236453202,
+          "macro_f1": 87.10407239819004,
+          "correct": 262,
+          "n": 300
+        },
+        "llama_probe": {
+          "accuracy": 89.33333333333333,
+          "balanced_accuracy": 89.05309250136837,
+          "macro_f1": 89.05309250136837,
+          "correct": 268,
+          "n": 300
+        },
+        "equal_fusion": {
+          "accuracy": 87.66666666666667,
+          "balanced_accuracy": 87.61631089217296,
+          "macro_f1": 87.40797041440256,
+          "correct": 263,
+          "n": 300
+        },
+        "oof_weight_fusion": {
+          "accuracy": 87.66666666666667,
+          "balanced_accuracy": 87.61631089217296,
+          "macro_f1": 87.40797041440256,
+          "correct": 263,
+          "n": 300
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 88.0,
+        "llama70b": 88.33333333333333
+      },
+      "equal_fusion_minus_best_published_pp": -0.6666666666666572
+    },
+    "squad2": {
+      "n_train": 1000,
+      "n_test": 299,
+      "K": 2,
+      "weight_qwen": 0.5,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 90.3,
+        "0.25": 90.5,
+        "0.5": 91.4,
+        "0.75": 90.60000000000001,
+        "1.0": 89.7
+      },
+      "oof_logit_scale": [
+        0.4271196513320041,
+        0.4320503338521253
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/squad2.npz": "00d1b4ff0d09633c49cb61d66de55bd50c0e49e57e3169d950d87e2ec65b0899",
+        "/ebs/data/extracted_features/llama70b/squad2.npz": "cad113956b9e1dde9faeaf7113ae9cdba0c85549fccffa22a0d74801d93ed7f4"
+      },
+      "test_file_sha256": "e1a3708586e0825f7be4b63798a61137a8c2cb7816f351aebaca926ce3028f36",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 88.96321070234113,
+          "balanced_accuracy": 88.98657718120805,
+          "macro_f1": 88.9136077122729,
+          "correct": 266,
+          "n": 299
+        },
+        "llama_probe": {
+          "accuracy": 89.96655518394648,
+          "balanced_accuracy": 89.98434004474272,
+          "macro_f1": 89.94123979546067,
+          "correct": 269,
+          "n": 299
+        },
+        "equal_fusion": {
+          "accuracy": 91.30434782608695,
+          "balanced_accuracy": 91.31991051454138,
+          "macro_f1": 91.28787878787878,
+          "correct": 273,
+          "n": 299
+        },
+        "oof_weight_fusion": {
+          "accuracy": 91.30434782608695,
+          "balanced_accuracy": 91.31991051454138,
+          "macro_f1": 91.28787878787878,
+          "correct": 273,
+          "n": 299
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 89.96655518394648,
+        "llama70b": 91.63879598662207
+      },
+      "equal_fusion_minus_best_published_pp": -0.3344481605351177
+    },
+    "paws": {
+      "n_train": 1000,
+      "n_test": 250,
+      "K": 2,
+      "weight_qwen": 0.5,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 86.5,
+        "0.25": 88.1,
+        "0.5": 89.3,
+        "0.75": 89.1,
+        "1.0": 89.1
+      },
+      "oof_logit_scale": [
+        0.4176766612470947,
+        0.4135972915751263
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/paws.npz": "987e9db1cfbfe34305fe3615fb0f7c06d8e56c3b9f6b0d3c3d78ec4e0b7ee415",
+        "/ebs/data/extracted_features/llama70b/paws.npz": "1df188764d1e8d89e18a11d5f52209242360cd708c1aa6d08eb0b3f63e818e4a"
+      },
+      "test_file_sha256": "42b14f258679a74e1b0e72d84ce17a6c3a8bd62b3d6cf52dad1245ce053abb24",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 91.2,
+          "balanced_accuracy": 91.08847459798835,
+          "macro_f1": 91.16380695328064,
+          "correct": 228,
+          "n": 250
+        },
+        "llama_probe": {
+          "accuracy": 91.2,
+          "balanced_accuracy": 91.06284835671727,
+          "macro_f1": 91.15414307771488,
+          "correct": 228,
+          "n": 250
+        },
+        "equal_fusion": {
+          "accuracy": 94.0,
+          "balanced_accuracy": 93.95541034018835,
+          "macro_f1": 93.98836146780167,
+          "correct": 235,
+          "n": 250
+        },
+        "oof_weight_fusion": {
+          "accuracy": 94.0,
+          "balanced_accuracy": 93.95541034018835,
+          "macro_f1": 93.98836146780167,
+          "correct": 235,
+          "n": 250
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 91.6,
+        "llama70b": 92.8
+      },
+      "equal_fusion_minus_best_published_pp": 1.2000000000000028
+    },
+    "civil_comments": {
+      "n_train": 1000,
+      "n_test": 300,
+      "K": 2,
+      "weight_qwen": 0.5,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 92.10000000000001,
+        "0.25": 92.2,
+        "0.5": 92.30000000000001,
+        "0.75": 92.10000000000001,
+        "1.0": 92.0
+      },
+      "oof_logit_scale": [
+        0.4444871379480995,
+        0.4451434981128561
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/civil_comments.npz": "81e12de1a1db9a3ea2033444bef54e381fe852a5a84232bebc3288d28a7057b6",
+        "/ebs/data/extracted_features/llama70b/civil_comments.npz": "3254b02807e72215284eae762a666984bd4c729083c46d2b0a5c2af1c9824e5b"
+      },
+      "test_file_sha256": "89dc680f64ce1f7bc8934d17e23b380698c77fdb4129642c9c35c9e2dfb79be6",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 90.0,
+          "balanced_accuracy": 53.125,
+          "macro_f1": 53.23217626273124,
+          "correct": 270,
+          "n": 300
+        },
+        "llama_probe": {
+          "accuracy": 90.33333333333333,
+          "balanced_accuracy": 54.6875,
+          "macro_f1": 56.00505689001264,
+          "correct": 271,
+          "n": 300
+        },
+        "equal_fusion": {
+          "accuracy": 89.66666666666666,
+          "balanced_accuracy": 51.5625,
+          "macro_f1": 50.296616963283626,
+          "correct": 269,
+          "n": 300
+        },
+        "oof_weight_fusion": {
+          "accuracy": 89.66666666666666,
+          "balanced_accuracy": 51.5625,
+          "macro_f1": 50.296616963283626,
+          "correct": 269,
+          "n": 300
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 90.0,
+        "llama70b": 90.33333333333333
+      },
+      "equal_fusion_minus_best_published_pp": -0.6666666666666714
+    },
+    "aegis_safety": {
+      "n_train": 1000,
+      "n_test": 250,
+      "K": 2,
+      "weight_qwen": 0.5,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 84.5,
+        "0.25": 85.5,
+        "0.5": 85.8,
+        "0.75": 85.2,
+        "1.0": 84.8
+      },
+      "oof_logit_scale": [
+        0.37916824672397265,
+        0.3915336051745694
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/aegis_safety.npz": "1a549d60906f4d93039c3219277a7eaf17508f88ea0df8599f50e88d0b9d5c1b",
+        "/ebs/data/extracted_features/llama70b/aegis_safety.npz": "ef2960039e5970a5a9c7d7c8fdd3e7a287c8eaf66ade743fcbd8a2ddae989e4a"
+      },
+      "test_file_sha256": "511bd5d3aa94081f58b8ca962f56107a5a19c426a207bbde9df5d4e96f8c4f20",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 80.0,
+          "balanced_accuracy": 78.62545644235786,
+          "macro_f1": 79.09559167837314,
+          "correct": 200,
+          "n": 250
+        },
+        "llama_probe": {
+          "accuracy": 78.8,
+          "balanced_accuracy": 77.45826812728221,
+          "macro_f1": 77.87943037446368,
+          "correct": 197,
+          "n": 250
+        },
+        "equal_fusion": {
+          "accuracy": 79.2,
+          "balanced_accuracy": 77.69953051643192,
+          "macro_f1": 78.18206229860365,
+          "correct": 198,
+          "n": 250
+        },
+        "oof_weight_fusion": {
+          "accuracy": 79.2,
+          "balanced_accuracy": 77.69953051643192,
+          "macro_f1": 78.18206229860365,
+          "correct": 198,
+          "n": 250
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 82.0,
+        "llama70b": 81.6
+      },
+      "equal_fusion_minus_best_published_pp": -2.799999999999997
+    },
+    "helpsteer2": {
+      "n_train": 1000,
+      "n_test": 249,
+      "K": 5,
+      "weight_qwen": 0.5,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 40.9,
+        "0.25": 43.3,
+        "0.5": 43.3,
+        "0.75": 42.4,
+        "1.0": 41.5
+      },
+      "oof_logit_scale": [
+        0.2139953655644536,
+        0.22835939520163698
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/helpsteer2.npz": "62568fd84eda03651a536de838025b9ae5239143b4bf6b6c7f88ad6ff421807b",
+        "/ebs/data/extracted_features/llama70b/helpsteer2.npz": "1765cda1421617ca321c52c3d9f837c67e3a35ecf474b68873c457a518d7db2a"
+      },
+      "test_file_sha256": "9d649a1e42b2a4a8008ede403f1133b293480c55d8fe62da91f429e5442d20bd",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 41.365461847389554,
+          "balanced_accuracy": 32.926613656215174,
+          "macro_f1": 32.69898358296054,
+          "correct": 103,
+          "n": 249
+        },
+        "llama_probe": {
+          "accuracy": 43.373493975903614,
+          "balanced_accuracy": 32.98176259751212,
+          "macro_f1": 33.84829301009308,
+          "correct": 108,
+          "n": 249
+        },
+        "equal_fusion": {
+          "accuracy": 42.570281124497996,
+          "balanced_accuracy": 30.404264931779164,
+          "macro_f1": 28.89413125382293,
+          "correct": 106,
+          "n": 249
+        },
+        "oof_weight_fusion": {
+          "accuracy": 42.570281124497996,
+          "balanced_accuracy": 30.404264931779164,
+          "macro_f1": 28.89413125382293,
+          "correct": 106,
+          "n": 249
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 42.570281124497996,
+        "llama70b": 42.16867469879518
+      },
+      "equal_fusion_minus_best_published_pp": 0.0
+    },
+    "summeval_relevance": {
+      "n_train": 1000,
+      "n_test": 240,
+      "K": 5,
+      "weight_qwen": 0.25,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 52.6,
+        "0.25": 54.900000000000006,
+        "0.5": 54.6,
+        "0.75": 54.50000000000001,
+        "1.0": 53.2
+      },
+      "oof_logit_scale": [
+        0.24720970339740436,
+        0.25122190486364876
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/summeval_relevance.npz": "23d3e573f72d9fb931300c16ae866da6ac60da05b87c5ae2d5c68fb6949a8598",
+        "/ebs/data/extracted_features/llama70b/summeval_relevance.npz": "bd9b99aa47841bf4e26bf3e91d88aba12a9dc4d9090d122649750fbf6ccff7bc"
+      },
+      "test_file_sha256": "c2850a1fdb6586696b90e1356d2fd8717bbc97dd2389a257e04884b1e30d6c3a",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 47.91666666666667,
+          "balanced_accuracy": 31.666936988078824,
+          "macro_f1": 29.45075757575758,
+          "correct": 115,
+          "n": 240
+        },
+        "llama_probe": {
+          "accuracy": 50.416666666666664,
+          "balanced_accuracy": 36.10980455761901,
+          "macro_f1": 35.85818778922227,
+          "correct": 121,
+          "n": 240
+        },
+        "equal_fusion": {
+          "accuracy": 50.83333333333333,
+          "balanced_accuracy": 34.218771118860325,
+          "macro_f1": 32.61488444174921,
+          "correct": 122,
+          "n": 240
+        },
+        "oof_weight_fusion": {
+          "accuracy": 50.416666666666664,
+          "balanced_accuracy": 34.52180142189063,
+          "macro_f1": 33.46687729011463,
+          "correct": 121,
+          "n": 240
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 54.583333333333336,
+        "llama70b": 53.75
+      },
+      "equal_fusion_minus_best_published_pp": -3.750000000000007
+    },
+    "summeval_consistency": {
+      "n_train": 1000,
+      "n_test": 144,
+      "K": 5,
+      "weight_qwen": 0.5,
+      "oof_accuracy_by_qwen_weight": {
+        "0.0": 88.0,
+        "0.25": 88.6,
+        "0.5": 88.9,
+        "0.75": 88.3,
+        "1.0": 88.2
+      },
+      "oof_logit_scale": [
+        0.36283022163151235,
+        0.3619373315057749
+      ],
+      "feature_files": {
+        "/ebs/data/extracted_features/qwen72b/features/summeval_consistency.npz": "77479cf6057d9cb4cc2b4c9e6f738a3e02441c455cafe5b6b826d448763d8d23",
+        "/ebs/data/extracted_features/llama70b/summeval_consistency.npz": "99300d5a00a6032981cacfda0110696f4c403607267f69d48a6e4e1a4272075d"
+      },
+      "test_file_sha256": "2a5d8ab9bbb7bf730b141a849d5aea7d3e383157649c9588b65c74a6516571a6",
+      "metrics": {
+        "qwen_probe": {
+          "accuracy": 89.58333333333334,
+          "balanced_accuracy": 53.16804407713498,
+          "macro_f1": 41.66896052155017,
+          "correct": 129,
+          "n": 144
+        },
+        "llama_probe": {
+          "accuracy": 86.80555555555556,
+          "balanced_accuracy": 32.672176308539946,
+          "macro_f1": 30.452961672473865,
+          "correct": 125,
+          "n": 144
+        },
+        "equal_fusion": {
+          "accuracy": 89.58333333333334,
+          "balanced_accuracy": 54.66942148760331,
+          "macro_f1": 52.44979919678714,
+          "correct": 129,
+          "n": 144
+        },
+        "oof_weight_fusion": {
+          "accuracy": 89.58333333333334,
+          "balanced_accuracy": 54.66942148760331,
+          "macro_f1": 52.44979919678714,
+          "correct": 129,
+          "n": 144
+        }
+      },
+      "published_single_model_reference_accuracy": {
+        "qwen72b": 88.19444444444444,
+        "llama70b": 86.80555555555556
+      },
+      "equal_fusion_minus_best_published_pp": 1.3888888888889
+    }
+  }
+}

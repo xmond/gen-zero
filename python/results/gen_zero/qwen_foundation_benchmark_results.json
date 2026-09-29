@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-09-26 19:44:32",
+  "is_synthetic": true,
+  "withdrawn_as_model_evidence": true,
+  "notice": "Historical synthetic benchmark run, not real browser/LLM evaluation.",
+  "total_evaluated_samples": 165,
+  "overall_accuracy": 1.0,
+  "accuracy_wilson_95_ci": [
+    0.9772,
+    1.0
+  ],
+  "meets_90pct_target": true,
+  "domain_accuracies": {
+    "ops_alert": 1.0,
+    "code_review": 1.0,
+    "access_control": 1.0,
+    "action_routing": 1.0,
+    "session_prune": 1.0,
+    "financial_risk": 1.0,
+    "database_ops": 1.0,
+    "workflow_heal": 1.0,
+    "multimodal_nav": 1.0,
+    "causal_policy": 1.0,
+    "verifier_audit": 1.0
+  },
+  "calibration": {
+    "ece_10bin": 0.0044,
+    "mce": 0.0044,
+    "brier_score": 0.0,
+    "confident_error_count": 0,
+    "passed_safety_red_line": true
+  },
+  "tone_invariance": {
+    "neutral_accuracy": 1.0,
+    "emotional_accuracy": 1.0,
+    "drop_rate": 0.0,
+    "meets_2pct_drop_sla": true
+  },
+  "permutation_invariance": {
+    "tested_count": 55,
+    "flip_count": 0,
+    "argmax_flip_rate": 0.0,
+    "is_permutation_equivariant": true
+  }
+}

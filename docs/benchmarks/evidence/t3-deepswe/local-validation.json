@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "-m",
+    "py_compile",
+    "benchmarks/gen_zero_deepswe_adapter.py"
+  ],
+  "exit_code": 0,
+  "stdout": "",
+  "stderr": "",
+  "source_head": "478699c079bf4a053b953bb83b7e7f310eae4922"
+}

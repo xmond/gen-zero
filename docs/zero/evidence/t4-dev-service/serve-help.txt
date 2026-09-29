@@ -1,0 +1,11 @@
+Launch polymorphic MCP service in stdio or SSE mode
+
+Usage: gen-zero serve [OPTIONS]
+
+Options:
+      --mode <MODE>                  [default: stdio] [possible values: stdio, sse]
+      --host <HOST>                  IP address to bind in SSE / HTTP mode [default: 127.0.0.1]
+      --port <PORT>                  [default: 8080]
+      --token <TOKEN>                [env: GENZERO_API_KEY=]
+      --mount-assets <MOUNT_ASSETS>  Cognitive assets JSON (gen-zero/cognitive-assets/v1) to mount on the default key before serving [env: GENZERO_MOUNT_ASSETS=]
+  -h, --help                         Print help

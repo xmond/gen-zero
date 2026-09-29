@@ -1,0 +1,6 @@
+{
+  "command": "python python/gen_zero/scripts/run_12_planners_benchmark.py",
+  "exit_code": 1,
+  "timeout": false,
+  "elapsed_s": 8.249012231826782
+}

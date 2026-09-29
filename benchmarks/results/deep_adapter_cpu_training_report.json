@@ -1,0 +1,230 @@
+{
+  "is_synthetic": true,
+  "synthetic": true,
+  "case": "synthetic_smoke_test",
+  "warning": "SYNTHETIC MECHANICS SMOKE TEST -- not a real accuracy result. No 896-D hidden-state artifact exists in this repo; see docs/zero/10-trunk-unfreeze-and-latent-recurrence-engineering-spec.md section 2, point 4.",
+  "n_records": 2474,
+  "k_candidates_by_group": {
+    "6": 2474
+  },
+  "encoder_id": "zero-qwen2.5-0.5b-trunk:int8:last-token",
+  "manifold": "/ebs/pj/gen-zero/benchmarks/artifacts/zero/zero_manifold_open_v1.npz",
+  "task_head": "identity",
+  "trainable_parameters": 246080,
+  "epochs": 40,
+  "lr": 0.001,
+  "seed": 0,
+  "history": [
+    {
+      "epoch": 0,
+      "loss": 1.7917148895387025,
+      "accuracy": 0.2510105092966855
+    },
+    {
+      "epoch": 1,
+      "loss": 1.7917149066925049,
+      "accuracy": 0.2510105092966855
+    },
+    {
+      "epoch": 2,
+      "loss": 1.7915620803833008,
+      "accuracy": 0.29223928860145515
+    },
+    {
+      "epoch": 3,
+      "loss": 1.7912640571594238,
+      "accuracy": 0.3431689571544058
+    },
+    {
+      "epoch": 4,
+      "loss": 1.790159821510315,
+      "accuracy": 0.4009700889248181
+    },
+    {
+      "epoch": 5,
+      "loss": 1.7845369577407837,
+      "accuracy": 0.46443007275666937
+    },
+    {
+      "epoch": 6,
+      "loss": 1.780595302581787,
+      "accuracy": 0.5040420371867421
+    },
+    {
+      "epoch": 7,
+      "loss": 1.7651132345199585,
+      "accuracy": 0.5776071139854486
+    },
+    {
+      "epoch": 8,
+      "loss": 1.7641960382461548,
+      "accuracy": 0.5957962813257882
+    },
+    {
+      "epoch": 9,
+      "loss": 1.7390468120574951,
+      "accuracy": 0.6580436540016168
+    },
+    {
+      "epoch": 10,
+      "loss": 1.745664119720459,
+      "accuracy": 0.6378334680679062
+    },
+    {
+      "epoch": 11,
+      "loss": 1.7524009943008423,
+      "accuracy": 0.6257073565076798
+    },
+    {
+      "epoch": 12,
+      "loss": 1.7281856536865234,
+      "accuracy": 0.6952303961196443
+    },
+    {
+      "epoch": 13,
+      "loss": 1.6468727588653564,
+      "accuracy": 0.8185125303152789
+    },
+    {
+      "epoch": 14,
+      "loss": 1.7612344026565552,
+      "accuracy": 0.6236863379143088
+    },
+    {
+      "epoch": 15,
+      "loss": 1.7809396982192993,
+      "accuracy": 0.5662894098625707
+    },
+    {
+      "epoch": 16,
+      "loss": 1.7854585647583008,
+      "accuracy": 0.5416329830234439
+    },
+    {
+      "epoch": 17,
+      "loss": 1.7873069047927856,
+      "accuracy": 0.5311236863379143
+    },
+    {
+      "epoch": 18,
+      "loss": 1.7882643938064575,
+      "accuracy": 0.5185933710590137
+    },
+    {
+      "epoch": 19,
+      "loss": 1.7888189554214478,
+      "accuracy": 0.51535974130962
+    },
+    {
+      "epoch": 20,
+      "loss": 1.7891550064086914,
+      "accuracy": 0.5117219078415521
+    },
+    {
+      "epoch": 21,
+      "loss": 1.789364218711853,
+      "accuracy": 0.5064672594987873
+    },
+    {
+      "epoch": 22,
+      "loss": 1.7894947528839111,
+      "accuracy": 0.50767987065481
+    },
+    {
+      "epoch": 23,
+      "loss": 1.7895711660385132,
+      "accuracy": 0.50767987065481
+    },
+    {
+      "epoch": 24,
+      "loss": 1.789607048034668,
+      "accuracy": 0.5097008892481811
+    },
+    {
+      "epoch": 25,
+      "loss": 1.7896095514297485,
+      "accuracy": 0.5113177041228779
+    },
+    {
+      "epoch": 26,
+      "loss": 1.7895820140838623,
+      "accuracy": 0.5185933710590137
+    },
+    {
+      "epoch": 27,
+      "loss": 1.7895243167877197,
+      "accuracy": 0.5202101859337106
+    },
+    {
+      "epoch": 28,
+      "loss": 1.789434552192688,
+      "accuracy": 0.5226354082457558
+    },
+    {
+      "epoch": 29,
+      "loss": 1.7893060445785522,
+      "accuracy": 0.5262732417138237
+    },
+    {
+      "epoch": 30,
+      "loss": 1.7891266345977783,
+      "accuracy": 0.5282942603071948
+    },
+    {
+      "epoch": 31,
+      "loss": 1.7888789176940918,
+      "accuracy": 0.5331447049312854
+    },
+    {
+      "epoch": 32,
+      "loss": 1.7885321378707886,
+      "accuracy": 0.5351657235246564
+    },
+    {
+      "epoch": 33,
+      "loss": 1.7880322933197021,
+      "accuracy": 0.5432497978981407
+    },
+    {
+      "epoch": 34,
+      "loss": 1.7872787714004517,
+      "accuracy": 0.5468876313662085
+    },
+    {
+      "epoch": 35,
+      "loss": 1.7861140966415405,
+      "accuracy": 0.5493128536782539
+    },
+    {
+      "epoch": 36,
+      "loss": 1.7841984033584595,
+      "accuracy": 0.5513338722716249
+    },
+    {
+      "epoch": 37,
+      "loss": 1.7806967496871948,
+      "accuracy": 0.5606305578011318
+    },
+    {
+      "epoch": 38,
+      "loss": 1.773880958557129,
+      "accuracy": 0.570735650767987
+    },
+    {
+      "epoch": 39,
+      "loss": 1.757358193397522,
+      "accuracy": 0.6079223928860146
+    },
+    {
+      "epoch": 40,
+      "loss": 1.7289822101593018,
+      "accuracy": 0.6503637833468068
+    }
+  ],
+  "initial_loss": 1.7917148895387025,
+  "initial_accuracy": 0.2510105092966855,
+  "final_loss": 1.6234814729436136,
+  "final_accuracy": 0.7619240097008892,
+  "elapsed_seconds": 33.84609413146973,
+  "out_adapter": "/ebs/pj/gen-zero/benchmarks/artifacts/zero/deep_projection_adapter_cpu_v1.pt"
+}

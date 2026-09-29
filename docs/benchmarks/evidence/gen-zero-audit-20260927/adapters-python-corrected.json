@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "-m",
+    "pytest",
+    "-q",
+    "benchmarks/tests/test_gen_zero_tb_adapter.py",
+    "benchmarks/tests/test_deepswe_adapter.py"
+  ],
+  "PYTHONPATH": "python:benchmarks",
+  "exit_code": 2
+}

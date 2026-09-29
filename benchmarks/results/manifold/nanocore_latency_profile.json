@@ -1,0 +1,29 @@
+{
+  "suite": "profile_nanocore_latency",
+  "artifact": "/ebs/pj/gen-zero-worktree/b0927d-p4-t1-distiller/benchmarks/results/manifold/distilled_128d_llama70b_boolq.npz",
+  "features": "/ebs/data/extracted_features/llama70b/boolq.npz",
+  "iters": 100,
+  "loadavg": [
+    17.9755859375,
+    15.2578125,
+    14.40478515625
+  ],
+  "projection_ms": {
+    "mean_ms": 0.5455022485693917,
+    "median_ms": 0.5451269971672446,
+    "p99_ms": 0.740143011789769,
+    "min_ms": 0.44478103518486023,
+    "max_ms": 0.7573679904453456,
+    "iters": 100
+  },
+  "payload_generation_ms": {
+    "mean_ms": 0.5583087779814377,
+    "median_ms": 0.5601764714810997,
+    "p99_ms": 0.6587699550436814,
+    "min_ms": 0.44968200381845236,
+    "max_ms": 0.7475689635612071,
+    "iters": 100
+  },
+  "budget_ms": 1.0,
+  "within_budget": true
+}

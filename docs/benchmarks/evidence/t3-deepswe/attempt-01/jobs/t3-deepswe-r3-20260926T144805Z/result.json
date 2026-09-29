@@ -1,0 +1,85 @@
+{
+    "id": "2d47007d-e58b-45b1-bace-75082a49d7ea",
+    "started_at": "2026-09-26T14:48:13.992897",
+    "updated_at": "2026-09-26T14:49:02.243839",
+    "finished_at": "2026-09-26T14:49:02.243839",
+    "n_total_trials": 1,
+    "stats": {
+        "n_completed_trials": 1,
+        "n_errored_trials": 1,
+        "n_running_trials": 0,
+        "n_pending_trials": 0,
+        "n_cancelled_trials": 0,
+        "n_retries": 0,
+        "evals": {
+            "gen-zero-deepswe__ark-code-latest__adhoc": {
+                "n_trials": 1,
+                "n_errors": 1,
+                "metrics": [
+                    {
+                        "f2p": 0.0,
+                        "f2p_passed": 0.0,
+                        "f2p_total": 60.0,
+                        "p2p": 1.0,
+                        "p2p_passed": 964.0,
+                        "p2p_total": 964.0,
+                        "partial": 0.94140625,
+                        "reward": 0.0
+                    }
+                ],
+                "pass_at_k": {},
+                "reward_stats": {
+                    "reward": {
+                        "0": [
+                            "tomlkit-toml-table-converters__uzsUHAJ"
+                        ]
+                    },
+                    "f2p_total": {
+                        "60": [
+                            "tomlkit-toml-table-converters__uzsUHAJ"
+                        ]
+                    },
+                    "f2p_passed": {
+                        "0": [
+                            "tomlkit-toml-table-converters__uzsUHAJ"
+                        ]
+                    },
+                    "p2p_total": {
+                        "964": [
+                            "tomlkit-toml-table-converters__uzsUHAJ"
+                        ]
+                    },
+                    "p2p_passed": {
+                        "964": [
+                            "tomlkit-toml-table-converters__uzsUHAJ"
+                        ]
+                    },
+                    "f2p": {
+                        "0.0": [
+                            "tomlkit-toml-table-converters__uzsUHAJ"
+                        ]
+                    },
+                    "p2p": {
+                        "1.0": [
+                            "tomlkit-toml-table-converters__uzsUHAJ"
+                        ]
+                    },
+                    "partial": {
+                        "0.94140625": [
+                            "tomlkit-toml-table-converters__uzsUHAJ"
+                        ]
+                    }
+                },
+                "exception_stats": {
+                    "NonZeroAgentExitCodeError": [
+                        "tomlkit-toml-table-converters__uzsUHAJ"
+                    ]
+                }
+            }
+        },
+        "n_input_tokens": null,
+        "n_cache_tokens": null,
+        "n_output_tokens": null,
+        "cost_usd": null
+    }
+}

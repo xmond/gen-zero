@@ -1,0 +1,9 @@
+{
+  "command": [
+    "python",
+    "-c",
+    "import json,sys; r=json.load(open('benchmarks/results/deepswe_prm_enhanced_results.json')); passed=r['enhanced']['bon']['4']['solved_task_equivalents']>=32; print('PASS' if passed else 'FAIL: target >=32/38 not achieved; actual='+str(r['enhanced']['bon']['4']['solved_task_equivalents'])+'/38'); sys.exit(0 if passed else 1)"
+  ],
+  "returncode": 1,
+  "seconds": 0.05163741111755371
+}

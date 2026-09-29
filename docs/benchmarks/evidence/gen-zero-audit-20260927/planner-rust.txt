@@ -1,0 +1,115 @@
+      ┌─────────┐  mr boxington
+     ╱ ═══════ ╱│
+    ╱─────────╱ │
+    │ •    (◉)│≡│
+    │  ◟▄▄▄◞  │ ╱
+    │   ◀◆▶   │╱
+    └─────────┘
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.24s
+     Running unittests src/lib.rs (target/debug/deps/gen_zero_planner-ec30db8b5a7998f7)
+
+running 23 tests
+test config::tests::deserializes_a_partial_object_over_defaults ... ok
+test config::tests::default_matches_the_engines_own_defaults ... ok
+test config::tests::validate_rejects_degenerate_and_inverted_values ... ok
+test engine::tests::blocked_candidates_do_not_change_cfr_baseline_or_entropy ... ok
+test engine::tests::boltzmann_entropy_is_zero_for_one_action_and_one_for_ties ... ok
+test engine::tests::cem_rejects_trajectories_with_blocked_later_actions ... ok
+test engine::tests::cem_uniform_is_deterministic_and_in_unit_interval ... ok
+test engine::tests::cfr_entropy_matches_positive_regrets_and_uniform_fallback ... ok
+test engine::tests::sample_categorical_follows_cumulative_mass ... ok
+test engine::tests::gflow_entropy_matches_softmax_and_handles_ties_and_singletons ... ok
+test router::tests::test_router_tier_classification ... ok
+test tree::tests::rejects_byte_size_overflow_before_allocation - should panic ... ok
+test tests::test_decision_engine_integration ... ok
+test tree::tests::rejects_capacity_above_index_limit_before_allocation - should panic ... ok
+test tree::tests::rejects_layout_above_addressable_range - should panic ... ok
+test tree::tests::reset_and_drop_destroy_items_once_and_allow_reuse ... ok
+test tree::tests::test_compact_tree_node_layout_and_operations ... ok
+test tree::tests::rejects_zero_capacity - should panic ... ok
+test tree::tests::test_typed_arena_bump_allocation ... ok
+test tree::tests::test_alloc_stops_advancing_the_cursor_once_full ... ok
+test tree::tests::zero_sized_items_are_supported ... ok
+test tree::tests::concurrent_allocations_publish_only_initialized_items ... ok
+test engine::tests::test_all_six_engines ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/fail_closed_numeric_tests.rs (target/debug/deps/fail_closed_numeric_tests-35418e8ca99d17bd)
+
+running 7 tests
+test cpsat_filter_verdicts_preserves_blocked_candidates ... ok
+test astar_rejects_nonfinite_input_successor_reward_and_costs ... ok
+test cem_zero_parameters_are_rejected_before_sampling ... ok
+test cem_rejects_nonfinite_transitions_and_accumulated_reward ... ok
+test cpsat_rejects_nonfinite_values_before_nan_can_win_best_action ... ok
+test pipeline_rejects_nonfinite_astar_transition_and_return_overflow ... ok
+test validated_engines_preserve_world_model_errors ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/latent_world_model_planner_tests.rs (target/debug/deps/latent_world_model_planner_tests-888895ce0fb4e522)
+
+running 5 tests
+test all_blocked_frame_is_refused_by_every_engine_and_tier ... ok
+test nonfinite_input_is_refused_by_every_engine ... ok
+test nonfinite_input_is_refused_on_every_tier ... ok
+test engines_never_pick_a_blocked_action ... ok
+test latent_world_model_plans_through_planner_context_on_every_tier ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/planner_config_tests.rs (target/debug/deps/planner_config_tests-8394a39bc1facf4a)
+
+running 6 tests
+test high_c_puct_flips_the_decision_away_from_the_reward_optimum ... ok
+test configured_pipeline_selects_gflownet_and_cfr_nash_from_the_request ... ok
+test low_c_puct_converges_to_the_highest_reward_action ... ok
+test high_uncertainty_weight_picks_the_calmer_lower_reward_action ... ok
+test new_with_config_refuses_an_invalid_config ... ok
+test zero_uncertainty_weight_picks_the_higher_reward_despite_displacement ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/production_pipeline_tests.rs (target/debug/deps/production_pipeline_tests-42222a9063a7a460)
+
+running 28 tests
+test audit_refuses_invalid_warn_risk ... ok
+test audit_rejects_a_gate_hard_stop_without_imagining_it ... ok
+test audit_rejects_the_trap_action_as_lethal ... ok
+test audit_approves_a_calm_action_and_says_the_estimate_is_uncalibrated ... ok
+test decide_mode_parses_all_names_and_refuses_others ... ok
+test audit_continuation_follows_the_greedy_policy_and_drops_blocked_actions ... ok
+test audit_warns_on_a_confirm_tier_action ... ok
+test decide_reports_a_confirm_tier_choice ... ok
+test audit_warns_when_the_state_hugs_the_boundary ... ok
+test audit_refuses_a_model_without_safety_estimates ... ok
+test decide_fails_closed_when_no_action_is_legal ... ok
+test decide_refuses_malformed_requests ... ok
+test graph_revocation_prunes_candidate_before_engine_dispatch ... ok
+test every_method_refuses_a_divergent_state ... ok
+test heat_certificate_failure_prunes_high_risk_action ... ok
+test simulate_refuses_bad_horizons_and_empty_plans ... ok
+test simulate_marks_gate_blocked_steps ... ok
+test simulate_stops_at_death_and_reports_it ... ok
+test simulate_truncates_to_a_shorter_horizon ... ok
+test what_if_fails_closed_on_empty_blocked_or_malformed_candidates ... ok
+test simulate_replays_the_plan_through_the_real_world_model ... ok
+test what_if_excludes_gate_blocked_candidates ... ok
+test what_if_flags_every_candidate_when_all_are_trapped ... ok
+test what_if_detects_the_trap_and_picks_the_escape ... ok
+test decide_auto_routes_by_entropy ... ok
+test decide_prunes_hard_stops_before_any_engine_runs ... ok
+test decide_runs_every_mode_on_its_own_engine ... ok
+test decide_returns_the_chosen_actions_trajectory_on_request ... ok
+
+test result: ok. 28 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+   Doc-tests gen_zero_planner
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+mbx[cache]: 0 hits, 0 misses, 1 bypassed; 0 B downloaded, 0 B uploaded, 0 B stored locally
+mbx[savings]: 1d 14h of compiler time avoided across 5495 builds

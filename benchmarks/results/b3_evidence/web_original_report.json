@@ -1,0 +1,20 @@
+{
+  "timestamp": "2026-09-26 23:23:06",
+  "is_synthetic": true,
+  "is_synthetic_smoke_test": true,
+  "evaluated_scenarios_count": 3,
+  "total_trials": 30,
+  "decide_and_fill": {
+    "paradigm_name": "Decide-and-Fill + Semantic Action Compression",
+    "task_success_rate_pct": 66.67,
+    "average_steps_per_task": 2.0,
+    "average_step_latency_ms": 0.04,
+    "description": "Two-stage System 1 prefill action selection + literal Word-Span argument filling."
+  },
+  "failure_breakdown": {
+    "total_evaluations": 30,
+    "successes": 20,
+    "action_mismatches": 0,
+    "span_mismatches": 10
+  }
+}

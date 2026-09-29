@@ -1,0 +1,17 @@
+{
+  "command": [
+    "/tmp/b3-eval-venv/bin/python",
+    "-m",
+    "pytest",
+    "-q",
+    "python/gen_zero/tests/test_issue_15_decide_and_fill.py"
+  ],
+  "exit_code": 0,
+  "elapsed_seconds": 4.015800714492798,
+  "log": "benchmarks/results/b3_evidence/web_tests.log",
+  "environment": {
+    "OPENBLAS_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "PYTHONPATH": "python"
+  }
+}

@@ -1,0 +1,156 @@
+{
+  "overall": {
+    "total_samples": 390,
+    "accuracy_0step_pct": 47.44,
+    "accuracy_kstep_pct": 47.44,
+    "overall_accuracy_gain_pct": 0.0,
+    "latent_latency_p99_ms": 4.874,
+    "protocol_gate_35ms_pass": true,
+    "tokens_emitted": 0
+  },
+  "tasks": {
+    "aegis_safety": {
+      "samples": 30,
+      "k_classes": 2,
+      "accuracy_0step_pct": 70.0,
+      "accuracy_kstep_pct": 90.0,
+      "accuracy_delta_pct": 20.0,
+      "trajectory_p99_ms": 0.62,
+      "total_latent_p99_ms": 1.114,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    },
+    "arc_challenge": {
+      "samples": 30,
+      "k_classes": 4,
+      "accuracy_0step_pct": 16.67,
+      "accuracy_kstep_pct": 16.67,
+      "accuracy_delta_pct": 0.0,
+      "trajectory_p99_ms": 0.58,
+      "total_latent_p99_ms": 1.012,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    },
+    "boolq": {
+      "samples": 30,
+      "k_classes": 2,
+      "accuracy_0step_pct": 80.0,
+      "accuracy_kstep_pct": 80.0,
+      "accuracy_delta_pct": 0.0,
+      "trajectory_p99_ms": 0.897,
+      "total_latent_p99_ms": 1.38,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    },
+    "civil_comments": {
+      "samples": 30,
+      "k_classes": 2,
+      "accuracy_0step_pct": 73.33,
+      "accuracy_kstep_pct": 80.0,
+      "accuracy_delta_pct": 6.67,
+      "trajectory_p99_ms": 4.26,
+      "total_latent_p99_ms": 4.733,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    },
+    "gsm8k": {
+      "samples": 30,
+      "k_classes": 4,
+      "accuracy_0step_pct": 0.0,
+      "accuracy_kstep_pct": 0.0,
+      "accuracy_delta_pct": 0.0,
+      "trajectory_p99_ms": 1.566,
+      "total_latent_p99_ms": 1.973,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    },
+    "massive_de": {
+      "samples": 30,
+      "k_classes": 18,
+      "accuracy_0step_pct": 0.0,
+      "accuracy_kstep_pct": 0.0,
+      "accuracy_delta_pct": 0.0,
+      "trajectory_p99_ms": 0.791,
+      "total_latent_p99_ms": 1.289,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    },
+    "massive_en": {
+      "samples": 30,
+      "k_classes": 18,
+      "accuracy_0step_pct": 0.0,
+      "accuracy_kstep_pct": 0.0,
+      "accuracy_delta_pct": 0.0,
+      "trajectory_p99_ms": 1.823,
+      "total_latent_p99_ms": 2.331,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    },
+    "multinli": {
+      "samples": 30,
+      "k_classes": 3,
+      "accuracy_0step_pct": 76.67,
+      "accuracy_kstep_pct": 80.0,
+      "accuracy_delta_pct": 3.33,
+      "trajectory_p99_ms": 0.529,
+      "total_latent_p99_ms": 1.1,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    },
+    "paws": {
+      "samples": 30,
+      "k_classes": 2,
+      "accuracy_0step_pct": 76.67,
+      "accuracy_kstep_pct": 76.67,
+      "accuracy_delta_pct": 0.0,
+      "trajectory_p99_ms": 0.813,
+      "total_latent_p99_ms": 1.22,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    },
+    "pubmedqa": {
+      "samples": 30,
+      "k_classes": 3,
+      "accuracy_0step_pct": 56.67,
+      "accuracy_kstep_pct": 60.0,
+      "accuracy_delta_pct": 3.33,
+      "trajectory_p99_ms": 4.502,
+      "total_latent_p99_ms": 5.259,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    },
+    "squad2": {
+      "samples": 30,
+      "k_classes": 2,
+      "accuracy_0step_pct": 76.67,
+      "accuracy_kstep_pct": 76.67,
+      "accuracy_delta_pct": 0.0,
+      "trajectory_p99_ms": 4.674,
+      "total_latent_p99_ms": 5.34,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    },
+    "summeval": {
+      "samples": 30,
+      "k_classes": 5,
+      "accuracy_0step_pct": 40.0,
+      "accuracy_kstep_pct": 6.67,
+      "accuracy_delta_pct": -33.33,
+      "trajectory_p99_ms": 0.768,
+      "total_latent_p99_ms": 1.13,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    },
+    "vitaminc": {
+      "samples": 30,
+      "k_classes": 3,
+      "accuracy_0step_pct": 50.0,
+      "accuracy_kstep_pct": 50.0,
+      "accuracy_delta_pct": 0.0,
+      "trajectory_p99_ms": 4.747,
+      "total_latent_p99_ms": 5.122,
+      "gate_35ms_pass": true,
+      "tokens_emitted": 0
+    }
+  }
+}

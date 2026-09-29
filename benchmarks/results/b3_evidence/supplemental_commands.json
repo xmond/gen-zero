@@ -1,0 +1,32 @@
+[
+  {
+    "name": "constraints_ortools",
+    "command": [
+      "/tmp/b3-eval-venv/bin/python",
+      "python/gen_zero/scripts/benchmark_issue_76_constraint_compiler.py"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 0.6422531604766846,
+    "log": "benchmarks/results/b3_evidence/constraints_ortools.log",
+    "environment": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "PYTHONPATH": "python"
+    }
+  },
+  {
+    "name": "supplemental",
+    "command": [
+      "/tmp/b3-eval-venv/bin/python",
+      "benchmarks/b3_measure.py"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 2.621401786804199,
+    "log": "benchmarks/results/b3_evidence/supplemental.log",
+    "environment": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "PYTHONPATH": "python"
+    }
+  }
+]

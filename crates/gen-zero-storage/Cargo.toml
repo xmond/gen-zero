@@ -1,0 +1,17 @@
+[package]
+name = "gen-zero-storage"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Columnar causal replay buffer, Fenwick-tree prioritized sampling, and zstd golden snapshots for Gen-Zero."
+readme = "README.md"
+
+[dependencies]
+gen-zero-core = { workspace = true }
+zstd = { workspace = true }
+blake3 = { workspace = true }
+rand = { workspace = true }
+thiserror = { workspace = true }

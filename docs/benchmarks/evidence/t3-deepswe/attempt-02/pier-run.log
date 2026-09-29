@@ -1,0 +1,36 @@
+Proposer action rejected: {'rejected': 'None', 'instruction': 'Correct the invalid action; do not bypass the check.'}
+DeepSWE fail-closed: TimeoutError: The read operation timed out
+  1/1 F2P: 0.000 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 0:09:19 0:00:00
+adhoc • gen-zero-deepswe • ark-code-latest
+┏━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━━┳━━━━━━┓
+┃ Tria… ┃ Exce… ┃   F2P ┃ F2P_… ┃ F2P_… ┃   P2P ┃ P2P_… ┃ P2P_… ┃ Part… ┃ Rew… ┃
+┡━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━━╇━━━━━━┩
+│     1 │     1 │ 0.000 │ 0.000 │ 60.0… │ 1.000 │ 964.… │ 964.… │ 0.941 │ 0.0… │
+└───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴───────┴──────┘
+
+┏━━━━━━━━━━━━┳━━━━━━━┓
+┃ Reward     ┃ Count ┃
+┡━━━━━━━━━━━━╇━━━━━━━┩
+│ 0          │     1 │
+│ 60         │     1 │
+│ 0          │     1 │
+│ 964        │     1 │
+│ 964        │     1 │
+│ 0.0        │     1 │
+│ 1.0        │     1 │
+│ 0.94140625 │     1 │
+└────────────┴───────┘
+
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━┓
+┃ Exception                 ┃ Count ┃
+┡━━━━━━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━┩
+│ NonZeroAgentExitCodeError │     1 │
+└───────────────────────────┴───────┘
+
+Job Info
+Total runtime: 9m 19s
+Results written to 
+/home/user/benchmarks/t3-r3-live-02/jobs/t3-deepswe-r3-20260926T144922Z/result.js
+on
+Inspect results by running `pier view /home/user/benchmarks/t3-r3-live-02/jobs`
+

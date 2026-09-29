@@ -1,0 +1,57 @@
+{
+  "task": "pubmedqa",
+  "generated_at_utc": "2026-09-25T03:19:05Z",
+  "provenance": {
+    "script": "benchmarks/suites/run_qwen72b_downstream_eval.py",
+    "args": {
+      "tasks": [
+        "pubmedqa"
+      ],
+      "data_dir": "/ebs/pj/gen-zero/data/extracted_features/qwen72b",
+      "probe": true,
+      "probe_c": 0.01,
+      "max_iter": 2000,
+      "reference_npz": null,
+      "out": "benchmarks/results/qwen72b_linear_probe_pubmedqa_report.json",
+      "task": "pubmedqa"
+    },
+    "numpy_version": "2.4.6",
+    "sklearn_version": "1.9.1",
+    "python_version": "3.11.16"
+  },
+  "linear_probe": {
+    "task": "pubmedqa",
+    "model": "qwen72b",
+    "feature_dim": 8192,
+    "K": 3,
+    "n_train": 750,
+    "n_test": 250,
+    "probe_C": 0.01,
+    "fit_info": {
+      "device": "cpu",
+      "solver": "sklearn-lbfgs",
+      "max_iter": 2000,
+      "fit_seconds": 170.14634490013123
+    },
+    "train_accuracy": 1.0,
+    "test_accuracy": 0.748,
+    "majority_class_baseline_test_accuracy": 0.532,
+    "confusion_matrix": [
+      [
+        119,
+        11,
+        3
+      ],
+      [
+        13,
+        64,
+        3
+      ],
+      [
+        21,
+        12,
+        4
+      ]
+    ]
+  }
+}

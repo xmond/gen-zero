@@ -1,0 +1,2 @@
+c6a22cb3dca945bd0deffa4f60e1a08251682d1d222ef13c87a0a010c05b0a50  gen_zero_deepswe_adapter.py
+8bae5609a8527b0d0d8a782f4287f876b0b051e34d32cebb658a0a1b7065f0c2  /home/user/gen-zero/target/release/gen-zero

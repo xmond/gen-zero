@@ -1,0 +1,17 @@
+{
+  "real-gcca.npz": {
+    "path": "/tmp/b0928-t4-evidence/real-gcca.npz",
+    "bytes": 8528646,
+    "sha256": "8c522a297c8379006fe329063068941a988821ee415825d3ac8ff97caa8e701c"
+  },
+  "real-anchor-unbound.npz": {
+    "path": "/tmp/b0928-t4-evidence/real-anchor-unbound.npz",
+    "bytes": 8657020,
+    "sha256": "9d500ec256e9548b44bcbd323f85eff71c6f424e85025f2abd2bdb1516833796"
+  },
+  "real-paired-transform-evidence.npz": {
+    "path": "/tmp/b0928-t4-evidence/real-paired-transform-evidence.npz",
+    "bytes": 435960,
+    "sha256": "b7678479a1ec74baa9e794892e77a81ce331a87c377c069242450691d342fb60"
+  }
+}

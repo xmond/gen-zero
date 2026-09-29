@@ -1,0 +1,591 @@
+{
+  "schema_version": 1,
+  "generated_at_utc": "2026-09-26T14:27:15.546317+00:00",
+  "workspace": "/ebs/pj/gen-zero-worktree/eval-b3-constraints",
+  "git_head": "478699c079bf4a053b953bb83b7e7f310eae4922",
+  "overall_status": "NOT_ACCEPTED",
+  "status_categories": {
+    "已实现": [
+      "Executed all three requested benchmark commands; preserved raw exit codes and logs",
+      "Added and executed supplemental real compiler / existing arena measurement harness",
+      "Captured 1000 solve trials, 20 compilation samples, 3 league seeds, 3240 training matches",
+      "Ran 31 existing focused tests"
+    ],
+    "未验证": [
+      "Universal 100% rejection across all constraints and inputs; observed sample success is not proof",
+      "Real browser dataset task success, interaction steps and backtracking",
+      "Learned agent decision stability; strategy total variation is only a simulation statistic"
+    ],
+    "未完成": [
+      "League benchmark acceptance failed",
+      "CP-SAT latency goals and fallback-free acceptance failed",
+      "Real Web Agent benchmark is absent from the requested entrypoint; no replacement dataset or browser environment was specified"
+    ]
+  },
+  "commands": [
+    {
+      "name": "constraints",
+      "command": [
+        "python",
+        "python/gen_zero/scripts/benchmark_issue_76_constraint_compiler.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 78.53149890899658,
+      "log": "benchmarks/results/b3_evidence/constraints.log"
+    },
+    {
+      "name": "league",
+      "command": [
+        "python",
+        "python/gen_zero/run_league_benchmark.py"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 3.0358924865722656,
+      "log": "benchmarks/results/b3_evidence/league.log"
+    },
+    {
+      "name": "web_agent",
+      "command": [
+        "python",
+        "python/gen_zero/evaluate/web_agent_benchmark.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 3.0280611515045166,
+      "log": "benchmarks/results/b3_evidence/web_agent.log"
+    },
+    {
+      "name": "constraints_ortools",
+      "command": [
+        "/tmp/b3-eval-venv/bin/python",
+        "python/gen_zero/scripts/benchmark_issue_76_constraint_compiler.py"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 0.6422531604766846,
+      "log": "benchmarks/results/b3_evidence/constraints_ortools.log",
+      "environment": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "python"
+      }
+    },
+    {
+      "name": "supplemental",
+      "command": [
+        "/tmp/b3-eval-venv/bin/python",
+        "benchmarks/b3_measure.py"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 2.621401786804199,
+      "log": "benchmarks/results/b3_evidence/supplemental.log",
+      "environment": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "python"
+      }
+    },
+    {
+      "name": "constraints_ortools_retry",
+      "command": [
+        "/tmp/b3-eval-venv/bin/python",
+        "python/gen_zero/scripts/benchmark_issue_76_constraint_compiler.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 14.103575229644775,
+      "log": "benchmarks/results/b3_evidence/constraints_ortools_retry.log",
+      "environment": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "python"
+      }
+    },
+    {
+      "name": "supplemental_retry",
+      "command": [
+        "/tmp/b3-eval-venv/bin/python",
+        "benchmarks/b3_measure.py"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 13.463600397109985,
+      "log": "benchmarks/results/b3_evidence/supplemental_retry.log",
+      "environment": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "python"
+      }
+    },
+    {
+      "name": "focused_tests",
+      "command": [
+        "/tmp/b3-eval-venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "python/gen_zero/tests/test_issue_76_constraint_compiler.py",
+        "python/gen_zero/tests/test_league_arena.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 18.584858417510986,
+      "log": "benchmarks/results/b3_evidence/focused_tests.log",
+      "environment": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "python"
+      }
+    },
+    {
+      "command": [
+        "/tmp/b3-eval-venv/bin/python",
+        "-m",
+        "pytest",
+        "-q",
+        "python/gen_zero/tests/test_issue_15_decide_and_fill.py"
+      ],
+      "exit_code": 0,
+      "elapsed_seconds": 4.015800714492798,
+      "log": "benchmarks/results/b3_evidence/web_tests.log",
+      "environment": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "python"
+      }
+    },
+    {
+      "command": [
+        "/tmp/b3-eval-venv/bin/python",
+        "benchmarks/b3_measure.py"
+      ],
+      "exit_code": 1,
+      "elapsed_seconds": 13.819332599639893,
+      "log": "benchmarks/results/b3_evidence/supplemental_final.log",
+      "environment": {
+        "OPENBLAS_NUM_THREADS": "1",
+        "OMP_NUM_THREADS": "1",
+        "PYTHONPATH": "python"
+      }
+    }
+  ],
+  "environment": {
+    "python": "3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]",
+    "executable": "/tmp/b3-eval-venv/bin/python",
+    "dependency_path": "/home/luy/.hermes-venv/lib/python3.11/site-packages via explicit .pth",
+    "packages": {
+      "numpy": "2.4.6",
+      "ortools": "9.15.6755",
+      "pytest": "9.1.1",
+      "torch": "2.14.0+cpu"
+    }
+  },
+  "dependency_setup": {
+    "commands": [
+      "uv venv --system-site-packages /tmp/b3-eval-venv",
+      "uv pip install --python /tmp/b3-eval-venv/bin/python ortools"
+    ],
+    "install_exit_code": 0,
+    "log": "benchmarks/results/b3_evidence/ortools_install.log",
+    "repair": "Initial isolated environment did not inherit torch from active venv. Added /home/luy/.hermes-venv/lib/python3.11/site-packages via b3_base_dependencies.pth. Both failed attempts remain recorded. No global package changes.",
+    "initial_environment": {
+      "python": "/home/luy/.hermes-venv/bin/python",
+      "ortools": null
+    },
+    "timing_caveat": "Shared machine; supplementary runs set OPENBLAS_NUM_THREADS=1 and OMP_NUM_THREADS=1. Original default environment is not directly comparable."
+  },
+  "constraints": {
+    "original_report": {
+      "metadata": {
+        "latent_dim": 1024,
+        "num_eval_steps": 1000,
+        "num_rules_compiled": 8,
+        "num_propositions": 8,
+        "hard_timeout_ms": 2.0
+      },
+      "time": {
+        "avg_compilation_latency_ms": 3569.383,
+        "p99_compilation_latency_ms": 7500.163,
+        "target_compilation_ms": 2.0,
+        "passed_compilation_target": false,
+        "avg_cpsat_solve_latency_ms": 0.384,
+        "p99_cpsat_solve_latency_ms": 0.814,
+        "target_solve_ms": 1.5,
+        "passed_solve_target": true,
+        "dynamic_rule_injection_ms": 3216.231
+      },
+      "safety_and_blocking": {
+        "before_unconstrained_violations": 156,
+        "before_violation_rate_pct": 15.6,
+        "after_cpsat_violations": 0,
+        "after_violation_rate_pct": 0.0,
+        "hard_blocking_rate_pct": 100.0,
+        "target_blocking_rate_pct": 100.0,
+        "passed_hard_safety_target": true
+      },
+      "zero_training_adaptation": {
+        "neural_parameters_added": 0,
+        "retraining_epochs": 0,
+        "weight_drift_rmse": 0.0,
+        "immediate_hot_activation": true
+      }
+    },
+    "ortools_entrypoint_report": {
+      "metadata": {
+        "latent_dim": 1024,
+        "num_eval_steps": 1000,
+        "num_rules_compiled": 8,
+        "num_propositions": 8,
+        "hard_timeout_ms": 2.0
+      },
+      "time": {
+        "avg_compilation_latency_ms": 243.865,
+        "p99_compilation_latency_ms": 289.862,
+        "target_compilation_ms": 2.0,
+        "passed_compilation_target": false,
+        "avg_cpsat_solve_latency_ms": 5.704,
+        "p99_cpsat_solve_latency_ms": 12.336,
+        "target_solve_ms": 1.5,
+        "passed_solve_target": false,
+        "dynamic_rule_injection_ms": 233.605
+      },
+      "safety_and_blocking": {
+        "before_unconstrained_violations": 156,
+        "before_violation_rate_pct": 15.6,
+        "after_cpsat_violations": 0,
+        "after_violation_rate_pct": 0.0,
+        "hard_blocking_rate_pct": 100.0,
+        "target_blocking_rate_pct": 100.0,
+        "passed_hard_safety_target": true
+      },
+      "zero_training_adaptation": {
+        "neural_parameters_added": 0,
+        "retraining_epochs": 0,
+        "weight_drift_rmse": 0.0,
+        "immediate_hot_activation": true
+      }
+    },
+    "measured": {
+      "is_synthetic": true,
+      "notice": "Real compiler execution on generated synthetic telemetry/rules workloads.",
+      "workload": "synthetic full-telemetry single-action selection; mutex is vacuous for exactly-one output",
+      "compilation_rules_per_second": 34.26332168080842,
+      "solve_rule_evaluations_per_second": 1714.5873013320677,
+      "solve_min_ms": 0.03379801637493074,
+      "solve_max_ms": 16.054932988481596,
+      "solve_mean_ms": 4.665845824114513,
+      "solve_p99_ms": 9.117923987214454,
+      "solve_wall_over_2ms": 947,
+      "solver_status_counts": {
+        "CPSAT_NO_SOLUTION_FALLBACK:UNKNOWN": 103,
+        "CP_SAT_OPTIMAL": 844,
+        "0_1_ILP_FEASIBLE": 53
+      },
+      "fallback_count": 103,
+      "violating_proposals": 242,
+      "rejected_violating_proposals": 242,
+      "rejection_rate_pct": 100.0,
+      "unsafe_release_count": 0
+    },
+    "metric_definitions": {
+      "compilation_rules_per_second": "8 * 20 / total measured compilation seconds (includes first compilation)",
+      "solve_rule_evaluations_per_second": "8 * 1000 / sum caller-measured solve seconds; nominal rule volume, includes fallback and exactly-one trivial solves, NOT CP-SAT-only throughput",
+      "solve_extrema": "Min and max caller wall time over 1000 solves, no profiling in timed compiler section",
+      "rejection_rate_pct": "Rejected violating argmax proposals / all violating argmax proposals * 100; independent explicit-rule oracle; no universal guarantee"
+    },
+    "full_data": "benchmarks/results/b3_evidence/supplemental.json",
+    "safety_acceptance": "100% within 242 violating proposals only; no unsafe releases in 1000 samples",
+    "solver_acceptance": false
+  },
+  "league": {
+    "is_synthetic": true,
+    "notice": "Real simulator execution on a seeded synthetic payoff workload; not a learned-agent or real-world evaluation.",
+    "source": "supplemental.json; real existing simulator execution, synthetic workload",
+    "original_exit_code": 1,
+    "naive_baseline": {
+      "mean_expected_win_rate_pct": 44.6,
+      "min_expected_win_rate_pct": 37.3,
+      "measured_elo": null,
+      "reason": "Analytic tanh payoff score; baseline_elo fixed to 1200 in original script"
+    },
+    "stability_definition": "Total variation between consecutive strategy probability vectors; not task robustness",
+    "round_win_rate_definition": "Sum of observed round scores / observed rounds involving the active object, before historical evaluation; not match-win fraction; archival copies excluded",
+    "runs": [
+      {
+        "seed": 42,
+        "agents": [
+          {
+            "role": "main_agent",
+            "id": "main_gen_0",
+            "elo": 1103.8618903557267,
+            "round_wins": 5208.0,
+            "rounds": 14400,
+            "round_win_rate_pct": 36.166666666666664,
+            "mean_generation_total_variation": 0.005000000000000001,
+            "max_generation_total_variation": 0.04000000000000002
+          },
+          {
+            "role": "main_exploiter",
+            "id": "main_exploiter_gen_0",
+            "elo": 1267.370745969376,
+            "round_wins": 5207.0,
+            "rounds": 7200,
+            "round_win_rate_pct": 72.31944444444444,
+            "mean_generation_total_variation": 0.025240000000000002,
+            "max_generation_total_variation": 0.04959999999999998
+          },
+          {
+            "role": "league_exploiter",
+            "id": "league_exploiter_gen_0",
+            "elo": 1168.1019908139551,
+            "round_wins": 3819.0,
+            "rounds": 7200,
+            "round_win_rate_pct": 53.041666666666664,
+            "mean_generation_total_variation": 0.0,
+            "max_generation_total_variation": 0.0
+          }
+        ],
+        "robustness": {
+          "tested_historical_snapshots": 30,
+          "mean_win_rate": 0.52,
+          "min_win_rate": 0.3,
+          "max_win_rate": 0.8,
+          "zero_elo_degradation": false
+        },
+        "post_robustness_main_elo": 1114.0629995937063
+      },
+      {
+        "seed": 43,
+        "agents": [
+          {
+            "role": "main_agent",
+            "id": "main_gen_0",
+            "elo": 1069.9900892574044,
+            "round_wins": 4440.0,
+            "rounds": 14400,
+            "round_win_rate_pct": 30.833333333333332,
+            "mean_generation_total_variation": 0.005000000000000001,
+            "max_generation_total_variation": 0.04000000000000002
+          },
+          {
+            "role": "main_exploiter",
+            "id": "main_exploiter_gen_0",
+            "elo": 1368.4243778473663,
+            "round_wins": 5875.0,
+            "rounds": 7200,
+            "round_win_rate_pct": 81.59722222222223,
+            "mean_generation_total_variation": 0.02383666666666667,
+            "max_generation_total_variation": 0.04730000000000001
+          },
+          {
+            "role": "league_exploiter",
+            "id": "league_exploiter_gen_0",
+            "elo": 1142.6224646556655,
+            "round_wins": 3823.0,
+            "rounds": 7200,
+            "round_win_rate_pct": 53.09722222222222,
+            "mean_generation_total_variation": 0.0,
+            "max_generation_total_variation": 0.0
+          }
+        ],
+        "robustness": {
+          "tested_historical_snapshots": 30,
+          "mean_win_rate": 0.52,
+          "min_win_rate": 0.2,
+          "max_win_rate": 0.9,
+          "zero_elo_degradation": false
+        },
+        "post_robustness_main_elo": 1085.6092083313065
+      },
+      {
+        "seed": 44,
+        "agents": [
+          {
+            "role": "main_agent",
+            "id": "main_gen_0",
+            "elo": 1094.9645102595316,
+            "round_wins": 4959.0,
+            "rounds": 14400,
+            "round_win_rate_pct": 34.4375,
+            "mean_generation_total_variation": 0.005000000000000001,
+            "max_generation_total_variation": 0.04000000000000002
+          },
+          {
+            "role": "main_exploiter",
+            "id": "main_exploiter_gen_0",
+            "elo": 1295.7369544862543,
+            "round_wins": 5427.0,
+            "rounds": 7200,
+            "round_win_rate_pct": 75.375,
+            "mean_generation_total_variation": 0.018849999999999995,
+            "max_generation_total_variation": 0.049600000000000005
+          },
+          {
+            "role": "league_exploiter",
+            "id": "league_exploiter_gen_0",
+            "elo": 1144.7374929853192,
+            "round_wins": 3733.0,
+            "rounds": 7200,
+            "round_win_rate_pct": 51.84722222222222,
+            "mean_generation_total_variation": 0.0,
+            "max_generation_total_variation": 0.0
+          }
+        ],
+        "robustness": {
+          "tested_historical_snapshots": 30,
+          "mean_win_rate": 0.47,
+          "min_win_rate": 0.2,
+          "max_win_rate": 0.7,
+          "zero_elo_degradation": false
+        },
+        "post_robustness_main_elo": 1087.3011022060998
+      }
+    ]
+  },
+  "web_agent": {
+    "raw_smoke_report": {
+      "timestamp": "2026-09-26 23:23:06",
+      "is_synthetic": true,
+      "is_synthetic_smoke_test": true,
+      "evaluated_scenarios_count": 3,
+      "total_trials": 30,
+      "decide_and_fill": {
+        "paradigm_name": "Decide-and-Fill + Semantic Action Compression",
+        "task_success_rate_pct": 66.67,
+        "average_steps_per_task": 2.0,
+        "average_step_latency_ms": 0.04,
+        "description": "Two-stage System 1 prefill action selection + literal Word-Span argument filling."
+      },
+      "failure_breakdown": {
+        "total_evaluations": 30,
+        "successes": 20,
+        "action_mismatches": 0,
+        "span_mismatches": 10
+      }
+    },
+    "action_span_success_rate_pct": 66.67,
+    "real_task_success_rate_pct": null,
+    "interaction_steps": null,
+    "backtracking_rate_pct": null,
+    "reported_candidate_action_count_mean": 2.0,
+    "acceptance": false,
+    "reason": "No browser execution or backtracking events in entrypoint. Heuristic routing smoke test only."
+  },
+  "tests": {
+    "constraint_and_league": "19 passed; exit 0",
+    "web_action_pipeline": "12 passed; exit 0",
+    "caveat": "Existing unit tests include synthetic/mocked integration checks; not evidence of real agent or universal solver safety."
+  },
+  "findings": [
+    {
+      "severity": "critical",
+      "finding": "Original constraint run had no OR-Tools: 1000 explicit fallback warnings, not CP-SAT execution. Exit 0 does not validate solver performance.",
+      "evidence": [
+        "benchmarks/results/b3_evidence/constraints.log:1",
+        "python/gen_zero/gate/constraint_compiler.py:762"
+      ]
+    },
+    {
+      "severity": "critical",
+      "finding": "Original safety oracle checks only four bans; does not check REQUIRE, dirty_pages, io_wait or mutex. Its 100% hard-block number is 100 minus output violation percent, not rejection rate among violating proposals.",
+      "evidence": [
+        "python/gen_zero/scripts/benchmark_issue_76_constraint_compiler.py:118",
+        "python/gen_zero/scripts/benchmark_issue_76_constraint_compiler.py:182"
+      ]
+    },
+    {
+      "severity": "critical",
+      "finding": "League prints PASSED (Monotonic) unconditionally before the failing >=85% assertion. Seed 42 actual historical mean/min are 52%/30%.",
+      "evidence": [
+        "python/gen_zero/run_league_benchmark.py:78",
+        "python/gen_zero/run_league_benchmark.py:83",
+        "benchmarks/results/b3_evidence/league.log:18"
+      ]
+    },
+    {
+      "severity": "critical",
+      "finding": "League uses hand-defined payoffs, random simulated round outcomes and fixed heuristic strategy updates, not learned-agent game evaluation. Baseline Elo 1200 is an initialization, not a measured result.",
+      "evidence": [
+        "python/gen_zero/multiagent/league_arena.py:177",
+        "python/gen_zero/multiagent/league_arena.py:255",
+        "python/gen_zero/run_league_benchmark.py:31"
+      ]
+    },
+    {
+      "severity": "critical",
+      "finding": "Web runs 3 hand-written scenarios with no decision_client: keyword routing, not model reasoning or browser task execution. 66.67% means action/span match only.",
+      "evidence": [
+        "python/gen_zero/evaluate/web_agent_benchmark.py:179",
+        "python/gen_zero/harness/action_pipeline.py:221",
+        "python/gen_zero/harness/action_pipeline.py:274"
+      ]
+    },
+    {
+      "severity": "critical",
+      "finding": "Web average_steps_per_task counts synthesized candidate actions, not interaction steps; backtracking is uninstrumented. These requested metrics must remain null.",
+      "evidence": [
+        "python/gen_zero/evaluate/web_agent_benchmark.py:203"
+      ]
+    },
+    {
+      "severity": "high",
+      "finding": "Active league agents and initial archived copies reuse snapshot IDs; head_to_head merges them. Final supplemental role wins use observed real play_match returns and object identity; prior supplemental pooled ID wins must not be used as active-agent wins.",
+      "evidence": [
+        "python/gen_zero/multiagent/league_arena.py:202",
+        "benchmarks/b3_measure.py:111"
+      ]
+    },
+    {
+      "severity": "high",
+      "finding": "Configured 2ms timeout is not an end-to-end wall-time cap. CP-SAT success labels OPTIMAL even for FEASIBLE and sets timed_out=False; observed wall times are separately measured.",
+      "evidence": [
+        "python/gen_zero/gate/constraint_compiler.py:694",
+        "python/gen_zero/gate/constraint_compiler.py:703"
+      ]
+    }
+  ],
+  "artifact_notes": {
+    "supplemental_prior.json": "Superseded diagnostic run; role wins were pooled by reused IDs. Do not use for active-agent win rates. Final supplemental.json corrects observation without changing production methods.",
+    "original_reports": "Raw legacy claims retained for audit only. Acceptance is determined by this report.",
+    "scope": "No production module replaced or removed. Supplemental harness is actually invoked. No agents/reviewers spawned."
+  },
+  "sha256": {
+    "benchmarks/results/b3_evidence/supplemental.log": "fb1d352eb07139ca844a49f3c0a67f3a3915ffc8d50515ca58ec92f7c9c70af1",
+    "benchmarks/results/b3_evidence/ortools_install.exit_code": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+    "benchmarks/results/b3_evidence/supplemental.json": "06081d39c0b06d22f2ee3087b2eddc2a307c74b454f016b3062fa580b6741cd2",
+    "benchmarks/results/b3_evidence/environment.json": "4f0f67d987a67039788e55b24d38e53ca8dd022126a30eec44cc8c702bf88346",
+    "benchmarks/results/b3_evidence/web_original_report.json": "1a3de2c9e35096c8aa0faa8e273f98681363053e06878fc7540dc2c9c78445f6",
+    "benchmarks/results/b3_evidence/web_tests_command.json": "064ba286caaff6e6dea9bd238a298a8300a9fbf7c2472a998766dd3a6fc6e398",
+    "benchmarks/results/b3_evidence/supplemental_prior.json": "94ef3206d7b1c419b2f7c654423d8157789498c4a025a74a0944b0f28a74d8c7",
+    "benchmarks/results/b3_evidence/constraints.log": "0677f3d3a331e691a7ef0d21ec3cd5d65b67455383c81b76ebcc33c98cd15740",
+    "benchmarks/results/b3_evidence/constraints_ortools_retry.log": "bc607635743e1267399b91c48dd053459c531b5c8d65df0b9d68e3d7f57c3070",
+    "benchmarks/results/b3_evidence/constraints_original_report.json": "2c82e2e1ce686a48b71c3631c533cf0ee2caedd5df1e9afed402ee9a822cd3f3",
+    "benchmarks/results/b3_evidence/ortools_install.log": "088f068b2d30d5420d9751d7f0f9e0cc80f32042180f88535611d87345325352",
+    "benchmarks/results/b3_evidence/retry_commands.json": "e49ae53de470472abf1b9830f0a236592eb9f971a9bf01183e5e61bf6e473bfe",
+    "benchmarks/results/b3_evidence/supplemental_commands.json": "6400e739fa0928a889fa4b02154ec0790768e3959068604f65886d0d770868d9",
+    "benchmarks/results/b3_evidence/constraints_ortools.log": "47c9e46974d7c296cd815155c1383503cce4a01da9c3238865ed0cdf6f3ef0e0",
+    "benchmarks/results/b3_evidence/web_tests.log": "df6ea1e5fb7a413e887dc5464efedff3af0a16337b9e65f4767bdbcfd923c62e",
+    "benchmarks/results/b3_evidence/league.log": "0e2d5ac016b7cf10211fcf3ea347c9ee371124d376034b0f17a42281c36b472c",
+    "benchmarks/results/b3_evidence/web_agent.log": "7cbcb93cb0dcb0d1d091cc4f7268353f4017df814904e35224737378cce9be11",
+    "benchmarks/results/b3_evidence/constraints_ortools_report.json": "804e9c1db83e6a6f572fca44a9b8400da559da4d569784d82e5b49b90fd591a0",
+    "benchmarks/results/b3_evidence/supplemental_final.log": "4506dad8ecd2489e09a9a9b67c0e300cd0a16f51e4a5d511e51feea38f445afa",
+    "benchmarks/results/b3_evidence/focused_tests.log": "e652021282a1b8e4f733231cb5d357f1634352a12813ec04402722776381ffe5",
+    "benchmarks/results/b3_evidence/commands.json": "7ee15ef1f19ad1a16ab6f18eec2596169776edc75f5d4264c700be556fd63ed4",
+    "benchmarks/results/b3_evidence/supplemental_final_command.json": "71783f13ff9c000c6ec46cb9a23ed39235950dec5e52bdc462003e2f946a12d0",
+    "benchmarks/results/b3_evidence/supplemental_retry.log": "514ba21bb1c8a85c56bfc4f7ac9723e8eac79d79eaab0151e48cd1bec5c66169",
+    "benchmarks/b3_measure.py": "74f78b3b3ae6bd88ca7518892bbcbbe60a0e3e4b16e833accd8f23d9be447613",
+    "python/gen_zero/gate/constraint_compiler.py": "9d94a2c5260a13a4d420cf02030d2d16142a6927edcbc165bc483936f291db87",
+    "python/gen_zero/run_league_benchmark.py": "51b9c972baa2608be11d0ebb2472a31480469626d75e9ccbf61bce926ec20958",
+    "python/gen_zero/multiagent/league_arena.py": "7c7e66c122e6d37dbb08bac42c8b6881bf1577ad28beea95a0710ddcd165a784",
+    "python/gen_zero/evaluate/web_agent_benchmark.py": "e52ac96bd27b5902276b6dc821e83c0b898091f2711026aa63ccf2b12ed11ffb",
+    "benchmarks/results/b3_evidence/README.md": "d8dd4c0d578f19be7ec5131f9ab434b98050021de2cedeac3ba372e9e12c95e9",
+    "benchmarks/results/b3_evidence/verification.log": "4d1f25a3cc1dc0738c632e9cbce6a3c7b4b21ba92b02b5f3187ac276298f74a6",
+    "benchmarks/results/b3_evidence/verification.exit_code": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+  },
+  "verification": {
+    "exit_code": 0,
+    "log": "benchmarks/results/b3_evidence/verification.log",
+    "checks": [
+      "SHA-256 of source and artifacts",
+      "all 1000 solve rows, rejection denominator and timing extrema",
+      "all 3240 matches and active-object win totals",
+      "unavailable Web metrics remain null",
+      "original command exit codes preserved"
+    ]
+  }
+}

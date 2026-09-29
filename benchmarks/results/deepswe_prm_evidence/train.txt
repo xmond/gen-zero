@@ -1,0 +1,39 @@
+COMMAND benchmarks/eval_deepswe_enhanced_prm.py train --features benchmarks/artifacts/deepswe_prm/train_features.pt --output benchmarks/artifacts/deepswe_prm/enhanced_head.pt
+DEVICE cpu (explicit); no GPU requested or fallback
+{"config": ["semantic", 0], "alpha": 0.001, "bon4": 0.7466666666666667, "pairwise_accuracy": 0.5766666666666667, "auc": 0.5609191508581752}
+{"config": ["semantic", 0], "alpha": 0.01, "bon4": 0.7333333333333333, "pairwise_accuracy": 0.52, "auc": 0.49186991869918695}
+{"config": ["semantic", 0], "alpha": 0.1, "bon4": 0.72, "pairwise_accuracy": 0.5033333333333333, "auc": 0.4100609756097561}
+{"config": ["semantic", 0], "alpha": 1.0, "bon4": 0.7466666666666667, "pairwise_accuracy": 0.5633333333333332, "auc": 0.405713640469738}
+{"config": ["geometry", 0], "alpha": 0.001, "bon4": 0.72, "pairwise_accuracy": 0.5466666666666666, "auc": 0.5066056910569106}
+{"config": ["geometry", 0], "alpha": 0.01, "bon4": 0.72, "pairwise_accuracy": 0.5733333333333333, "auc": 0.5153568202348691}
+{"config": ["geometry", 0], "alpha": 0.1, "bon4": 0.7333333333333333, "pairwise_accuracy": 0.6066666666666667, "auc": 0.5065492321589883}
+{"config": ["geometry", 0], "alpha": 1.0, "bon4": 0.72, "pairwise_accuracy": 0.5566666666666668, "auc": 0.48938572719060525}
+{"config": ["geometry", 0.5], "alpha": 0.001, "bon4": 0.7466666666666667, "pairwise_accuracy": 0.59, "auc": 0.5887533875338753}
+{"config": ["geometry", 0.5], "alpha": 0.01, "bon4": 0.7466666666666667, "pairwise_accuracy": 0.61, "auc": 0.5816960252935863}
+{"config": ["geometry", 0.5], "alpha": 0.1, "bon4": 0.72, "pairwise_accuracy": 0.5966666666666667, "auc": 0.5685411020776875}
+{"config": ["geometry", 0.5], "alpha": 1.0, "bon4": 0.7333333333333333, "pairwise_accuracy": 0.62, "auc": 0.5675813008130082}
+{"config": ["geometry", 1.0], "alpha": 0.001, "bon4": 0.7333333333333333, "pairwise_accuracy": 0.6, "auc": 0.5486675700090333}
+{"config": ["geometry", 1.0], "alpha": 0.01, "bon4": 0.7466666666666667, "pairwise_accuracy": 0.59, "auc": 0.5313911472448059}
+{"config": ["geometry", 1.0], "alpha": 0.1, "bon4": 0.7333333333333333, "pairwise_accuracy": 0.61, "auc": 0.5182926829268293}
+{"config": ["geometry", 1.0], "alpha": 1.0, "bon4": 0.7466666666666667, "pairwise_accuracy": 0.5966666666666667, "auc": 0.5246160794941283}
+{"config": ["geometry", 2.0], "alpha": 0.001, "bon4": 0.7066666666666667, "pairwise_accuracy": 0.5433333333333333, "auc": 0.5175022583559169}
+{"config": ["geometry", 2.0], "alpha": 0.01, "bon4": 0.7333333333333333, "pairwise_accuracy": 0.5466666666666666, "auc": 0.5057588075880758}
+{"config": ["geometry", 2.0], "alpha": 0.1, "bon4": 0.72, "pairwise_accuracy": 0.57, "auc": 0.4657294489611563}
+{"config": ["geometry", 2.0], "alpha": 1.0, "bon4": 0.7333333333333333, "pairwise_accuracy": 0.6133333333333333, "auc": 0.4491305329719964}
+{"config": ["combined", 0], "alpha": 0.001, "bon4": 0.72, "pairwise_accuracy": 0.5433333333333333, "auc": 0.5046296296296297}
+{"config": ["combined", 0], "alpha": 0.01, "bon4": 0.72, "pairwise_accuracy": 0.56, "auc": 0.5058152664859982}
+{"config": ["combined", 0], "alpha": 0.1, "bon4": 0.7333333333333333, "pairwise_accuracy": 0.63, "auc": 0.4814814814814815}
+{"config": ["combined", 0], "alpha": 1.0, "bon4": 0.72, "pairwise_accuracy": 0.5433333333333333, "auc": 0.43941960252935863}
+{"config": ["combined", 0.5], "alpha": 0.001, "bon4": 0.7333333333333333, "pairwise_accuracy": 0.5966666666666667, "auc": 0.5592253839205059}
+{"config": ["combined", 0.5], "alpha": 0.01, "bon4": 0.72, "pairwise_accuracy": 0.6133333333333333, "auc": 0.5295280036133695}
+{"config": ["combined", 0.5], "alpha": 0.1, "bon4": 0.72, "pairwise_accuracy": 0.6099999999999999, "auc": 0.47086720867208676}
+{"config": ["combined", 0.5], "alpha": 1.0, "bon4": 0.7333333333333333, "pairwise_accuracy": 0.61, "auc": 0.4290876242095754}
+{"config": ["combined", 1.0], "alpha": 0.001, "bon4": 0.72, "pairwise_accuracy": 0.59, "auc": 0.5424006323396566}
+{"config": ["combined", 1.0], "alpha": 0.01, "bon4": 0.7466666666666667, "pairwise_accuracy": 0.5933333333333333, "auc": 0.5150745257452575}
+{"config": ["combined", 1.0], "alpha": 0.1, "bon4": 0.72, "pairwise_accuracy": 0.5666666666666667, "auc": 0.4765130984643179}
+{"config": ["combined", 1.0], "alpha": 1.0, "bon4": 0.7466666666666667, "pairwise_accuracy": 0.5966666666666667, "auc": 0.45556684733513997}
+{"config": ["combined", 2.0], "alpha": 0.001, "bon4": 0.7066666666666667, "pairwise_accuracy": 0.5333333333333333, "auc": 0.5173328816621501}
+{"config": ["combined", 2.0], "alpha": 0.01, "bon4": 0.7333333333333333, "pairwise_accuracy": 0.56, "auc": 0.49808039747064137}
+{"config": ["combined", 2.0], "alpha": 0.1, "bon4": 0.72, "pairwise_accuracy": 0.57, "auc": 0.44060523938572727}
+{"config": ["combined", 2.0], "alpha": 1.0, "bon4": 0.7466666666666667, "pairwise_accuracy": 0.6366666666666666, "auc": 0.41548102981029805}
+FROZEN {"path": "benchmarks/artifacts/deepswe_prm/enhanced_head.pt", "sha256": "4e4399a9afe9bc7e4cff5293c3cee512a7087c605472325fd94939a86779591f", "selected": {"config": ["combined", 2.0], "alpha": 1.0, "bon4": 0.7466666666666667, "pairwise_accuracy": 0.6366666666666666, "auc": 0.41548102981029805}}

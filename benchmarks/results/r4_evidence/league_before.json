@@ -1,0 +1,6 @@
+{
+  "command": "python python/gen_zero/run_league_benchmark.py",
+  "exit_code": 1,
+  "timeout": false,
+  "elapsed_s": 3.4403867721557617
+}

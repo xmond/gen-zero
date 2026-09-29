@@ -1,0 +1,15 @@
+{
+  "command": [
+    "/tmp/r4-planners-venv/bin/python",
+    "python/gen_zero/scripts/run_12_planners_benchmark.py"
+  ],
+  "cwd": "/ebs/pj/gen-zero-worktree/rm-r4-planners",
+  "exit_code": 1,
+  "elapsed_s": 10.963953018188477,
+  "log": "/ebs/pj/gen-zero-worktree/rm-r4-planners/benchmarks/results/r4_evidence/planners_after.log",
+  "environment": {
+    "PYTHONPATH": "python",
+    "OPENBLAS_NUM_THREADS": null,
+    "OMP_NUM_THREADS": null
+  }
+}

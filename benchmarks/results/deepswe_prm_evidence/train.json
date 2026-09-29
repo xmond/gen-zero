@@ -1,0 +1,18 @@
+{
+  "command": [
+    "python",
+    "-u",
+    "benchmarks/eval_deepswe_enhanced_prm.py",
+    "train",
+    "--features",
+    "benchmarks/artifacts/deepswe_prm/train_features.pt",
+    "--output",
+    "benchmarks/artifacts/deepswe_prm/enhanced_head.pt"
+  ],
+  "returncode": 0,
+  "seconds": 27.15724205970764,
+  "environment": {
+    "OPENBLAS_NUM_THREADS": "4",
+    "OMP_NUM_THREADS": "4"
+  }
+}

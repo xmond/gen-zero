@@ -1,0 +1,92 @@
+{
+  "abbac53891c8640820d353b398c0b58df8015778ddeb3717b981b6e4e2729e50": {
+    "container_id": "1df8b337d3b6d1989c684b0b3684a76d9012cff718b41148d19a56a8b4858e5c",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk-main-1",
+    "command": "bash -c chmod 777 /logs/agent /logs/verifier",
+    "exit_code": 0
+  },
+  "2351bedc13c69ac7bbbeaccc3c86220addd8b1d40bf0b2220b3906cda3d5c321": {
+    "container_id": "1df8b337d3b6d1989c684b0b3684a76d9012cff718b41148d19a56a8b4858e5c",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk-main-1",
+    "command": "bash -c git rev-parse --show-toplevel",
+    "exit_code": 0
+  },
+  "65affa6d2c72a49ce65a91596ccea70e914403bfe4b2d9068d8c1d2dfdb80c3a": {
+    "container_id": "1df8b337d3b6d1989c684b0b3684a76d9012cff718b41148d19a56a8b4858e5c",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk-main-1",
+    "command": "bash -c git grep -n -I -F -e def -- .",
+    "exit_code": 0
+  },
+  "f79ffbd12c0ef571984f3174cf549b40cf3aec43102d8c6881cbc8685d06a8b3": {
+    "container_id": "1df8b337d3b6d1989c684b0b3684a76d9012cff718b41148d19a56a8b4858e5c",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk-main-1",
+    "command": "bash -c git rev-parse HEAD && git status --porcelain=v1",
+    "exit_code": 0
+  },
+  "d1df842f98eba781063e6f871fff6f7ceb8559cce20e10f963daa17213e885ba": {
+    "container_id": "1df8b337d3b6d1989c684b0b3684a76d9012cff718b41148d19a56a8b4858e5c",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk-main-1",
+    "command": "bash -c chown -R 1000:1000 /logs",
+    "exit_code": 0
+  },
+  "6bdbded4a67d00a506018b72f59aa5417d4f266a0e48c12b28da3f8d7bf8d1ec": {
+    "container_id": "1df8b337d3b6d1989c684b0b3684a76d9012cff718b41148d19a56a8b4858e5c",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk-main-1",
+    "command": "bash -c cd /app && mkdir -p /logs/artifacts && git config --global --add safe.directory /app && git diff --binary dd05eebc8ed9e30fc6c223088a5a450cb54c1cab HEAD > /logs/artifacts/model.patch",
+    "exit_code": 0
+  },
+  "3cff5c97df56e1eff4d1df22dbcba1d80f2c9709abf10a32ad2eff0d5432a831": {
+    "container_id": "1df8b337d3b6d1989c684b0b3684a76d9012cff718b41148d19a56a8b4858e5c",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk-main-1",
+    "command": "bash -c test -d /logs/artifacts/model.patch",
+    "exit_code": 1
+  },
+  "a82b503f6cdc7bc8219cd3b4f2e19d3956fbbf705a0de57bfdffdde88498c2a7": {
+    "container_id": "1df8b337d3b6d1989c684b0b3684a76d9012cff718b41148d19a56a8b4858e5c",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk-main-1",
+    "command": "bash -c chown 1000:1000 /logs/artifacts/model.patch",
+    "exit_code": 0
+  },
+  "6a83317ef64e5c79aa60ace11bfb702a60e41a1c875086ea08fa193dedcd358f": {
+    "container_id": "1df8b337d3b6d1989c684b0b3684a76d9012cff718b41148d19a56a8b4858e5c",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk-main-1",
+    "command": "bash -c chown -R 1000:1000 /logs",
+    "exit_code": 0
+  },
+  "fa2de9449b3f36c13176aefcc97c8e9d030e49876e7e22f430095b1b7cbd1be5": {
+    "container_id": "6995e28ee18f411ce8079283e8e3c56fdcae31dfab4c41d261361309756d472f",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk__verifier__trial-main-1",
+    "command": "bash -c chmod 777 /logs/agent /logs/verifier",
+    "exit_code": 1
+  },
+  "2f393036635dd926f0854ea4f08c37ec2f41ca6ba8ef3488d8c6c6bf26c5bb1f": {
+    "container_id": "6995e28ee18f411ce8079283e8e3c56fdcae31dfab4c41d261361309756d472f",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk__verifier__trial-main-1",
+    "command": "bash -c if [ -L /logs/verifier ] || { [ -e /logs/verifier ] && [ ! -d /logs/verifier ]; }; then rm -rf /logs/verifier; fi && mkdir -p /logs/verifier && find /logs/verifier -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && chmod 777 /logs/verifier",
+    "exit_code": 0
+  },
+  "6fa095539c74d7e95503cbb12cd8de96e82538dbb7469f33a17199559c1393ab": {
+    "container_id": "6995e28ee18f411ce8079283e8e3c56fdcae31dfab4c41d261361309756d472f",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk__verifier__trial-main-1",
+    "command": "bash -c if [ -L /logs/artifacts ] || { [ -e /logs/artifacts ] && [ ! -d /logs/artifacts ]; }; then rm -rf /logs/artifacts; fi && mkdir -p /logs/artifacts && find /logs/artifacts -mindepth 1 -maxdepth 1 -exec rm -rf -- {} + && chmod 777 /logs/artifacts",
+    "exit_code": 0
+  },
+  "7f1ba963528885012d4531ac0b185a89f1e15b89cb889a83d260e0c539466933": {
+    "container_id": "6995e28ee18f411ce8079283e8e3c56fdcae31dfab4c41d261361309756d472f",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk__verifier__trial-main-1",
+    "command": "bash -c chmod +x /tests/test.sh",
+    "exit_code": 0
+  },
+  "0cfae5aceeb442fd5db9469501f02efb16d441e23d4c9407cb6c3c15b7b2b7b2": {
+    "container_id": "6995e28ee18f411ce8079283e8e3c56fdcae31dfab4c41d261361309756d472f",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk__verifier__trial-main-1",
+    "command": "bash -c (/tests/test.sh) > /logs/verifier/test-stdout.txt 2>&1",
+    "exit_code": 0
+  },
+  "a8f1ecc28255ae1bfd3a5ebd859b9a378c0cb39de8c812f49b7d9d077c027348": {
+    "container_id": "6995e28ee18f411ce8079283e8e3c56fdcae31dfab4c41d261361309756d472f",
+    "container_name": "tomlkit-toml-table-converters__h9tazpk__verifier__trial-main-1",
+    "command": "bash -c chown -R 1000:1000 /logs",
+    "exit_code": 0
+  }
+}

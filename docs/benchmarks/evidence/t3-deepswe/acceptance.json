@@ -1,0 +1,27 @@
+{
+  "accepted": false,
+  "pier_exit": 0,
+  "adapter_exit": 78,
+  "verifier_exec": [
+    {
+      "container_id": "6995e28ee18f411ce8079283e8e3c56fdcae31dfab4c41d261361309756d472f",
+      "container_name": "tomlkit-toml-table-converters__h9tazpk__verifier__trial-main-1",
+      "command": "bash -c (/tests/test.sh) > /logs/verifier/test-stdout.txt 2>&1",
+      "exit_code": 0
+    }
+  ],
+  "independent_verifier": true,
+  "reward": {
+    "reward": 0,
+    "f2p_total": 60,
+    "f2p_passed": 0,
+    "p2p_total": 964,
+    "p2p_passed": 964,
+    "f2p": 0.0,
+    "p2p": 1.0,
+    "partial": 0.94140625
+  },
+  "patch_bytes": 0,
+  "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "exception_type": "NonZeroAgentExitCodeError"
+}

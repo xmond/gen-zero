@@ -1,0 +1,72 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/gen-zero-core",
+    "crates/gen-zero-model",
+    "crates/gen-zero-nanocore",
+    "crates/gen-zero-worldmodel",
+    "crates/gen-zero-lod",
+    "crates/gen-zero-gate",
+    "crates/gen-zero-planner",
+    "crates/gen-zero-storage",
+    "crates/gen-zero-provenance",
+    "crates/gen-zero-service",
+    "crates/gen-zero-cli",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+authors = ["Gen-Zero Core Team <core@gen-zero.ai>"]
+license = "Apache-2.0"
+repository = "https://github.com/xmond/gen-zero"
+rust-version = "1.88"
+
+[workspace.dependencies]
+# Intra-workspace dependencies
+gen-zero-core = { path = "crates/gen-zero-core", version = "0.1.0" }
+gen-zero-model = { path = "crates/gen-zero-model", version = "0.1.0" }
+gen-zero-nanocore = { path = "crates/gen-zero-nanocore", version = "0.1.0" }
+gen-zero-worldmodel = { path = "crates/gen-zero-worldmodel", version = "0.1.0" }
+gen-zero-lod = { path = "crates/gen-zero-lod", version = "0.1.0" }
+gen-zero-gate = { path = "crates/gen-zero-gate", version = "0.1.0" }
+gen-zero-planner = { path = "crates/gen-zero-planner", version = "0.1.0" }
+gen-zero-storage = { path = "crates/gen-zero-storage", version = "0.1.0" }
+gen-zero-provenance = { path = "crates/gen-zero-provenance", version = "0.1.0" }
+gen-zero-service = { path = "crates/gen-zero-service", version = "0.1.0" }
+
+# Serialization & Zero-copy
+serde = { version = "1.0", features = ["derive"] }
+serde_json = { version = "1.0" }
+simd-json = { version = "0.14" }
+rkyv = { version = "0.7", features = ["validation", "strict"] }
+
+# Concurrency & Memory
+parking_lot = "0.12"
+crossbeam-queue = "0.3"
+arc-swap = "1.7"
+smallvec = { version = "1.13", features = ["const_generics", "serde"] }
+arrayvec = { version = "0.7", features = ["serde"] }
+indexmap = { version = "2.2", features = ["serde"] }
+
+# Compression & Hashing
+zstd = { version = "0.13", default-features = false }
+blake3 = "1.5"
+sha2 = "0.10"
+
+# Async & Networking
+tokio = { version = "1.38", features = ["full"] }
+axum = { version = "0.7" }
+tower = { version = "0.4" }
+tower-http = { version = "0.5", features = ["cors", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Math & Numerics
+nalgebra = { version = "0.33" }
+rand = "0.8"
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+anyhow = "1.0"
+thiserror = "1.0"

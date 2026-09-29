@@ -1,0 +1,32 @@
+[
+  {
+    "name": "constraints",
+    "command": [
+      "python",
+      "python/gen_zero/scripts/benchmark_issue_76_constraint_compiler.py"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 78.53149890899658,
+    "log": "benchmarks/results/b3_evidence/constraints.log"
+  },
+  {
+    "name": "league",
+    "command": [
+      "python",
+      "python/gen_zero/run_league_benchmark.py"
+    ],
+    "exit_code": 1,
+    "elapsed_seconds": 3.0358924865722656,
+    "log": "benchmarks/results/b3_evidence/league.log"
+  },
+  {
+    "name": "web_agent",
+    "command": [
+      "python",
+      "python/gen_zero/evaluate/web_agent_benchmark.py"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 3.0280611515045166,
+    "log": "benchmarks/results/b3_evidence/web_agent.log"
+  }
+]

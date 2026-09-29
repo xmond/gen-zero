@@ -1,0 +1,19 @@
+[package]
+name = "gen-zero-provenance"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Decision audit entries, BLAKE3 Merkle Mountain Range ledger, and capability tokens for Gen-Zero."
+readme = "README.md"
+
+[dependencies]
+gen-zero-core = { workspace = true }
+blake3 = { workspace = true }
+parking_lot = { workspace = true }
+rand = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }

@@ -1,0 +1,157 @@
+{
+ "is_synthetic": true,
+ "notice": "Random-weight/input shape-only latency microbenchmark; it contains no task or model-quality evidence.",
+ "host": {
+  "platform": "Linux-7.0.0-31-generic-x86_64-with-glibc2.39",
+  "cpu_count": 24,
+  "loadavg_start": [
+   8.1923828125,
+   6.2177734375,
+   6.80615234375
+  ],
+  "omp_threads": "1",
+  "python": "3.11.16",
+  "numpy": "2.4.6",
+  "torch": "2.14.0+cpu",
+  "torch_threads": 1,
+  "loadavg_end": [
+   8.984375,
+   6.7109375,
+   6.92626953125
+  ]
+ },
+ "note": "random weights; latency only; batch 1; float32",
+ "heads": {
+  "D1792_K18": {
+   "linear_probe": {
+    "median_us": 5.7,
+    "p95_us": 12.7
+   },
+   "residual_adapter_r512_plus_linear": {
+    "median_us": 454.38,
+    "p95_us": 551.84
+   },
+   "residual_adapter_folded_into_head": {
+    "median_us": 211.29,
+    "p95_us": 277.99
+   },
+   "bank_gemv_16_heads": {
+    "median_us": 105.1,
+    "p95_us": 149.01
+   },
+   "nystrom_m1024_r256": {
+    "median_us": 465.83,
+    "p95_us": 551.95
+   },
+   "poincare_64d_protos": {
+    "median_us": 48.95,
+    "p95_us": 78.2
+   },
+   "layer_diff_linear_3D": {
+    "median_us": 12.7,
+    "p95_us": 24.8
+   },
+   "fold_max_abs_err": 4.172325134277344e-07,
+   "residual_adapter_folded_r64": {
+    "median_us": 29.15,
+    "p95_us": 45.5
+   },
+   "residual_adapter_folded_r128": {
+    "median_us": 50.2,
+    "p95_us": 78.62
+   }
+  },
+  "D5120_K18": {
+   "linear_probe": {
+    "median_us": 12.3,
+    "p95_us": 25.7
+   },
+   "residual_adapter_r512_plus_linear": {
+    "median_us": 1211.35,
+    "p95_us": 1485.7
+   },
+   "residual_adapter_folded_into_head": {
+    "median_us": 596.53,
+    "p95_us": 712.23
+   },
+   "bank_gemv_16_heads": {
+    "median_us": 320.29,
+    "p95_us": 378.8
+   },
+   "nystrom_m1024_r256": {
+    "median_us": 1237.95,
+    "p95_us": 1437.45
+   },
+   "poincare_64d_protos": {
+    "median_us": 101.9,
+    "p95_us": 143.21
+   },
+   "layer_diff_linear_3D": {
+    "median_us": 56.2,
+    "p95_us": 90.41
+   },
+   "fold_max_abs_err": 6.705522537231445e-07,
+   "residual_adapter_folded_r64": {
+    "median_us": 103.9,
+    "p95_us": 144.92
+   },
+   "residual_adapter_folded_r128": {
+    "median_us": 182.69,
+    "p95_us": 265.99
+   }
+  },
+  "D8192_K18": {
+   "linear_probe": {
+    "median_us": 14.9,
+    "p95_us": 30.7
+   },
+   "residual_adapter_r512_plus_linear": {
+    "median_us": 2270.11,
+    "p95_us": 2994.98
+   },
+   "residual_adapter_folded_into_head": {
+    "median_us": 972.91,
+    "p95_us": 1141.37
+   },
+   "bank_gemv_16_heads": {
+    "median_us": 529.78,
+    "p95_us": 623.08
+   },
+   "nystrom_m1024_r256": {
+    "median_us": 2149.56,
+    "p95_us": 2790.31
+   },
+   "poincare_64d_protos": {
+    "median_us": 153.19,
+    "p95_us": 216.24
+   },
+   "layer_diff_linear_3D": {
+    "median_us": 113.89,
+    "p95_us": 162.81
+   },
+   "fold_max_abs_err": 6.556510925292969e-07,
+   "residual_adapter_folded_r64": {
+    "median_us": 158.29,
+    "p95_us": 210.3
+   },
+   "residual_adapter_folded_r128": {
+    "median_us": 276.79,
+    "p95_us": 345.09
+   }
+  }
+ },
+ "adapter_training": {
+  "D5120": {
+   "identity_max_abs_err_at_init": 0.0,
+   "batch": 256,
+   "fp32_ms_per_step": 107.59,
+   "bf16_ms_per_step": 487.75
+  },
+  "D8192": {
+   "identity_max_abs_err_at_init": 0.0,
+   "batch": 256,
+   "fp32_ms_per_step": 211.47,
+   "bf16_ms_per_step": 2672.14
+  }
+ }
+}

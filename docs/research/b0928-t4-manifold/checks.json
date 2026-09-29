@@ -1,0 +1,46 @@
+[
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "rustfmt",
+      "--edition",
+      "2021",
+      "--check",
+      "crates/gen-zero-service/tests/test_nanocore_live.rs"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "python",
+      "-m",
+      "compileall",
+      "-q",
+      "python/gen_zero/causal/universal_manifold_extractor.py",
+      "python/gen_zero/causal/manifold_anchor_distiller.py",
+      "python/gen_zero/causal/nanocore_bridge.py",
+      "python/gen_zero/cli.py",
+      "python/gen_zero/client.py",
+      "benchmarks/suites/generalized_cca_manifold_interference.py",
+      "benchmarks/suites/run_universal_extraction_a100.py",
+      "benchmarks/suites/profile_nanocore_latency.py",
+      "benchmarks/suites/verify_gguf_model.py",
+      "benchmarks/suites/gpu_extract_llama405b_13tasks.py",
+      "scripts/slice_gguf_layers.py"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]

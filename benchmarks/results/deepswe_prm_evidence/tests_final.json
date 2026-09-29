@@ -1,0 +1,15 @@
+{
+  "command": [
+    "python",
+    "-m",
+    "unittest",
+    "discover",
+    "-s",
+    "benchmarks/tests",
+    "-p",
+    "test_deepswe_enhanced_prm.py",
+    "-v"
+  ],
+  "returncode": 0,
+  "seconds": 5.104767322540283
+}

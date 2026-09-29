@@ -1,0 +1,61 @@
+      ┌─────────┐  mr boxington
+     ╱ ═══════ ╱│
+    ╱─────────╱ │
+    │ •    (◉)│≡│
+    │  ◟▄▄▄◞  │ ╱
+    │   ◀◆▶   │╱
+    └─────────┘
+   Compiling gen-zero-lod v0.1.0 (/ebs/pj/gen-zero/crates/gen-zero-lod)
+   Compiling gen-zero-gate v0.1.0 (/ebs/pj/gen-zero/crates/gen-zero-gate)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.78s
+     Running unittests src/lib.rs (target/debug/deps/gen_zero_gate-59625c536816bade)
+
+running 43 tests
+test constraint::tests::test_linear_constraints ... ok
+test policy::tests::configured_heat_certificate_rejects_high_risk_action ... ok
+test policy::tests::invalid_entropy_and_thresholds_fail_closed ... ok
+test policy::tests::test_policy_gate_cascade ... ok
+test risk::tests::maps_probability_bands_to_tiers ... ok
+test risk::tests::unassessed_or_malformed_risk_fails_closed ... ok
+test risk::tests::bare_rm_rf_root_escalates_under_recalibrated_threshold ... ok
+test dual_track::tests::test_dual_track_gate_criteria ... ok
+test policy::tests::every_registered_requirement_checks_the_same_terminal_state ... ok
+test policy::tests::certificate_from_looser_tolerance_is_rejected ... ok
+test sheaf_gate::tests::certify_rejects_epoch_mismatch ... ok
+test sheaf_gate::tests::certify_rejects_eta_at_or_above_safe_bound ... ok
+test sheaf_gate::tests::certify_converges_to_zero_residual_on_reachable_target ... ok
+test policy::tests::empty_registration_differs_from_missing_certificate ... ok
+test sheaf_gate::tests::certify_rejects_non_finite_candidate_state ... ok
+test policy::tests::repaired_terminal_state_reaches_every_lower_tier_verdict ... ok
+test sheaf_gate::tests::certify_rejects_residual_exceeded_when_budget_exhausted ... ok
+test sheaf_gate::tests::degenerate_laplacian_rejected_at_construction ... ok
+test sheaf_gate::tests::check_uncertain_energy_detects_a_deliberately_wrong_prediction ... ok
+test policy::tests::residual_violation_is_rejected_without_repair_even_with_forged_diagnostics ... ok
+test policy::tests::malformed_certificates_fail_closed ... ok
+test sheaf_gate::tests::explicit_overflow_and_nan_crosscheck_fail_closed ... ok
+test sheaf_gate::tests::invalid_tolerances_fail_before_certification ... ok
+test sheaf_gate::tests::maximum_pin_index_returns_shape_error ... ok
+test sheaf_gate::tests::non_finite_pin_anchor_rejected_as_non_finite_not_fiber_mismatch ... ok
+test sheaf_gate::tests::public_operators_fail_closed_on_wrong_dimensions ... ok
+test sheaf_gate::tests::stable_norm_preserves_extreme_magnitudes ... ok
+test sheaf_gate::tests::relax_step_with_unsafe_eta_actually_raises_energy ... ok
+test sheaf_gate::tests::safe_eta_bound_matches_two_over_lambda_max ... ok
+test sheaf_gate::tests::window_budget_stall_and_invalid_inputs_are_explicit ... ok
+test sheaf_gate::tests::certify_keeps_pinned_node_fixed_across_relaxation ... ok
+test sheaf_gate::tests::window_relaxes_to_affine_trajectory_and_checks_each_step ... ok
+test sheaf_gate::tests::certify_detects_stalled_harmonic_obstruction ... ok
+test sheaf_gate::tests::tiny_residual_cannot_converge_or_verify_above_tolerance ... ok
+test sheaf_gate::tests::manifold_requires_unit_sphere_in_f64 ... ok
+test sheaf_gate::tests::certify_rejects_pinned_node_that_already_moved ... ok
+test sheaf_gate::tests::laplacian_relaxation_strictly_decreases_energy ... ok
+test sheaf_gate::tests::certify_rejects_fiber_dimension_mismatch ... ok
+test sheaf_gate::tests::manifold_guard_rejects_hyperbolic_domain_violation ... ok
+test sheaf_gate::tests::certify_with_default_budget_classifies_obstruction_as_stalled ... ok
+test sheaf_gate::tests::manifold_guard_rejects_spherical_cut_locus ... ok
+test sheaf_gate::tests::window_operator_matches_independent_dense_quadratic_and_finite_differences ... ok
+test sheaf_gate::tests::long_window_uses_local_operators_and_zero_weight_observations ... ok
+
+test result: ok. 43 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+mbx[cache]: 0 hits, 1 misses, 2 incremental; 0 B downloaded, 0 B uploaded, 0 B stored locally
+mbx[savings]: 1.7 TiB logical of files removed by collection so far

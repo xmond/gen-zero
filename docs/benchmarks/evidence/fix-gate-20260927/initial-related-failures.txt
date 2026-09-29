@@ -1,0 +1,140 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.1.1, pluggy-1.6.0
+rootdir: /ebs/pj/gen-zero-worktree/fix-gate
+configfile: pytest.ini
+plugins: anyio-4.12.1
+collected 18 items
+
+python/gen_zero/tests/test_issue_8_compound_decision.py ...FFFF.......F. [ 88%]
+..                                                                       [100%]
+
+=================================== FAILURES ===================================
+_ TestDualTrackPolicyGate.test_01_hard_rule_sensitive_action_requires_confirm __
+
+self = <test_issue_8_compound_decision.TestDualTrackPolicyGate testMethod=test_01_hard_rule_sensitive_action_requires_confirm>
+
+    def test_01_hard_rule_sensitive_action_requires_confirm(self):
+        decision = CompositeStepDecision(
+            target="table_users",
+            target_confidence=0.95,
+            action="drop",
+            action_confidence=0.95,
+            done_prob=0.0,
+            risk_prob=0.01  # Even with low self-reported risk, hard rule catches it!
+        )
+        verdict = self.gate.evaluate_policy(decision, state="Postgres DB shell")
+>       self.assertEqual(verdict.action, PolicyVerdictAction.CONFIRM)
+E       AssertionError: <PolicyVerdictAction.STOP: 'stop'> != <PolicyVerdictAction.CONFIRM: 'confirm'>
+
+python/gen_zero/tests/test_issue_8_compound_decision.py:99: AssertionError
+_____ TestDualTrackPolicyGate.test_02_soft_gate_high_risk_requires_confirm _____
+
+self = <test_issue_8_compound_decision.TestDualTrackPolicyGate testMethod=test_02_soft_gate_high_risk_requires_confirm>
+
+    def test_02_soft_gate_high_risk_requires_confirm(self):
+        decision = CompositeStepDecision(
+            target="#btn-update-config",
+            target_confidence=0.85,
+            action="click",
+            action_confidence=0.90,
+            done_prob=0.0,
+            risk_prob=0.35  # Exceeds default tau_risk = 0.20
+        )
+        verdict = self.gate.evaluate_policy(decision, state="Settings page")
+>       self.assertEqual(verdict.action, PolicyVerdictAction.CONFIRM)
+E       AssertionError: <PolicyVerdictAction.STOP: 'stop'> != <PolicyVerdictAction.CONFIRM: 'confirm'>
+
+python/gen_zero/tests/test_issue_8_compound_decision.py:114: AssertionError
+____________ TestDualTrackPolicyGate.test_03_confidence_three_tiers ____________
+
+self = <test_issue_8_compound_decision.TestDualTrackPolicyGate testMethod=test_03_confidence_three_tiers>
+
+    def test_03_confidence_three_tiers(self):
+        # Tier 1: Blind Guess (< 0.30) -> STOP
+        blind_decision = CompositeStepDecision(
+            target="button_a",
+            target_confidence=0.25,
+            action="click",
+            action_confidence=0.80,
+            done_prob=0.0,
+            risk_prob=0.01
+        )
+        v_stop = self.gate.evaluate_policy(blind_decision)
+        self.assertEqual(v_stop.action, PolicyVerdictAction.STOP)
+        self.assertFalse(v_stop.passed)
+    
+        # Tier 2: Ambiguity (0.30 <= conf < 0.50) -> ESCALATE
+        ambiguous_decision = CompositeStepDecision(
+            target="button_b",
+            target_confidence=0.42,
+            action="click",
+            action_confidence=0.80,
+            done_prob=0.0,
+            risk_prob=0.01
+        )
+        v_escalate = self.gate.evaluate_policy(ambiguous_decision)
+>       self.assertEqual(v_escalate.action, PolicyVerdictAction.ESCALATE)
+E       AssertionError: <PolicyVerdictAction.STOP: 'stop'> != <PolicyVerdictAction.ESCALATE: 'escalate'>
+
+python/gen_zero/tests/test_issue_8_compound_decision.py:142: AssertionError
+_____________ TestDualTrackPolicyGate.test_04_domain_risk_profiles _____________
+
+self = <test_issue_8_compound_decision.TestDualTrackPolicyGate testMethod=test_04_domain_risk_profiles>
+
+    def test_04_domain_risk_profiles(self):
+        # Read-only profile allows 0.42 confidence to proceed
+        ro_prof = DomainRiskProfile.read_only()
+        decision = CompositeStepDecision(
+            target="search_result_1",
+            target_confidence=0.45,
+            action="click",
+            action_confidence=0.90,
+            done_prob=0.0,
+            risk_prob=0.01
+        )
+        v_ro = self.gate.evaluate_policy(decision, profile=ro_prof)
+>       self.assertEqual(v_ro.action, PolicyVerdictAction.PROCEED)
+E       AssertionError: <PolicyVerdictAction.STOP: 'stop'> != <PolicyVerdictAction.PROCEED: 'proceed'>
+
+python/gen_zero/tests/test_issue_8_compound_decision.py:170: AssertionError
+_ TestReviewerEdgeCases.test_01_nan_inf_sanitization_stops_corrupted_decisions _
+
+self = <test_issue_8_compound_decision.TestReviewerEdgeCases testMethod=test_01_nan_inf_sanitization_stops_corrupted_decisions>
+
+    def test_01_nan_inf_sanitization_stops_corrupted_decisions(self):
+        gate = DecisionPolicyGate()
+    
+        # NaN confidence must NOT fall through to PROCEED; must trigger STOP
+        nan_decision = CompositeStepDecision(
+            target="#btn-ok",
+            target_confidence=float("nan"),
+            action="click",
+            action_confidence=float("nan"),
+            done_prob=0.0,
+            risk_prob=0.0
+        )
+        v_nan = gate.evaluate_policy(nan_decision)
+        self.assertEqual(v_nan.action, PolicyVerdictAction.STOP)
+        self.assertFalse(v_nan.passed)
+    
+        # NaN risk must NOT bypass soft risk gate; must trigger CONFIRM
+        nan_risk_decision = CompositeStepDecision(
+            target="#btn-ok",
+            target_confidence=0.9,
+            action="click",
+            action_confidence=0.9,
+            done_prob=0.0,
+            risk_prob=float("nan")
+        )
+        v_risk = gate.evaluate_policy(nan_risk_decision)
+>       self.assertEqual(v_risk.action, PolicyVerdictAction.CONFIRM)
+E       AssertionError: <PolicyVerdictAction.STOP: 'stop'> != <PolicyVerdictAction.CONFIRM: 'confirm'>
+
+python/gen_zero/tests/test_issue_8_compound_decision.py:392: AssertionError
+=========================== short test summary info ============================
+FAILED python/gen_zero/tests/test_issue_8_compound_decision.py::TestDualTrackPolicyGate::test_01_hard_rule_sensitive_action_requires_confirm
+FAILED python/gen_zero/tests/test_issue_8_compound_decision.py::TestDualTrackPolicyGate::test_02_soft_gate_high_risk_requires_confirm
+FAILED python/gen_zero/tests/test_issue_8_compound_decision.py::TestDualTrackPolicyGate::test_03_confidence_three_tiers
+FAILED python/gen_zero/tests/test_issue_8_compound_decision.py::TestDualTrackPolicyGate::test_04_domain_risk_profiles
+FAILED python/gen_zero/tests/test_issue_8_compound_decision.py::TestReviewerEdgeCases::test_01_nan_inf_sanitization_stops_corrupted_decisions
+========================= 5 failed, 13 passed in 6.46s =========================

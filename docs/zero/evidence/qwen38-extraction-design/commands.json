@@ -1,0 +1,116 @@
+[
+ {
+  "name": "identity",
+  "command": [
+   "git",
+   "rev-parse",
+   "HEAD"
+  ],
+  "exit_code": 0,
+  "tail": [
+   "fa6cddb656f49d9ae01bf417e476514962e03a34"
+  ]
+ },
+ {
+  "name": "callers",
+  "command": [
+   "rg",
+   "-n",
+   "universal_manifold_extractor|UniversalManifoldExtractionPipeline|load_codebook",
+   "python",
+   "crates",
+   "benchmarks",
+   "--glob",
+   "*.py",
+   "--glob",
+   "*.rs"
+  ],
+  "exit_code": 0,
+  "tail": [
+   "python/gen_zero/tests/test_universal_manifold_extractor.py:390:    pipeline = UniversalManifoldExtractionPipeline(dim=10, k=8)",
+   "python/gen_zero/tests/test_universal_manifold_extractor.py:397:    pipeline = UniversalManifoldExtractionPipeline(dim=10, k=4)",
+   "python/gen_zero/causal/universal_manifold_extractor.py:23:`UniversalManifoldExtractionPipeline` wires the four pillars into one",
+   "python/gen_zero/causal/universal_manifold_extractor.py:43:    \"UniversalManifoldExtractionPipeline\",",
+   "python/gen_zero/causal/universal_manifold_extractor.py:402:class UniversalManifoldExtractionPipeline:",
+   "python/gen_zero/causal/universal_manifold_extractor.py:491:    def load_codebook(path) -> Tuple[Dict[str, object], Dict[str, np.ndarray]]:"
+  ]
+ },
+ {
+  "name": "numerics",
+  "command": [
+   "python",
+   "-c",
+   "import sys,numpy as np\nsys.path.insert(0,\"python\")\nfrom gen_zero.causal.universal_manifold_extractor import StreamingCovarianceAccumulator\nx=1e8+np.arange(32,dtype=np.float64).reshape(16,2)\na=StreamingCovarianceAccumulator(2)\nfor b in np.array_split(x,4): a.update(b)\nexpected=(x-x.mean(0)).T@(x-x.mean(0))/len(x)\nprint(\"stream_cov=\",a.covariance().tolist())\nprint(\"centered_cov=\",expected.tolist())\nprint(\"max_abs_error=\",float(np.max(np.abs(a.covariance()-expected))))\nprint(\"state_bytes=\",a.memory_bytes())\nprint(\"diagnostic only; no Qwen inference or capability test\")"
+  ],
+  "exit_code": 0,
+  "tail": [
+   "stream_cov= [[86.0, 86.0], [86.0, 84.0]]",
+   "centered_cov= [[85.0, 85.0], [85.0, 85.0]]",
+   "max_abs_error= 1.0",
+   "state_bytes= 48",
+   "diagnostic only; no Qwen inference or capability test"
+  ]
+ },
+ {
+  "source_file": ".firecrawl/qwen38-official.md",
+  "sha256": "1b29816ed232d5b4205aa3223f68bb746ec611e35cd6c886f20585100f65d8bb"
+ },
+ {
+  "source_file": ".firecrawl/qwen38-github.md",
+  "sha256": "8b406b69c5d2524538cbbcb4aec32e6b961e435f21c50b593b6e91b88af5be47"
+ },
+ {
+  "source_file": ".firecrawl/qwen38-vllm.md",
+  "sha256": "953cd932a929a3e0de81a32296d0c1acb1027707d2f59b7396f5b3ce21dfd026"
+ },
+ {
+  "source_file": ".firecrawl/qwen38-sglang.md",
+  "sha256": "49a07a9b8a745a2a811b8359bd4180a7b84af2246cdf6ec36fbd55e46d4e5095"
+ },
+ {
+  "name": "flash-next-config",
+  "command": [
+   "curl",
+   "-sL",
+   "-o",
+   "flash-next-config.json",
+   "https://huggingface.co/Qwen/Qwen3.8-Flash-Next/resolve/main/config.json"
+  ],
+  "exit_code": 0,
+  "http_status": 200,
+  "sha256": "889658f2508e8c61d409b02e70e0d78d8d4452ec65aaafbe129805d213d2e74b",
+  "revision": "de4b8e4d43b917e7706784d8bb445c9af86a3540"
+ },
+ {
+  "name": "hooks-tiny",
+  "command": [
+   "/home/luy/.hermes-venv/bin/python",
+   "scripts/test_qwen4exp_extraction_hooks_tiny.py"
+  ],
+  "exit_code": 0,
+  "log": "hooks-tiny.log",
+  "tail": [
+   "  1024",
+   " ]",
+   "}",
+   "OK"
+  ],
+  "note": "tiny random-weight qwen4_exp on CPU; proves hook names, shapes, code paths; not representation quality"
+ },
+ {
+  "name": "covariance-cancellation",
+  "command": [
+   "python3",
+   "docs/zero/evidence/qwen38-extraction-design/covariance-cancellation.py"
+  ],
+  "exit_code": 0,
+  "log": "covariance-cancellation.log",
+  "tail": [
+   "offset=0 direct_err=6.661e-16 shifted_err=1.110e-15",
+   "offset=1000 direct_err=1.283e-09 shifted_err=6.661e-16",
+   "offset=100000 direct_err=1.409e-05 shifted_err=6.661e-16",
+   "offset=1e+08 direct_err=2.496e+01 shifted_err=2.784e-13",
+   "diagnostic only: synthetic gaussian data, no Qwen inference"
+  ]
+ }
+]

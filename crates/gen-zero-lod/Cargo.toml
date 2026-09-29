@@ -1,0 +1,18 @@
+[package]
+name = "gen-zero-lod"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Multi-scale level-of-detail graph with CSR snapshots, PPR, product-manifold geometry, and relation semirings."
+readme = "README.md"
+
+[dependencies]
+gen-zero-core = { workspace = true }
+arc-swap = { workspace = true }
+parking_lot = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }

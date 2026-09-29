@@ -1,0 +1,11 @@
+test_exact_subset_and_tie_expectation (test_deepswe_enhanced_prm.EnhancedPRMTests.test_exact_subset_and_tie_expectation) ... ok
+test_geometry_invariant_to_shared_rotation (test_deepswe_enhanced_prm.EnhancedPRMTests.test_geometry_invariant_to_shared_rotation) ... ok
+test_invalid_scores_fail_closed (test_deepswe_enhanced_prm.EnhancedPRMTests.test_invalid_scores_fail_closed) ... ok
+test_no_ranking_pairs_rejected (test_deepswe_enhanced_prm.EnhancedPRMTests.test_no_ranking_pairs_rejected) ... ok
+test_ranking_fit_uses_actual_outcomes (test_deepswe_enhanced_prm.EnhancedPRMTests.test_ranking_fit_uses_actual_outcomes) ... ok
+test_temporal_order_is_used (test_deepswe_enhanced_prm.EnhancedPRMTests.test_temporal_order_is_used) ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.010s
+
+OK

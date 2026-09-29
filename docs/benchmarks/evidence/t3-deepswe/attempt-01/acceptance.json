@@ -1,0 +1,42 @@
+{
+  "accepted": false,
+  "failures": [
+    "No nonempty standard Git patch collected",
+    "Collected patch does not match agent's finalized patch",
+    "Agent never finalized a validated repair",
+    "Pier trial contains an exception",
+    "f2p: 0/60 passed",
+    "Verifier did not award full reward"
+  ],
+  "trial_result": "jobs/t3-deepswe-r3-20260926T144805Z/tomlkit-toml-table-converters__uzsUHAJ/result.json",
+  "patch_bytes": 0,
+  "patch_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "pier_exit": 0,
+  "reward": {
+    "reward": 0,
+    "f2p_total": 60,
+    "f2p_passed": 0,
+    "p2p_total": 964,
+    "p2p_passed": 964,
+    "f2p": 0.0,
+    "p2p": 1.0,
+    "partial": 0.94140625
+  },
+  "verifier_exit": 0,
+  "container_starts": {
+    "tomlkit-toml-table-converters__uzsuhaj": "8655f679d1485228b5b7e9cc53fb521c2d531ea174ecc4ac2114c334b51b1434",
+    "tomlkit-toml-table-converters__uzsuhaj__verifier__trial": "24afb05e56bf6d275be4a27a1422fd02b56a46ef8e56e5fb63072eed6a742a5d"
+  },
+  "nonzero_sandbox_commands": [
+    {
+      "session": "tomlkit-toml-table-converters__uzsUHAJ",
+      "command": "test -d /logs/artifacts/model.patch",
+      "exit": 1
+    },
+    {
+      "session": "tomlkit-toml-table-converters__uzsUHAJ__verifier__trial",
+      "command": "chmod 777 /logs/agent /logs/verifier",
+      "exit": 1
+    }
+  ]
+}

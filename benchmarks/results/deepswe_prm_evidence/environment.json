@@ -1,0 +1,15 @@
+{
+  "python": "3.11.16",
+  "platform": "Linux-7.0.0-31-generic-x86_64-with-glibc2.39",
+  "packages": {
+    "torch": "2.14.0+cpu",
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "scikit-learn": "1.9.1",
+    "pyarrow": "25.0.1"
+  },
+  "git_head": "478699c079bf4a053b953bb83b7e7f310eae4922",
+  "threads": 4,
+  "device": "cpu",
+  "external_agents_used": false
+}

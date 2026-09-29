@@ -1,0 +1,37 @@
+{
+  "is_synthetic": true,
+  "notice": "Generated synthetic telemetry/rules workload; solver timings are measurements on this fixture and do not establish model or universal safety performance.",
+  "metadata": {
+    "latent_dim": 1024,
+    "num_eval_steps": 1000,
+    "num_rules_compiled": 8,
+    "num_propositions": 8,
+    "hard_timeout_ms": 2.0
+  },
+  "time": {
+    "avg_compilation_latency_ms": 3569.383,
+    "p99_compilation_latency_ms": 7500.163,
+    "target_compilation_ms": 2.0,
+    "passed_compilation_target": false,
+    "avg_cpsat_solve_latency_ms": 0.384,
+    "p99_cpsat_solve_latency_ms": 0.814,
+    "target_solve_ms": 1.5,
+    "passed_solve_target": true,
+    "dynamic_rule_injection_ms": 3216.231
+  },
+  "safety_and_blocking": {
+    "before_unconstrained_violations": 156,
+    "before_violation_rate_pct": 15.6,
+    "after_cpsat_violations": 0,
+    "after_violation_rate_pct": 0.0,
+    "hard_blocking_rate_pct": 100.0,
+    "target_blocking_rate_pct": 100.0,
+    "passed_hard_safety_target": true
+  },
+  "zero_training_adaptation": {
+    "neural_parameters_added": 0,
+    "retraining_epochs": 0,
+    "weight_drift_rmse": 0.0,
+    "immediate_hot_activation": true
+  }
+}

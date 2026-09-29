@@ -1,0 +1,38 @@
+[
+  {
+    "command": [
+      "git",
+      "rev-parse",
+      "HEAD"
+    ],
+    "cwd": "/workspace/pj/gen-zero-worktree/rm-r3-deepswe",
+    "return_code": 0,
+    "stdout": "478699c079bf4a053b953bb83b7e7f310eae4922\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "python3",
+      "-m",
+      "py_compile",
+      "benchmarks/gen_zero_deepswe_adapter.py",
+      "benchmarks/deepswe_audited_docker.py",
+      "benchmarks/verify_deepswe_evidence.py"
+    ],
+    "cwd": "/workspace/pj/gen-zero-worktree/rm-r3-deepswe",
+    "return_code": 0,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "bash",
+      "-n",
+      "benchmarks/run_deepswe_smoke.sh"
+    ],
+    "cwd": "/workspace/pj/gen-zero-worktree/rm-r3-deepswe",
+    "return_code": 0,
+    "stdout": "",
+    "stderr": ""
+  }
+]

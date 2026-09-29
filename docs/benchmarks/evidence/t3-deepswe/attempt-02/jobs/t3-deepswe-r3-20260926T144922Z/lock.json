@@ -1,0 +1,96 @@
+{
+    "schema_version": 1,
+    "created_at": "2026-09-26T14:49:32.120751Z",
+    "pier": {
+        "version": "0.3.1"
+    },
+    "invocation": [
+        "/home/user/.local/bin/pier",
+        "run",
+        "-p",
+        "/home/user/benchmarks/deep-swe/tasks/tomlkit-toml-table-converters",
+        "--agent-import-path",
+        "gen_zero_deepswe_adapter:GenZeroDeepSWEAdapter",
+        "--ak",
+        "proposer_url=https://ark.ap-southeast.bytepluses.com/api/coding/v1/messages",
+        "--ak",
+        "proposer_model=ark-code-latest",
+        "--ak",
+        "proposer_protocol=anthropic",
+        "--ak",
+        "proposer_key_env=ANTHROPIC_AUTH_TOKEN",
+        "--ak",
+        "validation_command=python -m pytest -q",
+        "--ak",
+        "max_steps=60",
+        "--environment-import-path",
+        "deepswe_audited_docker:AuditedDockerEnvironment",
+        "--ek",
+        "audit_dir=/home/user/benchmarks/t3-r3-live-02/audit",
+        "--env",
+        "docker",
+        "--n-concurrent",
+        "1",
+        "--n-attempts",
+        "1",
+        "--max-retries",
+        "0",
+        "--job-name",
+        "t3-deepswe-r3-20260926T144922Z",
+        "--jobs-dir",
+        "/home/user/benchmarks/t3-r3-live-02/jobs"
+    ],
+    "n_concurrent_trials": 1,
+    "retry": {
+        "max_retries": 0,
+        "exclude_exceptions": [
+            "VerifierOutputParseError",
+            "RewardFileEmptyError",
+            "AgentTimeoutError",
+            "RewardFileNotFoundError",
+            "VerifierTimeoutError"
+        ],
+        "wait_multiplier": 1.0,
+        "min_wait_sec": 1.0,
+        "max_wait_sec": 60.0
+    },
+    "trials": [
+        {
+            "task": {
+                "name": "tomlkit-toml-table-converters",
+                "type": "local",
+                "digest": "sha256:59840567a8555e7613e17321440a996723f9b40aa8b09a82a968afaae84be075",
+                "path": "/home/user/benchmarks/deep-swe/tasks/tomlkit-toml-table-converters"
+            },
+            "timeout_multiplier": 1.0,
+            "agent": {
+                "import_path": "gen_zero_deepswe_adapter:GenZeroDeepSWEAdapter",
+                "kwargs": {
+                    "proposer_url": "https://ark.ap-southeast.bytepluses.com/api/coding/v1/messages",
+                    "proposer_model": "ark-code-latest",
+                    "proposer_protocol": "anthropic",
+                    "proposer_key_env": "ANTHROPIC_AUTH_TOKEN",
+                    "validation_command": "python -m pytest -q",
+                    "max_steps": 60
+                },
+                "env": {}
+            },
+            "environment": {
+                "import_path": "deepswe_audited_docker:AuditedDockerEnvironment",
+                "force_build": false,
+                "delete": true,
+                "cpu_enforcement_policy": "auto",
+                "memory_enforcement_policy": "auto",
+                "suppress_override_warnings": false,
+                "env": {},
+                "kwargs": {
+                    "audit_dir": "/home/user/benchmarks/t3-r3-live-02/audit"
+                }
+            },
+            "verifier": {
+                "env": {},
+                "disable": false
+            }
+        }
+    ]
+}

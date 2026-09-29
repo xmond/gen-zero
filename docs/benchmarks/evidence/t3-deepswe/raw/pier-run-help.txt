@@ -1,0 +1,71 @@
+                                                                                                                                                                                    
+ Usage: pier run [OPTIONS]                                                                                                                                                          
+                                                                                                                                                                                    
+ Start a job.                                                                                                                                                                       
+                                                                                                                                                                                    
+╭─ Options ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --help          Show this message and exit.                                                                                                                                      │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Config ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --config  -c      <path>  A job configuration path in yaml or json format. Should implement the schema of pier.models.job.config:JobConfig. Allows for more granular control     │
+│                           over the job configuration.                                                                                                                            │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Job Settings ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --job-name                                                           <str>    Name of the job (default: timestamp)                                                               │
+│ --jobs-dir                              -o                           <path>   Directory to store job results (default: jobs)                                                     │
+│ --n-attempts                            -k                           <int>    Number of attempts per trial (default: 1)                                                          │
+│ --timeout-multiplier                                                 <float>  Multiplier for task timeouts (default: 1.0)                                                        │
+│ --agent-timeout-multiplier                                           <float>  Multiplier for agent execution timeout (overrides --timeout-multiplier)                            │
+│ --verifier-timeout-multiplier                                        <float>  Multiplier for verifier timeout (overrides --timeout-multiplier)                                   │
+│ --agent-setup-timeout-multiplier                                     <float>  Multiplier for agent setup timeout (overrides --timeout-multiplier)                                │
+│ --environment-build-timeout-multiplier                               <float>  Multiplier for environment build timeout (overrides --timeout-multiplier)                          │
+│ --quiet,--silent                        -q                                    Suppress individual trial progress displays                                                        │
+│ --debug                                                                       Enable debug logging                                                                               │
+│ --n-concurrent                          -n                           <int>    Number of concurrent trials to run (default: 4)                                                    │
+│ --max-retries                           -r                           <int>    Maximum number of retry attempts (default: 0)                                                      │
+│ --retry-include                                                      <str>    Exception types to retry on. If not specified, all exceptions except those in --retry-exclude are  │
+│                                                                               retried (can be used multiple times)                                                               │
+│ --retry-exclude                                                      <str>    Exception types to NOT retry on (can be used multiple times)                                       │
+│ --yes                                   -y                                    Auto-confirm when tasks declare environment variables that read from the host.                     │
+│ --env-file                                                           <path>   Path to a .env file to load into environment.                                                      │
+│ --artifact                                                           <str>    Environment path to download as an artifact after the trial (can be used multiple times)           │
+│ --ve,--verifier-env                                                  <str>    Environment variable to pass to the verifier in KEY=VALUE format. Can be used multiple times.      │
+│                                                                               Example: --ve OPENAI_BASE_URL=http://localhost:8000/v1                                             │
+│ --disable-verification                      --enable-verification             Disable task verification (skip running tests)                                                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Agent ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --agent              -a      <oracle|nop|claude-code|antigravity-sdk|codex|cursor-cli|gemini-cli|mini  Agent name (default: oracle)                                              │
+│                              -swe-agent|swe-agent|opencode>                                                                                                                      │
+│ --agent-import-path          <str>                                                                     Import path for custom agent                                              │
+│ --model              -m      <str>                                                                     Model name for the agent (can be used multiple times)                     │
+│ --ak,--agent-kwarg           <str>                                                                     Additional agent kwarg in the format 'key=value'. You can view available  │
+│                                                                                                        kwargs by looking at the agent's `__init__` method. Can be set multiple   │
+│                                                                                                        times to set multiple kwargs. Common kwargs include: version,             │
+│                                                                                                        prompt_template, etc.                                                     │
+│ --ae,--agent-env             <str>                                                                     Environment variable to pass to the agent in KEY=VALUE format. Can be     │
+│                                                                                                        used multiple times. Example: --ae AWS_REGION=us-east-1                   │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Environment ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --env                      -e                      <docker|modal|daytona>                 Environment type (default: docker)                                                     │
+│ --environment-import-path                          <str>                                  Import path for custom environment (module.path:ClassName).                            │
+│ --force-build                  --no-force-build                                           Whether to force rebuild the environment; local Docker builds use --no-cache when      │
+│                                                                                           enabled (default: --no-force-build)                                                    │
+│ --delete                       --no-delete                                                Whether to delete the environment after completion (default: --delete)                 │
+│ --cpus                                             <auto|limit|request|guarantee|ignore>  How to apply task CPU resources: auto, limit, request, guarantee, or ignore.           │
+│ --memory                                           <auto|limit|request|guarantee|ignore>  How to apply task memory resources: auto, limit, request, guarantee, or ignore.        │
+│ --override-cpus                                    <int>                                  Override the number of CPUs for the environment                                        │
+│ --override-memory-mb                               <int>                                  Override the memory (in MB) for the environment                                        │
+│ --override-storage-mb                              <int>                                  Override the storage (in MB) for the environment                                       │
+│ --override-gpus                                    <int>                                  Override the number of GPUs for the environment                                        │
+│ --mounts-json                                      <str>                                  JSON array of volume mounts for the environment container (Docker Compose service      │
+│                                                                                           volume format)                                                                         │
+│ --ek,--environment-kwarg                           <str>                                  Environment kwarg in key=value format (can be used multiple times)                     │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+╭─ Dataset ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
+│ --path               -p      <path>  Path to a local task or dataset directory                                                                                                   │
+│ --include-task-name  -i      <str>   Task name to include from dataset (supports glob patterns)                                                                                  │
+│ --exclude-task-name  -x      <str>   Task name to exclude from dataset (supports glob patterns)                                                                                  │
+│ --n-tasks            -l      <int>   Maximum number of tasks to run (applied after other filters)                                                                                │
+│ --sample-seed                <int>   Seed for deterministic random task sampling/order. Applied after include/exclude filters and before --n-tasks.                              │
+╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+

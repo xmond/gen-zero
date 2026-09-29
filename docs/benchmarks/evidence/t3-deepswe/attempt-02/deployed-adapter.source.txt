@@ -1,0 +1,370 @@
+"""Pier repair adapter with an explicit external JSON Proposer.
+
+The Proposer, not Gen-Zero's numeric world model, generates code. No oracle or
+held-out verifier files are exposed. The sandbox helper has no provider secrets.
+Configure proposer_url (full messages/chat-completions endpoint), proposer_model,
+proposer_protocol (anthropic/openai), proposer_key_env and validation_command.
+Only the disposable Pier repository is committed, for its base..HEAD collector.
+"""
+from __future__ import annotations
+
+import argparse
+import asyncio
+import base64
+import hashlib
+import json
+import os
+from pathlib import Path, PurePosixPath
+import shlex
+import subprocess
+import sys
+import urllib.error
+import urllib.request
+
+MAX_BYTES = 1_000_000
+
+
+def digest(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
+
+
+def write_json(path: Path, value) -> None:
+    path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
+
+
+def git(*args: str) -> str:
+    result = subprocess.run(["git", *args], capture_output=True, text=True)
+    if result.returncode:
+        raise RuntimeError(f"git {args!r}: exit {result.returncode}: {result.stderr}")
+    return result.stdout
+
+
+def source_path(name: str) -> Path:
+    p = PurePosixPath(name)
+    if not name or p.is_absolute() or any(x in ("..", ".git") or x.startswith(".") for x in p.parts):
+        raise ValueError(f"Forbidden repository path: {name!r}")
+    path = Path(name)
+    if path.resolve().is_relative_to(Path.cwd().resolve()) is False:
+        raise ValueError("Path escapes repository")
+    if any(x.is_symlink() for x in (path, *path.parents)):
+        raise ValueError("Symlink source access denied")
+    return path
+
+
+def sandbox_action(action: dict) -> dict:
+    """Small, real repository operations; no model or benchmark-specific rules."""
+    op = action["action"]
+    tracked = git("ls-files", "-z").split("\0")[:-1]
+    if op == "inventory":
+        status = git("status", "--porcelain=v1", "--untracked-files=all")
+        if status:
+            raise ValueError("Expected a clean, disposable task repository")
+        return {"head": git("rev-parse", "HEAD").strip(), "files": tracked}
+    if op == "search":
+        query = action["query"]
+        if not isinstance(query, str) or not query or len(query) > 200:
+            raise ValueError("Search requires 1..200 characters")
+        r = subprocess.run(["git", "grep", "-n", "-I", "-F", "-e", query, "--", "."],
+                           capture_output=True, text=True)
+        if r.returncode not in (0, 1):
+            raise RuntimeError(f"git grep exit {r.returncode}: {r.stderr}")
+        if len(r.stdout.encode()) > MAX_BYTES:
+            raise ValueError("Search output exceeds budget; narrow query")
+        return {"command": r.args, "return_code": r.returncode, "matches": r.stdout}
+    if op == "read":
+        name = action["path"]
+        path = source_path(name)
+        if name not in tracked:
+            raise ValueError("Only tracked repository sources may be read")
+        data = path.read_bytes()
+        if len(data) > MAX_BYTES:
+            raise ValueError("Source file exceeds byte budget")
+        lines = data.decode().splitlines()
+        start, end = action.get("start", 1), action.get("end", len(lines))
+        if type(start) is not int or type(end) is not int or not 1 <= start <= end <= max(1, len(lines)):
+            raise ValueError("Invalid line range")
+        return {"path": name, "sha256": digest(data), "total_lines": len(lines),
+                "source": "\n".join(f"{i}: {lines[i-1]}" for i in range(start, min(end, len(lines))+1))}
+    if op == "edit":
+        edits = action["files"]
+        if not isinstance(edits, list) or not 1 <= len(edits) <= 20:
+            raise ValueError("Expected 1..20 complete source file edits")
+        prepared = []
+        seen = set()
+        for edit in edits:
+            name = edit["path"]
+            path = source_path(name)
+            if name in seen:
+                raise ValueError("Duplicate edit path")
+            seen.add(name)
+            # Tests and repository tooling remain independent of proposed fixes.
+            if any(p.lower() in ("test", "tests", "testing", "__tests__", "node_modules") for p in path.parts) or path.name.startswith("test_") or path.name.endswith("_test.py"):
+                raise ValueError("Proposer may not edit tests")
+            if path.suffix not in (".py", ".rs", ".go", ".js", ".ts", ".tsx", ".jsx", ".c", ".h", ".cpp", ".java"):
+                raise ValueError("Only source code edits are supported")
+            current = path.read_bytes() if path.exists() else None
+            if current is not None and name not in tracked:
+                raise ValueError("Refusing to overwrite an untracked file")
+            expected = digest(current) if current is not None else None
+            if edit["old_sha256"] != expected:
+                raise ValueError(f"Stale source hash: {name}")
+            content = edit["content"].encode()
+            if not content or len(content) > MAX_BYTES or content == current:
+                raise ValueError("Empty, oversized or unchanged edit")
+            if path.suffix == ".py":
+                compile(content, name, "exec")
+            prepared.append((path, content))
+        # All paths, hashes and Python syntax are checked before any write.
+        for path, content in prepared:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(content)
+        git("add", "--", *(str(p) for p, _ in prepared))
+        patch = git("diff", "--cached", "--binary")
+        if not patch:
+            raise ValueError("Candidate patch is empty")
+        return {"changed": [str(p) for p, _ in prepared], "patch": patch}
+    if op == "finalize":
+        base = action["base"]
+        if git("rev-parse", "HEAD").strip() != base:
+            raise ValueError("Unexpected HEAD change before finalization")
+        git("diff", "--cached", "--check")
+        if not git("diff", "--cached", "--binary"):
+            raise ValueError("Refusing empty submission")
+        git("-c", "user.name=DeepSWE Proposer", "-c", "user.email=deepswe@localhost",
+            "-c", "core.hooksPath=/dev/null", "commit", "-m", "Apply Proposer repair")
+        patch = git("diff", "--binary", base, "HEAD")
+        if not patch or git("status", "--porcelain=v1", "--untracked-files=all"):
+            raise ValueError("Empty patch or dirty finalized repository")
+        output = Path("/logs/artifacts/model.patch")
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(patch)
+        return {"head": git("rev-parse", "HEAD").strip(), "patch": patch,
+                "patch_sha256": digest(patch.encode())}
+    raise ValueError(f"Unknown sandbox operation: {op}")
+
+
+SYSTEM = """You are a code repair Proposer. Reason from the task and real repository
+observations; do not invent successful execution or use benchmark solutions.
+Return exactly one JSON object, without markdown. First respond with:
+{"action":"analyze","problem":"precise required behavior","targets":["function_name"]}.
+Targets MUST be function or class identifiers copied verbatim from the task
+instruction, NOT invented file paths. Use search/read later to locate files.
+Then explore using {"action":"search","query":"literal"} or
+{"action":"read","path":"relative/source.py","start":1,"end":100} (ranges optional).
+Read implementation and relevant existing tests before editing. Search is literal
+indexing, not reasoning. Implement general semantics, never task-name dispatch,
+fixed answers, stubs, or test-specific hacks. No shell commands are available.
+To edit, return {"action":"edit","reason":"explain algorithm and risks","files":[
+{"path":"relative/source.py","old_sha256":"hash from read, or null for NEW file",
+"content":"complete replacement file, not a diff"}]}.
+Existing tests/configuration cannot be edited. New source files are allowed.
+After edits the configured real regression command runs automatically. Repair
+failures using its real output. Finish only after nonempty edits and successful
+validation: {"action":"finish","summary":"behavior implemented; limitations"}.
+A passing regression suite does not prove new requirements; the separate,
+hidden verifier grades those later. Do not claim to have passed hidden tests.
+"""
+
+
+class Proposer:
+    def __init__(self, url: str, model: str, protocol: str, key_env: str):
+        if not url.startswith("https://") or protocol not in ("anthropic", "openai") or not model:
+            raise ValueError("Explicit HTTPS Proposer URL, model and supported protocol required")
+        self.url, self.model, self.protocol = url, model, protocol
+        self.key = os.environ.get(key_env)
+        if not self.key:
+            raise ValueError(f"Proposer credential environment variable {key_env} is unset")
+
+    def generate(self, messages: list[dict], output: Path) -> dict:
+        headers = {"Content-Type": "application/json"}
+        payload = {"model": self.model, "messages": messages, "max_tokens": 16000}
+        if self.protocol == "anthropic":
+            headers.update({"x-api-key": self.key, "anthropic-version": "2023-06-01"})
+            payload["system"] = SYSTEM
+        else:
+            headers["Authorization"] = "Bearer " + self.key
+            payload["messages"] = [{"role": "system", "content": SYSTEM}, *messages]
+        write_json(output.with_suffix(".request.json"), payload)
+        req = urllib.request.Request(self.url, data=json.dumps(payload).encode(), headers=headers)
+        try:
+            with urllib.request.urlopen(req, timeout=240) as response:
+                raw = response.read(4 * MAX_BYTES + 1)
+                write_json(output.with_suffix(".http.json"), {"status": response.status})
+        except urllib.error.HTTPError as exc:
+            write_json(output.with_suffix(".http.json"), {"status": exc.code})
+            raise RuntimeError(f"Proposer HTTP {exc.code}; no fallback") from None
+        if len(raw) > 4 * MAX_BYTES:
+            raise ValueError("Proposer response exceeds budget")
+        output.with_suffix(".response.json").write_bytes(raw)
+        data = json.loads(raw)
+        if self.protocol == "anthropic":
+            if data.get("stop_reason") != "end_turn":
+                raise ValueError(f"Proposer response incomplete: {data.get('stop_reason')}")
+            answer = "".join(b["text"] for b in data["content"] if b["type"] == "text")
+        else:
+            choice = data["choices"][0]
+            if choice["finish_reason"] != "stop":
+                raise ValueError("Proposer response incomplete")
+            answer = choice["message"]["content"]
+        action = json.loads(answer)
+        if not isinstance(action, dict) or not isinstance(action.get("action"), str):
+            raise ValueError("Proposer did not return a structured action")
+        return action
+
+
+class ActionRejected(RuntimeError):
+    """An observed sandbox rejection which can be corrected in a later turn."""
+
+
+# Run the sandbox worker without importing Pier or providing any credentials.
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--sandbox-action", required=True)
+    args = parser.parse_args()
+    try:
+        value = sandbox_action(json.loads(base64.b64decode(args.sandbox_action)))
+        print(json.dumps(value, ensure_ascii=False))
+    except Exception as exc:
+        print(f"{type(exc).__name__}: {exc}", file=sys.stderr)
+        sys.exit(1)
+    sys.exit(0)
+
+from pier.agents.base import BaseAgent
+from pier.agents.installed.base import NonZeroAgentExitCodeError
+
+
+class GenZeroDeepSWEAdapter(BaseAgent):
+    def __init__(self, *args, proposer_url: str, proposer_model: str,
+                 proposer_protocol: str, proposer_key_env: str,
+                 validation_command: str, repo_dir: str = "/app",
+                 max_steps: int = 40, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.model_name is None:
+            self.model_name = proposer_model
+            self._init_model_info()
+        if not repo_dir.startswith("/") or not validation_command.strip():
+            raise ValueError("Absolute sandbox repository and regression command required")
+        self.repo_dir = repo_dir
+        self.validation_command = validation_command
+        self.max_steps = int(max_steps)
+        if not 1 <= self.max_steps <= 100:
+            raise ValueError("max_steps must be 1..100")
+        self.provider_config = (proposer_url, proposer_model, proposer_protocol, proposer_key_env)
+        self.counter = 0
+        self.helper = "/tmp/gen-zero-deepswe-helper.py"
+        self.instruction_path = "/tmp/gen-zero-deepswe-instruction.md"
+
+    @staticmethod
+    def name():
+        return "gen-zero-deepswe"
+
+    def version(self):
+        return "0.2.0-external-proposer"
+
+    async def execute(self, environment, label, command, timeout=60, accepted=(0,)):
+        self.counter += 1
+        result = await environment.exec(command, cwd=self.repo_dir, timeout_sec=timeout)
+        write_json(self.logs_dir / f"exec-{self.counter:03d}-{label}.json",
+                   {"command": command, "cwd": self.repo_dir, **result.model_dump()})
+        if result.return_code not in accepted:
+            raise RuntimeError(f"{label} exited {result.return_code}; see exec-{self.counter:03d}-{label}.json")
+        return result
+
+    async def action(self, environment, action):
+        encoded = base64.b64encode(json.dumps(action).encode()).decode()
+        result = await self.execute(environment, action["action"],
+                                    f"python3 {self.helper} --sandbox-action {shlex.quote(encoded)}",
+                                    accepted=(0, 1))
+        if result.return_code:
+            raise ActionRejected(result.stderr)
+        return json.loads(result.stdout)
+
+    async def setup(self, environment):
+        self.logs_dir.mkdir(parents=True, exist_ok=True)
+        write_json(self.logs_dir / "adapter-identity.json", {
+            "sha256": digest(Path(__file__).read_bytes()), "version": self.version(),
+            "code_generator": "external-proposer", "gen_zero_world_model_used": False})
+        await environment.upload_file(Path(__file__).resolve(), self.helper)
+        result = await self.execute(environment, "root", "git rev-parse --show-toplevel")
+        if result.stdout.strip() != self.repo_dir:
+            raise ValueError("Sandbox repository root mismatch")
+        self.inventory = await self.action(environment, {"action": "inventory"})
+        write_json(self.logs_dir / "inventory.json", self.inventory)
+
+    async def run(self, instruction, environment, context):
+        context.metadata = {"status": "running", "code_generator": "external-proposer"}
+        try:
+            # Pier passes instruction.md contents to run(); stage and read the
+            # same bytes in the sandbox so provenance is explicit and verifiable.
+            local_instruction = self.logs_dir / "instruction.md"
+            local_instruction.write_text(instruction)
+            await environment.upload_file(local_instruction, self.instruction_path)
+            actual = await self.execute(environment, "instruction", "cat " + self.instruction_path)
+            if actual.stdout != instruction:
+                raise ValueError("Sandbox instruction differs from Pier input")
+            baseline = await self.execute(environment, "baseline", self.validation_command,
+                                          timeout=1200)
+            write_json(self.logs_dir / "baseline.json", baseline.model_dump())
+            proposer = Proposer(*self.provider_config)
+            messages = [{"role": "user", "content": json.dumps({
+                "instruction": actual.stdout, "repository": self.inventory,
+                "regression_command": self.validation_command})}]
+            analyzed, edited, validated = False, False, False
+            for step in range(1, self.max_steps + 1):
+                if len(json.dumps(messages).encode()) > 750_000:
+                    raise ValueError("Context budget exhausted; no silent truncation")
+                action = await asyncio.to_thread(proposer.generate, messages,
+                                                self.logs_dir / f"proposer-{step:03d}")
+                context.n_agent_steps = step
+                messages.append({"role": "assistant", "content": json.dumps(action)})
+                op = action["action"]
+                if not analyzed:
+                    if op != "analyze" or not isinstance(action.get("problem"), str) or not action["problem"].strip():
+                        raise ValueError("First Proposer action must explain the problem")
+                    targets = action.get("targets")
+                    if not isinstance(targets, list) or not targets or any(not isinstance(t, str) or not t or t not in instruction for t in targets):
+                        rejection = {"rejected": "Target functions must be identifiers copied verbatim from instruction text; file paths are not target functions"}
+                        write_json(self.logs_dir / f"rejection-{step:03d}.json", rejection)
+                        self.logger.warning("Proposer action rejected: %s", rejection)
+                        messages.append({"role": "user", "content": json.dumps(rejection)})
+                        continue
+                    write_json(self.logs_dir / "task-analysis.json", action)
+                    observation = {"target_locations": [await self.action(environment, {"action": "search", "query": t}) for t in targets]}
+                    analyzed = True
+                elif op in ("search", "read", "edit"):
+                    try:
+                        observation = await self.action(environment, action)
+                    except ActionRejected as exc:
+                        rejection = {"rejected": str(exc), "instruction": "Correct the invalid action; do not bypass the check."}
+                        write_json(self.logs_dir / f"rejection-{step:03d}.json", rejection)
+                        self.logger.warning("Proposer action rejected: %s", rejection)
+                        messages.append({"role": "user", "content": json.dumps(rejection)})
+                        if op == "edit":
+                            validated = False
+                        continue
+                    if op == "edit":
+                        edited, validated = True, False
+                        result = await self.execute(environment, "regression", self.validation_command,
+                                                    timeout=1200, accepted=tuple(range(256)))
+                        observation["regression"] = result.model_dump()
+                        validated = result.return_code == 0
+                        write_json(self.logs_dir / f"validation-{step:03d}.json", result.model_dump())
+                        (self.logs_dir / "candidate.patch").write_text(observation["patch"])
+                elif op == "finish":
+                    if not edited or not validated:
+                        raise ValueError("Cannot finish without nonempty changes and passing regression")
+                    final = await self.action(environment, {"action": "finalize", "base": self.inventory["head"]})
+                    (self.logs_dir / "model.patch").write_text(final.pop("patch"))
+                    context.metadata = {"status": "patch_generated", "code_generator": "external-proposer",
+                                        "regression_passed": True, "hidden_verifier_passed": None, **final}
+                    write_json(self.logs_dir / "completion.json", context.metadata)
+                    return
+                else:
+                    raise ValueError(f"Unsupported Proposer action: {op}")
+                messages.append({"role": "user", "content": json.dumps(observation)})
+            raise RuntimeError("Proposer step budget exhausted")
+        except Exception as exc:
+            context.metadata = {"status": "failed", "error": f"{type(exc).__name__}: {exc}"}
+            write_json(self.logs_dir / "failure.json", context.metadata)
+            self.logger.error("DeepSWE fail-closed: %s", context.metadata["error"])
+            raise NonZeroAgentExitCodeError(context.metadata["error"]) from exc

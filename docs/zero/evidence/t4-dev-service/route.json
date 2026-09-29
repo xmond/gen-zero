@@ -1,0 +1,1 @@
+{"action": "route", "intent": "Read the README file.", "tools": [{"name": "read_file", "description": "Read a text file"}, {"name": "delete_file", "description": "Delete a file"}], "top_k": 1}

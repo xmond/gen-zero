@@ -1,0 +1,188 @@
+{
+  "is_synthetic": true,
+  "notice": "Random-initialized latent core and random inputs; timing/analytic profile only, with no trained-model or task evidence.",
+  "suite": "profile_latent_latency",
+  "device": "cpu",
+  "torch_version": "2.14.0+cpu",
+  "dtype": "float32",
+  "dims": 4096,
+  "hidden_dim": 2048,
+  "batch_size": 1,
+  "seed": 0,
+  "warmup": 2,
+  "iters": 5,
+  "timestamp": "2026-09-21T06:56:39.530662+00:00",
+  "error": null,
+  "rows": [
+    {
+      "k": 1,
+      "steps_taken_mean": 1.0,
+      "params": 12591105,
+      "flops_per_forward": 25194497,
+      "flops_per_backward": 50388994,
+      "flops_per_step": 151191558,
+      "flops_total_per_k": 151191558,
+      "latency_total": {
+        "mean_ms": 51.210574246943,
+        "p50_ms": 43.01839787513018,
+        "p95_ms": 81.78916433826087,
+        "min_ms": 38.76866679638624,
+        "max_ms": 91.16439335048199,
+        "iters": 5
+      },
+      "per_step_latency": {
+        "mean_ms": 43.159172777086496,
+        "p50_ms": 42.530417907983065,
+        "p95_ms": 46.52591962367296,
+        "min_ms": 39.97631790116429,
+        "max_ms": 47.22543200477958,
+        "iters": 5
+      },
+      "per_step_latencies_last_iter": [
+        43.72787
+      ],
+      "estimated_bytes_per_step": 302399488,
+      "bytes_model": {
+        "estimated_bytes_per_step": 302399488,
+        "bytes_per_gradient_eval": 151134208,
+        "elementwise_bytes": 131072,
+        "elem_size": 4,
+        "assumptions": [
+          "weights counted at 3x footprint (fwd read, bwd read, bwd grad write)",
+          "layer activations counted at ~3x output size (write + 2 reads)",
+          "backward traffic folded into the 3x factors (approx 2x forward)",
+          "elementwise q/p/grad_q/kinetic traffic counted explicitly"
+        ]
+      },
+      "effective_bandwidth_GBps": 7.006609917244429,
+      "peak_bandwidth_GBps": 51.2,
+      "roofline_ratio": 0.13684784994618024,
+      "latency_total_derived_per_step_ms": 51.210574246943
+    },
+    {
+      "k": 2,
+      "steps_taken_mean": 2.0,
+      "params": 12591105,
+      "flops_per_forward": 25194497,
+      "flops_per_backward": 50388994,
+      "flops_per_step": 151191558,
+      "flops_total_per_k": 302383116,
+      "latency_total": {
+        "mean_ms": 104.80489423498511,
+        "p50_ms": 86.81176602840424,
+        "p95_ms": 144.70783537253737,
+        "min_ms": 83.60409317538142,
+        "max_ms": 151.22251771390438,
+        "iters": 5
+      },
+      "per_step_latency": {
+        "mean_ms": 42.17680147849023,
+        "p50_ms": 42.279278161004186,
+        "p95_ms": 43.81555134896189,
+        "min_ms": 40.101613849401474,
+        "max_ms": 43.83566603064537,
+        "iters": 10
+      },
+      "per_step_latencies_last_iter": [
+        42.825706,
+        43.835666
+      ],
+      "estimated_bytes_per_step": 302399488,
+      "bytes_model": {
+        "estimated_bytes_per_step": 302399488,
+        "bytes_per_gradient_eval": 151134208,
+        "elementwise_bytes": 131072,
+        "elem_size": 4,
+        "assumptions": [
+          "weights counted at 3x footprint (fwd read, bwd read, bwd grad write)",
+          "layer activations counted at ~3x output size (write + 2 reads)",
+          "backward traffic folded into the 3x factors (approx 2x forward)",
+          "elementwise q/p/grad_q/kinetic traffic counted explicitly"
+        ]
+      },
+      "effective_bandwidth_GBps": 7.169806087695409,
+      "peak_bandwidth_GBps": 51.2,
+      "roofline_ratio": 0.14003527515030095,
+      "latency_total_derived_per_step_ms": 52.40244711749256
+    },
+    {
+      "k": 4,
+      "steps_taken_mean": 4.0,
+      "params": 12591105,
+      "flops_per_forward": 25194497,
+      "flops_per_backward": 50388994,
+      "flops_per_step": 151191558,
+      "flops_total_per_k": 604766232,
+      "latency_total": {
+        "mean_ms": 198.98370783776045,
+        "p50_ms": 199.64290084317327,
+        "p95_ms": 241.72813650220633,
+        "min_ms": 165.36705801263452,
+        "max_ms": 250.88477414101362,
+        "iters": 5
+      },
+      "per_step_latency": {
+        "mean_ms": 48.62588618416339,
+        "p50_ms": 44.32559642009437,
+        "p95_ms": 74.35083829332144,
+        "min_ms": 39.19625002890825,
+        "max_ms": 88.0717160180211,
+        "iters": 20
+      },
+      "per_step_latencies_last_iter": [
+        42.817106,
+        61.260276,
+        39.19625,
+        42.9574
+      ],
+      "estimated_bytes_per_step": 302399488,
+      "bytes_model": {
+        "estimated_bytes_per_step": 302399488,
+        "bytes_per_gradient_eval": 151134208,
+        "elementwise_bytes": 131072,
+        "elem_size": 4,
+        "assumptions": [
+          "weights counted at 3x footprint (fwd read, bwd read, bwd grad write)",
+          "layer activations counted at ~3x output size (write + 2 reads)",
+          "backward traffic folded into the 3x factors (approx 2x forward)",
+          "elementwise q/p/grad_q/kinetic traffic counted explicitly"
+        ]
+      },
+      "effective_bandwidth_GBps": 6.218899268071052,
+      "peak_bandwidth_GBps": 51.2,
+      "roofline_ratio": 0.12146287632951273,
+      "latency_total_derived_per_step_ms": 49.74592695944011
+    }
+  ],
+  "peak_bandwidth": {
+    "peak_bandwidth_GBps": 51.2,
+    "source": "stated_constant",
+    "assumption": "CPU dual-channel DDR4-3200 assumed (51.2 GB/s)"
+  },
+  "core_params_measured": 12591105,
+  "core_params_formula": {
+    "total": 12591105,
+    "formula": "dim*hidden + hidden + hidden^2 + hidden + hidden + 1 + dim/2",
+    "terms": {
+      "layer1_w_b": 8390656,
+      "layer2_w_b": 4196352,
+      "layer3_w_b": 2049,
+      "inv_mass": 2048
+    }
+  },
+  "flops_assumptions": [
+    "GEMM counted at 2*B*M*N FLOPs; bias at 1 FLOP/element",
+    "SiLU counted at 4 FLOPs/element (sigmoid ~ exp + div, then multiply)",
+    "backward pass counted at 2x forward FLOPs (stated approximation)",
+    "one latent step = TWO gradient evaluations (half-kick, drift, half-kick)",
+    "elementwise q/p/grad_q/kinetic ops counted at 12 FLOPs per q element",
+    "early-break gate may terminate before K steps; FLOPs are the no-break bound",
+    "per-step timings are taken with a CUDA sync at every step boundary and therefore include sync overhead absent from the clean K-total pass"
+  ],
+  "bytes_assumptions": [
+    "weights counted at 3x footprint (fwd read, bwd read, bwd grad write)",
+    "layer activations counted at ~3x output size (write + 2 reads)",
+    "backward traffic folded into the 3x factors (approx 2x forward)",
+    "elementwise q/p/grad_q/kinetic traffic counted explicitly"
+  ]
+}

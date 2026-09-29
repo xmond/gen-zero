@@ -1,0 +1,32 @@
+{
+  "is_synthetic": true,
+  "notice": "Seeded synthetic mechanics smoke test with random/untrained models; not evidence of a learned model or real-world dynamics.",
+  "benchmark": "Issue #86 Hamiltonian World Model & Symplectic Integrator vs MLP Baseline",
+  "timestamp": "2026-09-26 09:42:13",
+  "mlp_baseline": {
+    "initial_energy": 9.370473,
+    "final_energy": 10.839156,
+    "max_energy_drift_pct": 15.6735,
+    "max_norm": 4.656,
+    "is_diverged": false
+  },
+  "hamiltonian_world_model": {
+    "horizon": 100,
+    "initial_energy": 7.525752,
+    "final_energy": 7.525776,
+    "max_energy_drift_pct": 0.0045,
+    "final_energy_drift_pct": 0.0003,
+    "max_state_norm": 4.502,
+    "divergence_rate_pct": 0.0,
+    "step_latency_ms": 0.1349,
+    "p99_latency_ms": 0.2427,
+    "throughput_transitions_per_sec": 7412.4
+  },
+  "acceptance_criteria": {
+    "energy_drift_le_1_5pct": true,
+    "divergence_rate_is_0pct": true,
+    "step_latency_le_0_40ms": true,
+    "energy_drift_gain_vs_mlp": true
+  },
+  "overall_success": true
+}

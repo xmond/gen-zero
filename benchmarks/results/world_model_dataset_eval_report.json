@@ -1,0 +1,434 @@
+{
+  "is_synthetic": true,
+  "notice": "Trajectory data comes from seeded generated deadlock-torus layouts and random/heuristic policies; this report covers a synthetic environment only.",
+  "schema": "gen_zero.world_model_dataset_eval.v2",
+  "model_sha256": "0e748c33e4cbe79a5538cf56a32ba1fd00dcdfd8bfeafdcd1f0eec365359bd18",
+  "data_sha256": "a7bd2f77952b63adac1fee399f6d1ab4a6bfaf35db293a6dc3afb21637057804",
+  "num_samples": 8146,
+  "split": {
+    "split_mode": "grouped_by_episode",
+    "method": "TransitionDataset.split_indices: permute unique episode ids, first round(E*val_fraction) episodes to val; verified against the training report",
+    "seed": 0,
+    "val_fraction": 0.2,
+    "train_count": 6454,
+    "val_count": 1692,
+    "train_episodes": 1296,
+    "val_episodes": 324,
+    "shared_episodes": 0
+  },
+  "reward_positive_means": "safe or goal; 0 means dead or doomed",
+  "done_rule": "reward probability below checkpoint threshold",
+  "constant_reward_probability": 0.8634955286979675,
+  "results": {
+    "train": {
+      "n": 6454,
+      "model": {
+        "state": {
+          "mse": 0.01263226382325122,
+          "cosine_similarity": 0.9775676107163401
+        },
+        "reward": {
+          "bce": 0.0008162607404598739,
+          "accuracy": 0.9998450573287884,
+          "precision": 0.9998205956225332,
+          "recall": 1.0,
+          "f1": 0.999910289764062,
+          "roc_auc": 0.9999997963262552,
+          "confusion_matrix": [
+            [
+              880,
+              1
+            ],
+            [
+              0,
+              5573
+            ]
+          ]
+        }
+      },
+      "identity_state_baseline": {
+        "mse": 0.20054314720791383,
+        "cosine_similarity": 0.660258955667529
+      },
+      "constant_state_baseline": {
+        "mse": 0.16300438475815254,
+        "cosine_similarity": 0.6638965455373345
+      },
+      "constant_reward_baseline": {
+        "bce": 0.398567027155634,
+        "accuracy": 0.8634955066625348,
+        "precision": 0.8634955066625348,
+        "recall": 1.0,
+        "f1": 0.9267481499958427,
+        "roc_auc": 0.5,
+        "confusion_matrix": [
+          [
+            0,
+            881
+          ],
+          [
+            0,
+            5573
+          ]
+        ]
+      },
+      "cpu_latency": {
+        "step_samples": 200,
+        "step_us_mean": 774.9538950000001,
+        "step_us_p50": 752.272,
+        "step_us_p90": 914.525,
+        "step_us_p99": 1022.4869599999989,
+        "batch_samples": 6454,
+        "batch_size": 256,
+        "batch_samples_per_sec": 122770.59094870774
+      }
+    },
+    "val": {
+      "n": 1692,
+      "model": {
+        "state": {
+          "mse": 0.01521715322125809,
+          "cosine_similarity": 0.9728323057365131
+        },
+        "reward": {
+          "bce": 0.010588326084904629,
+          "accuracy": 0.9970449172576832,
+          "precision": 0.9979647218453188,
+          "recall": 0.9986422267481331,
+          "f1": 0.99830335934849,
+          "roc_auc": 0.9999318013435134,
+          "confusion_matrix": [
+            [
+              216,
+              3
+            ],
+            [
+              2,
+              1471
+            ]
+          ]
+        }
+      },
+      "identity_state_baseline": {
+        "mse": 0.19540849328702156,
+        "cosine_similarity": 0.6686638134297591
+      },
+      "constant_state_baseline": {
+        "mse": 0.1622349156846133,
+        "cosine_similarity": 0.6653473843565503
+      },
+      "constant_reward_baseline": {
+        "bce": 0.3855220354920134,
+        "accuracy": 0.8705673758865248,
+        "precision": 0.8705673758865248,
+        "recall": 1.0,
+        "f1": 0.9308056872037914,
+        "roc_auc": 0.5,
+        "confusion_matrix": [
+          [
+            0,
+            219
+          ],
+          [
+            0,
+            1473
+          ]
+        ]
+      },
+      "cpu_latency": {
+        "step_samples": 200,
+        "step_us_mean": 737.165845,
+        "step_us_p50": 717.823,
+        "step_us_p90": 864.997,
+        "step_us_p99": 1059.4119999999998,
+        "batch_samples": 1692,
+        "batch_size": 256,
+        "batch_samples_per_sec": 136037.7399867652
+      }
+    }
+  },
+  "rollout_definitions": {
+    "n": "episodes with at least k transitions",
+    "reach_rate": "n / episodes in the split",
+    "mse": "mean over episodes of MSE(z_hat_k, s'_k); z_hat_k is the k-step autoregressive state, so this is accumulated drift",
+    "cumulative_mean_mse": "mean of all per-episode MSE values at steps 1..k",
+    "identity_baseline_mse": "MSE of predicting the episode's first state s_0 at every step",
+    "cosine_similarity": "mean cosine(z_hat_k, s'_k)",
+    "true_survival_rate": "share of the n episodes whose recorded reward is 1 at every step 1..k",
+    "predicted_survival_rate": "share of the n episodes where the model's done flag stayed false at every step 1..k",
+    "survival_agreement": "share of the n episodes where true and predicted survival at step k agree",
+    "actions": "recorded actions (open loop); rollout continues after a predicted done"
+  },
+  "val_episodes_rollout_drift": {
+    "episodes": 324,
+    "horizon": 10,
+    "steps": [
+      {
+        "step": 1,
+        "n": 324,
+        "reach_rate": 1.0,
+        "mse": 0.00905211805945639,
+        "mse_std": 0.006876313018338531,
+        "cumulative_mean_mse": 0.00905211805945639,
+        "identity_baseline_mse": 0.22526428133742915,
+        "cosine_similarity": 0.9846968904519722,
+        "true_survival_rate": 0.7191358024691358,
+        "predicted_survival_rate": 0.7222222222222222,
+        "survival_agreement": 0.9969135802469136
+      },
+      {
+        "step": 2,
+        "n": 233,
+        "reach_rate": 0.7191358024691358,
+        "mse": 0.02392424820422624,
+        "mse_std": 0.015050989980079895,
+        "cumulative_mean_mse": 0.015273314331864607,
+        "identity_baseline_mse": 0.2578641180745104,
+        "cosine_similarity": 0.9583762497645298,
+        "true_survival_rate": 0.7939914163090128,
+        "predicted_survival_rate": 0.7939914163090128,
+        "survival_agreement": 1.0
+      },
+      {
+        "step": 3,
+        "n": 185,
+        "reach_rate": 0.5709876543209876,
+        "mse": 0.03709927315711099,
+        "mse_std": 0.020068713010760717,
+        "cumulative_mean_mse": 0.020715096518752182,
+        "identity_baseline_mse": 0.25906555255812186,
+        "cosine_similarity": 0.9336394774833123,
+        "true_survival_rate": 0.8810810810810811,
+        "predicted_survival_rate": 0.8864864864864865,
+        "survival_agreement": 0.9945945945945946
+      },
+      {
+        "step": 4,
+        "n": 159,
+        "reach_rate": 0.49074074074074076,
+        "mse": 0.052135894694582616,
+        "mse_std": 0.02345520953471776,
+        "cumulative_mean_mse": 0.026259943255663436,
+        "identity_baseline_mse": 0.2915511289594058,
+        "cosine_similarity": 0.9059577467228137,
+        "true_survival_rate": 0.9245283018867925,
+        "predicted_survival_rate": 0.9182389937106918,
+        "survival_agreement": 0.9937106918238994
+      },
+      {
+        "step": 5,
+        "n": 134,
+        "reach_rate": 0.41358024691358025,
+        "mse": 0.07229367910738854,
+        "mse_std": 0.029406703212565274,
+        "cumulative_mean_mse": 0.03221986654467905,
+        "identity_baseline_mse": 0.3111932160687185,
+        "cosine_similarity": 0.8725731607979613,
+        "true_survival_rate": 0.9477611940298507,
+        "predicted_survival_rate": 0.8955223880597015,
+        "survival_agreement": 0.9029850746268657
+      },
+      {
+        "step": 6,
+        "n": 112,
+        "reach_rate": 0.345679012345679,
+        "mse": 0.0910706403280701,
+        "mse_std": 0.032675170184303784,
+        "cumulative_mean_mse": 0.03796641115125254,
+        "identity_baseline_mse": 0.3162336974737544,
+        "cosine_similarity": 0.8386151028368461,
+        "true_survival_rate": 0.9553571428571429,
+        "predicted_survival_rate": 0.8392857142857143,
+        "survival_agreement": 0.8482142857142857
+      },
+      {
+        "step": 7,
+        "n": 94,
+        "reach_rate": 0.29012345679012347,
+        "mse": 0.10899157796318648,
+        "mse_std": 0.04249051028590138,
+        "cumulative_mean_mse": 0.0433462384520759,
+        "identity_baseline_mse": 0.3322469438791569,
+        "cosine_similarity": 0.8143090503689504,
+        "true_survival_rate": 0.9574468085106383,
+        "predicted_survival_rate": 0.7127659574468085,
+        "survival_agreement": 0.7340425531914894
+      },
+      {
+        "step": 8,
+        "n": 71,
+        "reach_rate": 0.2191358024691358,
+        "mse": 0.13744267961812784,
+        "mse_std": 0.05481375955359304,
+        "cumulative_mean_mse": 0.04843834769200706,
+        "identity_baseline_mse": 0.3393905333300982,
+        "cosine_similarity": 0.7664980048019779,
+        "true_survival_rate": 0.9295774647887324,
+        "predicted_survival_rate": 0.6901408450704225,
+        "survival_agreement": 0.7605633802816901
+      },
+      {
+        "step": 9,
+        "n": 62,
+        "reach_rate": 0.19135802469135801,
+        "mse": 0.16490686709039187,
+        "mse_std": 0.08244250330859204,
+        "cumulative_mean_mse": 0.0536938412893141,
+        "identity_baseline_mse": 0.33804269808862847,
+        "cosine_similarity": 0.7380914861346125,
+        "true_survival_rate": 0.8548387096774194,
+        "predicted_survival_rate": 0.6935483870967742,
+        "survival_agreement": 0.6451612903225806
+      },
+      {
+        "step": 10,
+        "n": 39,
+        "reach_rate": 0.12037037037037036,
+        "mse": 0.16989292304189446,
+        "mse_std": 0.09960721614090841,
+        "cumulative_mean_mse": 0.056901034628557286,
+        "identity_baseline_mse": 0.30995124170752725,
+        "cosine_similarity": 0.7235202884183657,
+        "true_survival_rate": 1.0,
+        "predicted_survival_rate": 0.6153846153846154,
+        "survival_agreement": 0.6153846153846154
+      }
+    ]
+  },
+  "train_episodes_rollout_drift": {
+    "episodes": 1296,
+    "horizon": 10,
+    "steps": [
+      {
+        "step": 1,
+        "n": 1296,
+        "reach_rate": 1.0,
+        "mse": 0.007630490781928036,
+        "mse_std": 0.005265822888739792,
+        "cumulative_mean_mse": 0.007630490781928036,
+        "identity_baseline_mse": 0.23212618377672964,
+        "cosine_similarity": 0.9871855614945771,
+        "true_survival_rate": 0.7222222222222222,
+        "predicted_survival_rate": 0.7229938271604939,
+        "survival_agreement": 0.9992283950617284
+      },
+      {
+        "step": 2,
+        "n": 936,
+        "reach_rate": 0.7222222222222222,
+        "mse": 0.020495175006211924,
+        "mse_std": 0.010771905471029223,
+        "cumulative_mean_mse": 0.01302535835985354,
+        "identity_baseline_mse": 0.2587240405453905,
+        "cosine_similarity": 0.9648733782268832,
+        "true_survival_rate": 0.8151709401709402,
+        "predicted_survival_rate": 0.8151709401709402,
+        "survival_agreement": 1.0
+      },
+      {
+        "step": 3,
+        "n": 763,
+        "reach_rate": 0.5887345679012346,
+        "mse": 0.03248546459936284,
+        "mse_std": 0.01586490839220349,
+        "cumulative_mean_mse": 0.017982974740736873,
+        "identity_baseline_mse": 0.2733734897201658,
+        "cosine_similarity": 0.9421300387303136,
+        "true_survival_rate": 0.9017038007863696,
+        "predicted_survival_rate": 0.9003931847968545,
+        "survival_agreement": 0.9960681520314548
+      },
+      {
+        "step": 4,
+        "n": 675,
+        "reach_rate": 0.5208333333333334,
+        "mse": 0.04714768557974481,
+        "mse_std": 0.022272884514278495,
+        "cumulative_mean_mse": 0.02334705643455986,
+        "identity_baseline_mse": 0.28782157232329136,
+        "cosine_similarity": 0.9146223383207014,
+        "true_survival_rate": 0.9185185185185185,
+        "predicted_survival_rate": 0.914074074074074,
+        "survival_agreement": 0.9837037037037037
+      },
+      {
+        "step": 5,
+        "n": 575,
+        "reach_rate": 0.44367283950617287,
+        "mse": 0.06556690436379228,
+        "mse_std": 0.027923463944788243,
+        "cumulative_mean_mse": 0.029065881536870498,
+        "identity_baseline_mse": 0.30537670406186074,
+        "cosine_similarity": 0.8827254479249518,
+        "true_survival_rate": 0.9130434782608695,
+        "predicted_survival_rate": 0.9026086956521739,
+        "survival_agreement": 0.9443478260869566
+      },
+      {
+        "step": 6,
+        "n": 474,
+        "reach_rate": 0.36574074074074076,
+        "mse": 0.0844290310093957,
+        "mse_std": 0.03506186499669311,
+        "cumulative_mean_mse": 0.034626833613576775,
+        "identity_baseline_mse": 0.31675530676878205,
+        "cosine_similarity": 0.8495100809590584,
+        "true_survival_rate": 0.9282700421940928,
+        "predicted_survival_rate": 0.879746835443038,
+        "survival_agreement": 0.8924050632911392
+      },
+      {
+        "step": 7,
+        "n": 399,
+        "reach_rate": 0.30787037037037035,
+        "mse": 0.0995508868747123,
+        "mse_std": 0.04347510540771989,
+        "cumulative_mean_mse": 0.03968832193932768,
+        "identity_baseline_mse": 0.32633456779456077,
+        "cosine_similarity": 0.827470693926286,
+        "true_survival_rate": 0.9022556390977443,
+        "predicted_survival_rate": 0.8270676691729323,
+        "survival_agreement": 0.8646616541353384
+      },
+      {
+        "step": 8,
+        "n": 279,
+        "reach_rate": 0.2152777777777778,
+        "mse": 0.1319416025521148,
+        "mse_std": 0.05933474579744821,
+        "cumulative_mean_mse": 0.044457390920422286,
+        "identity_baseline_mse": 0.34121530907210246,
+        "cosine_similarity": 0.776588740532687,
+        "true_survival_rate": 0.910394265232975,
+        "predicted_survival_rate": 0.8136200716845878,
+        "survival_agreement": 0.7956989247311828
+      },
+      {
+        "step": 9,
+        "n": 230,
+        "reach_rate": 0.17746913580246915,
+        "mse": 0.16038256232845124,
+        "mse_std": 0.07622787624046087,
+        "cumulative_mean_mse": 0.049195757620945954,
+        "identity_baseline_mse": 0.34714715909116356,
+        "cosine_similarity": 0.74235026147371,
+        "true_survival_rate": 0.8956521739130435,
+        "predicted_survival_rate": 0.7347826086956522,
+        "survival_agreement": 0.7695652173913043
+      },
+      {
+        "step": 10,
+        "n": 139,
+        "reach_rate": 0.10725308641975309,
+        "mse": 0.16789305249901096,
+        "mse_std": 0.0910380187928024,
+        "cumulative_mean_mse": 0.05205717350510326,
+        "identity_baseline_mse": 0.32271371249181063,
+        "cosine_similarity": 0.7326796652331126,
+        "true_survival_rate": 0.9712230215827338,
+        "predicted_survival_rate": 0.7697841726618705,
+        "survival_agreement": 0.7841726618705036
+      }
+    ]
+  }
+}

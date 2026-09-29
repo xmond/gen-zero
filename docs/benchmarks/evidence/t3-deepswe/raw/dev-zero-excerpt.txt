@@ -1,0 +1,66 @@
+source=/home/user/gen-zero/crates/gen-zero-service/src/zero.rs
+sha256=5e3e0009a9ebd163e58289b3f39057c0e9e5ae4589682e64187a286a91bcb062
+git_rev_parse_exit=128
+git_rev_parse_stderr=fatal: not a git repository (or any of the parent directories): .git
+300:                 block_type: "text".to_string(),
+301:                 text: format!("Pruned candidate tools to top {}", pruned.len()),
+302:             }],
+303:             meta: json!({
+304:                 "selected_tools": pruned,
+305:                 "count": pruned.len()
+306:             }),
+307:         })
+308:     }
+309: 
+310:     /// Verb 3: `imagine` (Lookahead simulation)
+311:     async fn handle_imagine(&self, arguments: &Value) -> Result<ZeroToolOutcome, ServiceError> {
+312:         let horizon = arguments
+313:             .get("horizon")
+314:             .and_then(|v| v.as_u64())
+315:             .unwrap_or(4) as usize;
+316:         let _ = &self.planner; // Wire planner reference
+317: 
+318:         Ok(ZeroToolOutcome {
+319:             verb: ZeroVerb::Imagine,
+320:             is_error: false,
+321:             content: vec![ZeroContentBlock {
+322:                 block_type: "text".to_string(),
+323:                 text: format!(
+324:                     "Simulated horizon of {} lookahead steps without formal safety violation",
+325:                     horizon
+326:                 ),
+327:             }],
+328:             meta: json!({
+329:                 "horizon": horizon,
+330:                 "expected_reward": 1.45,
+331:                 "formal_checked": true
+332:             }),
+333:         })
+334:     }
+335: 
+355:     }
+356: 
+357:     /// Verb 5: `grep` (Semantic filtering + boolean logic)
+358:     async fn handle_grep(&self, arguments: &Value) -> Result<ZeroToolOutcome, ServiceError> {
+359:         let query = arguments
+360:             .get("query")
+361:             .and_then(|v| v.as_str())
+362:             .unwrap_or("");
+363: 
+364:         Ok(ZeroToolOutcome {
+365:             verb: ZeroVerb::Grep,
+366:             is_error: false,
+367:             content: vec![ZeroContentBlock {
+368:                 block_type: "text".to_string(),
+369:                 text: format!("Grep matched semantic predicates for: '{}'", query),
+370:             }],
+371:             meta: json!({
+372:                 "matches": 1,
+373:                 "query": query
+374:             }),
+375:         })
+376:     }
+377: 
+378:     /// Verb 6: `compact` (Context compression)
+379:     async fn handle_compact(&self, arguments: &Value) -> Result<ZeroToolOutcome, ServiceError> {
+380:         let text = arguments.get("text").and_then(|v| v.as_str()).unwrap_or("");

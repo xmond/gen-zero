@@ -1,0 +1,178 @@
+{
+  "description": "Real single-core CPU forward latency, BF16, random token inputs. No synthetic timings: every ms figure is a wall-clock time.perf_counter() measurement around a real ZeroModel forward pass.",
+  "environment": {
+    "hostname": "luy-open-box",
+    "cpu": "x86_64",
+    "logical_cores": 24,
+    "torch": "2.14.0+cpu",
+    "torch_threads": 1,
+    "torch_interop_threads": 1,
+    "cuda_available": false,
+    "python": "3.11.16",
+    "cpu_has_native_bf16": false
+  },
+  "results": [
+    {
+      "name": "Zero-Lite Dense",
+      "config": {
+        "vocab_size": 151643,
+        "hidden_size": 1024,
+        "embedding_dim": null,
+        "factorized_embedding": false,
+        "num_hidden_layers": 24,
+        "intermediate_size": 2816,
+        "num_attention_heads": 16,
+        "sparse_moe": false,
+        "sparse_layer_start": null,
+        "num_experts": null,
+        "experts_per_token": null,
+        "expert_intermediate_size": null
+      },
+      "active_parameter_count": 463679488,
+      "parameter_count": 463679488,
+      "storage_bytes_bf16": 927358976,
+      "storage_within_1gb": true,
+      "active_within_230m": false,
+      "dtype": "bfloat16",
+      "batch_size": 1,
+      "sequence_length": 16,
+      "warmup_iters": 2,
+      "measure_iters": 5,
+      "load_seconds": 9.534467820078135,
+      "forward_ms_per_batch": {
+        "n": 5,
+        "mean_ms": 691.849912609905,
+        "median_ms": 691.9644279405475,
+        "p90_ms": 703.4373646602035,
+        "min_ms": 672.8624650277197,
+        "max_ms": 707.5819298624992,
+        "stdev_ms": 11.33002692319547
+      },
+      "forward_ms_per_sample": {
+        "n": 5,
+        "mean_ms": 691.849912609905,
+        "median_ms": 691.9644279405475,
+        "p90_ms": 703.4373646602035,
+        "min_ms": 672.8624650277197,
+        "max_ms": 707.5819298624992,
+        "stdev_ms": 11.33002692319547
+      },
+      "throughput_samples_per_sec": 1.4454001970277668,
+      "memory": {
+        "rss_before_load_bytes": 244469760,
+        "rss_after_load_bytes": 1175949312,
+        "rss_after_run_bytes": 1195823104,
+        "model_footprint_bytes": 931479552
+      },
+      "speedup_vs_zero_lite_dense": 1.0
+    },
+    {
+      "name": "Zero-Lite Sparse MoE (Top-1)",
+      "config": {
+        "vocab_size": 151643,
+        "hidden_size": 1024,
+        "embedding_dim": null,
+        "factorized_embedding": false,
+        "num_hidden_layers": 24,
+        "intermediate_size": 2816,
+        "num_attention_heads": 16,
+        "sparse_moe": true,
+        "sparse_layer_start": 16,
+        "num_experts": 8,
+        "experts_per_token": 1,
+        "expert_intermediate_size": 704
+      },
+      "active_parameter_count": 405360640,
+      "parameter_count": 541609984,
+      "storage_bytes_bf16": 1083219968,
+      "storage_within_1gb": false,
+      "active_within_230m": false,
+      "dtype": "bfloat16",
+      "batch_size": 1,
+      "sequence_length": 16,
+      "warmup_iters": 2,
+      "measure_iters": 5,
+      "load_seconds": 11.376715042162687,
+      "forward_ms_per_batch": {
+        "n": 5,
+        "mean_ms": 595.4043298959732,
+        "median_ms": 587.5556468963623,
+        "p90_ms": 609.9445596337318,
+        "min_ms": 584.2408030293882,
+        "max_ms": 612.8809507936239,
+        "stdev_ms": 11.561579677699914
+      },
+      "forward_ms_per_sample": {
+        "n": 5,
+        "mean_ms": 595.4043298959732,
+        "median_ms": 587.5556468963623,
+        "p90_ms": 609.9445596337318,
+        "min_ms": 584.2408030293882,
+        "max_ms": 612.8809507936239,
+        "stdev_ms": 11.561579677699914
+      },
+      "throughput_samples_per_sec": 1.6795309502950981,
+      "memory": {
+        "rss_before_load_bytes": 268005376,
+        "rss_after_load_bytes": 1349816320,
+        "rss_after_run_bytes": 1354145792,
+        "model_footprint_bytes": 1081810944
+      },
+      "speedup_vs_zero_lite_dense": 1.1619833411872944
+    },
+    {
+      "name": "Zero-Compact 220M",
+      "config": {
+        "vocab_size": 151643,
+        "hidden_size": 1024,
+        "embedding_dim": 128,
+        "factorized_embedding": true,
+        "num_hidden_layers": 24,
+        "intermediate_size": 1536,
+        "num_attention_heads": 16,
+        "sparse_moe": true,
+        "sparse_layer_start": 16,
+        "num_experts": 8,
+        "experts_per_token": 1,
+        "expert_intermediate_size": 704
+      },
+      "active_parameter_count": 210637184,
+      "parameter_count": 346886528,
+      "storage_bytes_bf16": 693773056,
+      "storage_within_1gb": true,
+      "active_within_230m": true,
+      "dtype": "bfloat16",
+      "batch_size": 1,
+      "sequence_length": 16,
+      "warmup_iters": 2,
+      "measure_iters": 5,
+      "load_seconds": 6.6674039219506085,
+      "forward_ms_per_batch": {
+        "n": 5,
+        "mean_ms": 468.97919522598386,
+        "median_ms": 473.0484685860574,
+        "p90_ms": 487.14423393830657,
+        "min_ms": 446.41812704503536,
+        "max_ms": 491.01750599220395,
+        "stdev_ms": 16.833059979385236
+      },
+      "forward_ms_per_sample": {
+        "n": 5,
+        "mean_ms": 468.97919522598386,
+        "median_ms": 473.0484685860574,
+        "p90_ms": 487.14423393830657,
+        "min_ms": 446.41812704503536,
+        "max_ms": 491.01750599220395,
+        "stdev_ms": 16.833059979385236
+      },
+      "throughput_samples_per_sec": 2.1322907501645925,
+      "memory": {
+        "rss_before_load_bytes": 1043578880,
+        "rss_after_load_bytes": 1043615744,
+        "rss_after_run_bytes": 1043660800,
+        "model_footprint_bytes": 36864
+      },
+      "speedup_vs_zero_lite_dense": 1.475225169160282
+    }
+  ]
+}

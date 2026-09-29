@@ -1,0 +1,6 @@
+Proposer action rejected: {'rejected': 'None', 'instruction': 'Correct the invalid action; do not bypass the check.'}
+DeepSWE fail-closed: TimeoutError: The read operation timed out
+Running collect hook in service 'main': 'cd /app && mkdir -p /logs/artifacts && git config --global --add safe.directory /app && git diff --binary dd05eebc8ed9e30fc6c223088a5a450cb54c1cab HEAD > /logs/artifacts/model.patch'
+Collect hook in service 'main' completed
+Skipping image OS validation for hb__datacurve-tomlkit-toml-table-converters: docker inspect returned 1
+Not retrying trial because the maximum number of retries has been reached

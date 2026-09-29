@@ -1,0 +1,25 @@
+[package]
+name = "gen-zero-planner"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Planning engines, compact search-tree arena, and mixture-of-experts router for Gen-Zero."
+readme = "README.md"
+
+[dependencies]
+rand = { workspace = true }
+arc-swap = { workspace = true }
+gen-zero-core = { workspace = true }
+gen-zero-gate = { workspace = true }
+gen-zero-lod = { workspace = true }
+smallvec = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+
+[dev-dependencies]
+nalgebra = { workspace = true }
+gen-zero-worldmodel = { workspace = true }
+serde_json = { workspace = true }

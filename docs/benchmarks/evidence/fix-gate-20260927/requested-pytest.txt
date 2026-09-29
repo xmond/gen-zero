@@ -1,0 +1,12 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.1.1, pluggy-1.6.0
+rootdir: /ebs/pj/gen-zero-worktree/fix-gate
+configfile: pytest.ini
+plugins: anyio-4.12.1
+collected 73 items
+
+python/tests/test_policy_gate_fail_closed_fixes.py ..................... [ 28%]
+...................................                                      [ 76%]
+python/tests/test_loop_state_machine_verifier.py .................       [100%]
+
+============================== 73 passed in 2.65s ==============================

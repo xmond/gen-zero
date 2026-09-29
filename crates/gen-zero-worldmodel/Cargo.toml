@@ -1,0 +1,18 @@
+[package]
+name = "gen-zero-worldmodel"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Latent world-model dynamics: contact Hamiltonian and symplectic integrators, Koopman spectral operators."
+readme = "README.md"
+
+[dependencies]
+gen-zero-core = { workspace = true }
+thiserror = { workspace = true }
+zstd = { workspace = true }
+nalgebra = { workspace = true }
+
+[dev-dependencies]

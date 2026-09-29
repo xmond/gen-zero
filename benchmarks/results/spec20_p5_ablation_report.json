@@ -1,0 +1,741 @@
+{
+  "contains_synthetic": true,
+  "notice": "Mixed report: real task scorecards coexist with explicitly synthetic random-weight shape-only latency measurements under cpu_latency_us.",
+  "title": "Spec 20 P5: combined ablation & final grand scorecard (real data where it exists, explicit not_evaluated everywhere else)",
+  "generated_utc": "2026-09-24T09:29:39Z",
+  "command": "python3 benchmarks/suites/run_spec20_p5_ablation.py",
+  "host": {
+    "platform": "Linux-7.0.0-31-generic-x86_64-with-glibc2.39",
+    "cpu_count": 24,
+    "python": "3.11.16",
+    "numpy": "2.4.6",
+    "loadavg": [
+      5.357421875,
+      7.31396484375,
+      10.00439453125
+    ]
+  },
+  "spec_ref": "docs/zero/20-triad-deep-enhancement-multi-dimensional-analysis-spec.md",
+  "gating_table_assessment": {
+    "source": "docs/zero/20-triad-deep-enhancement-multi-dimensional-analysis-spec.md:356-365 defines the P0-P5 phases; the spec's own table has NO status column. Every status string below is THIS SCRIPT's assessment against real repo evidence, not a value copied from the spec.",
+    "P0_evidence_baseline": {
+      "status": "claimed passed in the task brief; partially spot-checked here",
+      "evidence": "tasks.<task>.leakage_gate.q9b_diff_16_24_compact.{id_overlap,text_overlap,family_overlap} == 0 for all 13 tasks in 01png_sota_ensemble_report_phase4.json (checked programmatically below); full nested/group-CV audit not re-verified by this script"
+    },
+    "P1_long_context_pooling": "engineering done + unit tests pass; accuracy not evaluated (S8:445)",
+    "P2_layer_dynamics_diff": "passed with real accuracy: this IS the 76.06% phase4 result",
+    "P3_folded_heads": "engineering done + unit tests pass; accuracy not evaluated (S8:445)",
+    "P4_dual_source_fusion": "engineering done + unit tests pass; accuracy not evaluated (S8:444-445), Gemma features never extracted",
+    "P5_combined_ablation": "this report: only P0+P2 have a real jointly-evaluated cell; P1/P3/P4 cannot be honestly combined into it yet (S7.1: '\u4e0d\u8981\u5168\u7ec4\u5408\u76f2\u641c...\u4ec5\u7ec4\u5408\u5185\u5c42\u8bad\u7ec3\u9a8c\u8bc1\u901a\u8fc7\u8005' -- P1/P3/P4 never ran the inner nested-CV/1-SE ladder on real data at all)"
+  },
+  "p0_leakage_gate_check": {
+    "tasks_checked": 13,
+    "tasks_with_nonzero_overlap": [],
+    "all_clean": true
+  },
+  "axis_grid": {
+    "axis1_representation": {
+      "q9b_diff_compact_8192d": {
+        "status": "evaluated",
+        "macro_avg_13": 76.06,
+        "micro_acc": 77.19,
+        "evidence": {
+          "file": "benchmarks/results/01png_sota_ensemble_report_phase4.json",
+          "key": "command (--features-dir ...q9b_diff_compact) and tasks.<task>.leakage_gate.q9b_diff_16_24_compact",
+          "command_string": "D:\\genz\\benchmarks\\suites\\evaluate_full_13_grand_scorecard.py --features-dir D:\\genz\\features_uncap_v1\\q9b_diff_compact\\features --ranks 32,64,128 --device cuda --results-dir D:\\genz\\benchmarks\\results_phase4_compact"
+        },
+        "note": "synthesize_layer_diff_features.py:15 compact = [h24; h24-h16], 8192-D"
+      },
+      "q9b_mid_8192d": {
+        "status": "not_evaluated",
+        "reason": "Spec 20 S8 '\u672a\u9a8c\u8bc1'/'\u672a\u5b8c\u6210' (docs/zero/20-triad-deep-enhancement-multi-dimensional-analysis-spec.md:442-453): real accuracy/non-inferiority for this cell was never measured. Only algorithmic-correctness unit tests (fold identity, monotonicity, orthogonality, shape/export consistency on synthetic inputs) exist for the underlying head/pooling code; it never ran through the nested-CV training/selection ladder on the real 13-task data, because the required upstream artifact (e.g. Gemma feature extraction, or a q9b_diff_full cache) does not exist in this repo.",
+        "note": "synthesize_layer_diff_features.py:8 q9b_mid = [mean@16 | last@16], 8192-D. 01png_grand_challenge_report.json's 63.82%/58.89% baseline uses a DIFFERENT, unrelated encoder (Qwen2.5-0.5B, see benchmark_01png_grand_challenge.py:26) and must not be read as a q9b_mid data point."
+      },
+      "q9b_diff_full_12288d": {
+        "status": "not_evaluated",
+        "reason": "Spec 20 S8 '\u672a\u9a8c\u8bc1'/'\u672a\u5b8c\u6210' (docs/zero/20-triad-deep-enhancement-multi-dimensional-analysis-spec.md:442-453): real accuracy/non-inferiority for this cell was never measured. Only algorithmic-correctness unit tests (fold identity, monotonicity, orthogonality, shape/export consistency on synthetic inputs) exist for the underlying head/pooling code; it never ran through the nested-CV training/selection ladder on the real 13-task data, because the required upstream artifact (e.g. Gemma feature extraction, or a q9b_diff_full cache) does not exist in this repo.",
+        "note": "synthesize_layer_diff_features.py:14 full = [h16; h24; h24-h16], 12288-D; no q9b_diff_full <task>.npz cache or report found under benchmarks/results/ or benchmarks/artifacts/zero/."
+      }
+    },
+    "axis2_head": {
+      "linear_probe": {
+        "status": "evaluated",
+        "chosen_on_n_tasks": 6,
+        "chosen_on_tasks": [
+          "aegis_safety",
+          "boolq",
+          "massive_de",
+          "massive_en",
+          "multinli",
+          "vitaminc"
+        ],
+        "evidence": {
+          "file": "benchmarks/results/01png_sota_ensemble_report_phase4.json",
+          "key": "aggregate.macro_avg_13"
+        }
+      },
+      "adapter_formulation_a": {
+        "status": "evaluated",
+        "chosen_on_n_tasks": 5,
+        "chosen_on_tasks": [
+          "civil_comments",
+          "paws",
+          "pubmedqa",
+          "squad2",
+          "summeval_relevance"
+        ],
+        "evidence": {
+          "file": "benchmarks/results/01png_sota_ensemble_report_phase4.json",
+          "key": "aggregate.macro_avg_13"
+        }
+      },
+      "supcon": {
+        "status": "evaluated",
+        "chosen_on_n_tasks": 2,
+        "chosen_on_tasks": [
+          "helpsteer2",
+          "summeval_consistency"
+        ],
+        "evidence": {
+          "file": "benchmarks/results/01png_sota_ensemble_report_phase4.json",
+          "key": "aggregate.macro_avg_13"
+        }
+      },
+      "adapter_formulation_b": {
+        "status": "not_evaluated",
+        "reason": "Spec 20 S8 '\u672a\u9a8c\u8bc1'/'\u672a\u5b8c\u6210' (docs/zero/20-triad-deep-enhancement-multi-dimensional-analysis-spec.md:442-453): real accuracy/non-inferiority for this cell was never measured. Only algorithmic-correctness unit tests (fold identity, monotonicity, orthogonality, shape/export consistency on synthetic inputs) exist for the underlying head/pooling code; it never ran through the nested-CV training/selection ladder on the real 13-task data, because the required upstream artifact (e.g. Gemma feature extraction, or a q9b_diff_full cache) does not exist in this repo.",
+        "unit_test_evidence": {
+          "path": "benchmarks/tests/test_spec20_formulation_b.py",
+          "exit_code": 0,
+          "summary": "44 passed, 14 warnings in 8.63s",
+          "seconds": 10.9
+        }
+      }
+    },
+    "axis3_fusion": {
+      "single_qwen": {
+        "status": "evaluated",
+        "evidence": {
+          "file": "benchmarks/results/01png_sota_ensemble_report_phase4.json",
+          "key": "aggregate.macro_avg_13"
+        }
+      },
+      "dual_manifold_qwen_gemma": {
+        "status": "not_evaluated",
+        "reason": "Spec 20 S8 '\u672a\u9a8c\u8bc1'/'\u672a\u5b8c\u6210' (docs/zero/20-triad-deep-enhancement-multi-dimensional-analysis-spec.md:442-453): real accuracy/non-inferiority for this cell was never measured. Only algorithmic-correctness unit tests (fold identity, monotonicity, orthogonality, shape/export consistency on synthetic inputs) exist for the underlying head/pooling code; it never ran through the nested-CV training/selection ladder on the real 13-task data, because the required upstream artifact (e.g. Gemma feature extraction, or a q9b_diff_full cache) does not exist in this repo.",
+        "note": "Spec 20 S8 (line 444): 'Gemma GGUF\u5b9e\u96452816\u8f93\u51fa\u53ca\u5b83\u81ea\u5df1\u7684token\u957f\u5ea6' explicitly listed \u672a\u9a8c\u8bc1 -- no real Gemma feature cache exists in this repo, so DualManifoldHead has never been fit on real paired Qwen+Gemma rows.",
+        "unit_test_evidence": {
+          "path": "benchmarks/tests/test_spec20_dual_manifold.py",
+          "exit_code": 0,
+          "summary": "20 passed, 4 warnings in 6.37s",
+          "seconds": 8.1
+        }
+      }
+    },
+    "pooling_axis": {
+      "uniform_mean": {
+        "status": "evaluated_implicitly",
+        "note": "The 13-task phase4 evaluation uses cached mean/last-token pooling baked into the q9b_diff_16_24_compact feature cache itself (synthesize_layer_diff_features.py), not a separate pooling module call; no task in the 13-task suite exercises >1536 tokens, so this is not a stress test of pooling choice.",
+        "evidence": {
+          "file": "benchmarks/results/01png_sota_ensemble_report_phase4.json",
+          "key": "aggregate.macro_avg_13"
+        }
+      },
+      "partition_anchor_pooling": {
+        "status": "not_evaluated",
+        "reason": "Spec 20 S8 '\u672a\u9a8c\u8bc1'/'\u672a\u5b8c\u6210' (docs/zero/20-triad-deep-enhancement-multi-dimensional-analysis-spec.md:442-453): real accuracy/non-inferiority for this cell was never measured. Only algorithmic-correctness unit tests (fold identity, monotonicity, orthogonality, shape/export consistency on synthetic inputs) exist for the underlying head/pooling code; it never ran through the nested-CV training/selection ladder on the real 13-task data, because the required upstream artifact (e.g. Gemma feature extraction, or a q9b_diff_full cache) does not exist in this repo.",
+        "unit_test_evidence": {
+          "path": "benchmarks/tests/test_spec20_anchor_pooling.py",
+          "exit_code": 0,
+          "summary": "38 passed in 1.69s",
+          "seconds": 2.6
+        }
+      }
+    }
+  },
+  "per_task_real_scorecard": [
+    {
+      "task": "aegis_safety",
+      "dataset": "Aegis 2.0",
+      "n": 250,
+      "correct": 184,
+      "accuracy": 73.6,
+      "wilson95_recomputed": [
+        67.81,
+        78.68
+      ],
+      "wilson95_stored": [
+        67.81,
+        78.68
+      ],
+      "chosen_strategy": "linear_probe",
+      "collapsed": false,
+      "max_pred_class_frac": 0.6,
+      "majority_class_train_prior_acc": 57.6,
+      "nimble": 81.2,
+      "jev": 80.4,
+      "delta_vs_nimble": -7.6,
+      "delta_vs_jev": -6.8,
+      "jev_inside_our_wilson95": false,
+      "nimble_inside_our_wilson95": false,
+      "decision_latency_us_median": 6.299989763647318,
+      "decision_latency_us_p95": 6.699992809444666,
+      "balanced_accuracy": 72.66,
+      "macro_f1": 72.83
+    },
+    {
+      "task": "boolq",
+      "dataset": "BoolQ",
+      "n": 300,
+      "correct": 246,
+      "accuracy": 82.0,
+      "wilson95_recomputed": [
+        77.26,
+        85.93
+      ],
+      "wilson95_stored": [
+        77.26,
+        85.93
+      ],
+      "chosen_strategy": "linear_probe",
+      "collapsed": false,
+      "max_pred_class_frac": 0.5867,
+      "majority_class_train_prior_acc": 62.48,
+      "nimble": 86.0,
+      "jev": 89.7,
+      "delta_vs_nimble": -4.0,
+      "delta_vs_jev": -7.7,
+      "jev_inside_our_wilson95": false,
+      "nimble_inside_our_wilson95": false,
+      "decision_latency_us_median": 6.200018106028438,
+      "decision_latency_us_p95": 6.599993503186852,
+      "balanced_accuracy": 81.42,
+      "macro_f1": 81.49
+    },
+    {
+      "task": "civil_comments",
+      "dataset": "Civil Comments",
+      "n": 300,
+      "correct": 266,
+      "accuracy": 88.67,
+      "wilson95_recomputed": [
+        84.58,
+        91.78
+      ],
+      "wilson95_stored": [
+        84.58,
+        91.78
+      ],
+      "chosen_strategy": "adapter_r128",
+      "collapsed": true,
+      "max_pred_class_frac": 0.96,
+      "majority_class_train_prior_acc": 92.1,
+      "nimble": 70.3,
+      "jev": 81.0,
+      "delta_vs_nimble": 18.37,
+      "delta_vs_jev": 7.67,
+      "jev_inside_our_wilson95": false,
+      "nimble_inside_our_wilson95": false,
+      "decision_latency_us_median": 46.00000102072954,
+      "decision_latency_us_p95": 70.79998758854344,
+      "balanced_accuracy": 56.51,
+      "macro_f1": 58.31
+    },
+    {
+      "task": "helpsteer2",
+      "dataset": "HelpSteer2",
+      "n": 249,
+      "correct": 97,
+      "accuracy": 38.96,
+      "wilson95_recomputed": [
+        33.11,
+        45.14
+      ],
+      "wilson95_stored": [
+        33.11,
+        45.14
+      ],
+      "chosen_strategy": "supcon_r128",
+      "collapsed": false,
+      "max_pred_class_frac": 0.494,
+      "majority_class_train_prior_acc": 40.3,
+      "nimble": 39.0,
+      "jev": 34.1,
+      "delta_vs_nimble": -0.04,
+      "delta_vs_jev": 4.86,
+      "jev_inside_our_wilson95": true,
+      "nimble_inside_our_wilson95": true,
+      "decision_latency_us_median": 73.89998063445091,
+      "decision_latency_us_p95": 87.59999764151871,
+      "balanced_accuracy": 33.33,
+      "macro_f1": 32.42
+    },
+    {
+      "task": "massive_de",
+      "dataset": "MASSIVE de-DE",
+      "n": 350,
+      "correct": 308,
+      "accuracy": 88.0,
+      "wilson95_recomputed": [
+        84.18,
+        91.0
+      ],
+      "wilson95_stored": [
+        84.18,
+        91.0
+      ],
+      "chosen_strategy": "linear_probe",
+      "collapsed": false,
+      "max_pred_class_frac": 0.1571,
+      "majority_class_train_prior_acc": 14.7,
+      "nimble": 83.4,
+      "jev": 86.9,
+      "delta_vs_nimble": 4.6,
+      "delta_vs_jev": 1.1,
+      "jev_inside_our_wilson95": true,
+      "nimble_inside_our_wilson95": false,
+      "decision_latency_us_median": 9.500014130026102,
+      "decision_latency_us_p95": 11.520000407472258,
+      "balanced_accuracy": 88.38,
+      "macro_f1": 88.31
+    },
+    {
+      "task": "massive_en",
+      "dataset": "MASSIVE en-US",
+      "n": 350,
+      "correct": 289,
+      "accuracy": 82.57,
+      "wilson95_recomputed": [
+        78.25,
+        86.19
+      ],
+      "wilson95_stored": [
+        78.25,
+        86.19
+      ],
+      "chosen_strategy": "linear_probe",
+      "collapsed": false,
+      "max_pred_class_frac": 0.1343,
+      "majority_class_train_prior_acc": 12.4,
+      "nimble": 86.9,
+      "jev": 87.4,
+      "delta_vs_nimble": -4.33,
+      "delta_vs_jev": -4.83,
+      "jev_inside_our_wilson95": false,
+      "nimble_inside_our_wilson95": false,
+      "decision_latency_us_median": 12.79998105019331,
+      "decision_latency_us_p95": 15.00999787822366,
+      "balanced_accuracy": 83.19,
+      "macro_f1": 82.23
+    },
+    {
+      "task": "multinli",
+      "dataset": "MultiNLI",
+      "n": 299,
+      "correct": 249,
+      "accuracy": 83.28,
+      "wilson95_recomputed": [
+        78.63,
+        87.08
+      ],
+      "wilson95_stored": [
+        78.63,
+        87.08
+      ],
+      "chosen_strategy": "linear_probe",
+      "collapsed": false,
+      "max_pred_class_frac": 0.3411,
+      "majority_class_train_prior_acc": 34.0,
+      "nimble": 85.3,
+      "jev": 82.9,
+      "delta_vs_nimble": -2.02,
+      "delta_vs_jev": 0.38,
+      "jev_inside_our_wilson95": true,
+      "nimble_inside_our_wilson95": true,
+      "decision_latency_us_median": 7.800001185387373,
+      "decision_latency_us_p95": 8.200004231184721,
+      "balanced_accuracy": 83.23,
+      "macro_f1": 83.2
+    },
+    {
+      "task": "paws",
+      "dataset": "PAWS",
+      "n": 250,
+      "correct": 222,
+      "accuracy": 88.8,
+      "wilson95_recomputed": [
+        84.29,
+        92.14
+      ],
+      "wilson95_stored": [
+        84.29,
+        92.14
+      ],
+      "chosen_strategy": "adapter_r64",
+      "collapsed": false,
+      "max_pred_class_frac": 0.556,
+      "majority_class_train_prior_acc": 57.9,
+      "nimble": 82.8,
+      "jev": 89.2,
+      "delta_vs_nimble": 6.0,
+      "delta_vs_jev": -0.4,
+      "jev_inside_our_wilson95": true,
+      "nimble_inside_our_wilson95": false,
+      "decision_latency_us_median": 37.299992982298136,
+      "decision_latency_us_p95": 42.919993575196706,
+      "balanced_accuracy": 88.66,
+      "macro_f1": 88.74
+    },
+    {
+      "task": "pubmedqa",
+      "dataset": "PubMedQA",
+      "n": 250,
+      "correct": 171,
+      "accuracy": 68.4,
+      "wilson95_recomputed": [
+        62.4,
+        73.85
+      ],
+      "wilson95_stored": [
+        62.4,
+        73.85
+      ],
+      "chosen_strategy": "adapter_r64",
+      "collapsed": false,
+      "max_pred_class_frac": 0.604,
+      "majority_class_train_prior_acc": 55.87,
+      "nimble": 75.6,
+      "jev": 77.2,
+      "delta_vs_nimble": -7.2,
+      "delta_vs_jev": -8.8,
+      "jev_inside_our_wilson95": false,
+      "nimble_inside_our_wilson95": false,
+      "decision_latency_us_median": 52.3999915458262,
+      "decision_latency_us_p95": 57.61498614447186,
+      "balanced_accuracy": 52.97,
+      "macro_f1": 51.1
+    },
+    {
+      "task": "squad2",
+      "dataset": "SQuAD 2.0",
+      "n": 299,
+      "correct": 260,
+      "accuracy": 86.96,
+      "wilson95_recomputed": [
+        82.67,
+        90.31
+      ],
+      "wilson95_stored": [
+        82.67,
+        90.31
+      ],
+      "chosen_strategy": "adapter_r128",
+      "collapsed": false,
+      "max_pred_class_frac": 0.5418,
+      "majority_class_train_prior_acc": 67.6,
+      "nimble": 80.6,
+      "jev": 82.9,
+      "delta_vs_nimble": 6.36,
+      "delta_vs_jev": 4.06,
+      "jev_inside_our_wilson95": true,
+      "nimble_inside_our_wilson95": false,
+      "decision_latency_us_median": 45.69999873638153,
+      "decision_latency_us_p95": 52.519992459565394,
+      "balanced_accuracy": 86.97,
+      "macro_f1": 86.94
+    },
+    {
+      "task": "summeval_consistency",
+      "dataset": "SummEval consistency",
+      "n": 144,
+      "correct": 124,
+      "accuracy": 86.11,
+      "wilson95_recomputed": [
+        79.52,
+        90.83
+      ],
+      "wilson95_stored": [
+        79.52,
+        90.83
+      ],
+      "chosen_strategy": "supcon_r32",
+      "collapsed": false,
+      "max_pred_class_frac": 0.8403,
+      "majority_class_train_prior_acc": 86.1,
+      "nimble": 75.7,
+      "jev": 81.2,
+      "delta_vs_nimble": 10.41,
+      "delta_vs_jev": 4.91,
+      "jev_inside_our_wilson95": true,
+      "nimble_inside_our_wilson95": false,
+      "decision_latency_us_median": 45.39999645203352,
+      "decision_latency_us_p95": 55.680012155789875,
+      "balanced_accuracy": 40.51,
+      "macro_f1": 40.27
+    },
+    {
+      "task": "summeval_relevance",
+      "dataset": "SummEval relevance",
+      "n": 240,
+      "correct": 99,
+      "accuracy": 41.25,
+      "wilson95_recomputed": [
+        35.21,
+        47.57
+      ],
+      "wilson95_stored": [
+        35.21,
+        47.57
+      ],
+      "chosen_strategy": "adapter_r128",
+      "collapsed": false,
+      "max_pred_class_frac": 0.7208,
+      "majority_class_train_prior_acc": 52.2,
+      "nimble": 49.2,
+      "jev": 35.0,
+      "delta_vs_nimble": -7.95,
+      "delta_vs_jev": 6.25,
+      "jev_inside_our_wilson95": false,
+      "nimble_inside_our_wilson95": false,
+      "decision_latency_us_median": 49.649999709799886,
+      "decision_latency_us_p95": 55.15001103049143,
+      "balanced_accuracy": 31.5,
+      "macro_f1": 24.64
+    },
+    {
+      "task": "vitaminc",
+      "dataset": "VitaminC",
+      "n": 599,
+      "correct": 480,
+      "accuracy": 80.13,
+      "wilson95_recomputed": [
+        76.75,
+        83.13
+      ],
+      "wilson95_stored": [
+        76.75,
+        83.13
+      ],
+      "chosen_strategy": "linear_probe",
+      "collapsed": false,
+      "max_pred_class_frac": 0.4841,
+      "majority_class_train_prior_acc": 48.7,
+      "nimble": 76.6,
+      "jev": 80.1,
+      "delta_vs_nimble": 3.53,
+      "delta_vs_jev": 0.03,
+      "jev_inside_our_wilson95": true,
+      "nimble_inside_our_wilson95": false,
+      "decision_latency_us_median": 7.800001185387373,
+      "decision_latency_us_p95": 8.200004231184721,
+      "balanced_accuracy": 71.67,
+      "macro_f1": 71.09
+    }
+  ],
+  "macro_summary": {
+    "macro_avg_13_point_estimate": 76.06,
+    "macro_avg_13_task_level_bootstrap_ci95": [
+      66.3,
+      84.03
+    ],
+    "bootstrap_method": "13-task resample with replacement, 20000 draws, percentile CI on the mean of resampled per-task accuracies; NOT a Wilson interval (macro_avg_13 is a mean over tasks, not one binomial proportion)",
+    "micro_acc": 77.19,
+    "delta_macro_vs_nimble": 1.26,
+    "delta_macro_vs_jev": 0.06,
+    "png_reference_avg": {
+      "nimble": 74.8,
+      "jev": 76.0
+    },
+    "tasks_beating_jev": [
+      "civil_comments",
+      "helpsteer2",
+      "massive_de",
+      "multinli",
+      "squad2",
+      "summeval_consistency",
+      "summeval_relevance",
+      "vitaminc"
+    ],
+    "tasks_collapsed": [
+      "civil_comments"
+    ],
+    "macro_excluding_collapsed_tasks": {
+      "excluded_tasks": [
+        "civil_comments"
+      ],
+      "excluded_task_majority_class_prior_acc": {
+        "civil_comments": 92.1
+      },
+      "n_tasks_remaining": 12,
+      "ours": 75.005,
+      "jev": 75.583,
+      "nimble": 75.192,
+      "delta_vs_jev": -0.578,
+      "delta_vs_nimble": -0.187
+    },
+    "evidence": {
+      "file": "benchmarks/results/01png_sota_ensemble_report_phase4.json",
+      "key": "aggregate"
+    }
+  },
+  "one_se_selector_distribution": {
+    "linear_probe": 6,
+    "adapter_formulation_a": 5,
+    "supcon": 2,
+    "n_tasks_total": 13,
+    "n_tasks_selected_sum_check": 13,
+    "evidence": {
+      "file": "benchmarks/results/01png_sota_ensemble_report_phase4.json",
+      "key": "aggregate.tasks_selected_{linear,adapter,supcon}"
+    }
+  },
+  "collapse_gate": {
+    "formula": "collapsed = K >= 2 and max_pred_class_frac > 0.95 (evaluate_full_13_grand_scorecard.py:242)",
+    "collapsed_tasks": [
+      "civil_comments"
+    ],
+    "evidence": {
+      "file": "benchmarks/results/01png_sota_ensemble_report_phase4.json",
+      "key": "tasks.<task>.collapsed"
+    }
+  },
+  "cpu_latency_us": {
+    "is_synthetic": true,
+    "notice": "Random-weight shape-only latency measurements; real trained-weight task latencies are reported separately.",
+    "methodology": "batch=1, float32, random weights (dense-kernel latency is weight-value-independent, only shape-dependent; same principle as spec19_head_latency_microbench.py); BLAS pinned to 1 thread (OMP/OPENBLAS/MKL_NUM_THREADS=1); reps=2000 warm=200 for head GEMVs, reps=200 warm=200 for O(T) pooling; median_us / p95_us over independently timed calls on this host, this run.",
+    "loadavg_1min": 5.04443359375,
+    "cpu_count": 24,
+    "host_busy_caveat": "host load was below cpu_count at run time.",
+    "k_values_observed_in_13_tasks": {
+      "massive_en": 18,
+      "massive_de": 18,
+      "multinli": 3,
+      "pubmedqa": 3,
+      "vitaminc": 3,
+      "boolq": 2,
+      "squad2": 2,
+      "paws": 2,
+      "civil_comments": 2,
+      "aegis_safety": 2,
+      "helpsteer2": 5,
+      "summeval_relevance": 5,
+      "summeval_consistency": 5
+    },
+    "k_probe_points": [
+      2,
+      3,
+      18
+    ],
+    "adapter_formulation_a_D8192_rank64_shape_only": {
+      "K2": {
+        "median_us": 168.59,
+        "p95_us": 225.41
+      },
+      "K3": {
+        "median_us": 169.84,
+        "p95_us": 231.4
+      },
+      "K18": {
+        "median_us": 207.89,
+        "p95_us": 271.99
+      }
+    },
+    "adapter_formulation_b_D8192_rank64": {
+      "K2": {
+        "median_us": 175.29,
+        "p95_us": 235.69
+      },
+      "K3": {
+        "median_us": 175.89,
+        "p95_us": 241.91
+      },
+      "K18": {
+        "median_us": 201.94,
+        "p95_us": 268.9
+      }
+    },
+    "dual_manifold_DQ8192_DG2816": {
+      "K2": {
+        "median_us": 25.6,
+        "p95_us": 38.8
+      },
+      "K3": {
+        "median_us": 25.7,
+        "p95_us": 46.2
+      },
+      "K18": {
+        "median_us": 52.7,
+        "p95_us": 81.7
+      }
+    },
+    "linear_probe_D8192_fresh": {
+      "K2": {
+        "median_us": 5.3,
+        "p95_us": 7.1
+      },
+      "K3": {
+        "median_us": 6.8,
+        "p95_us": 9.2
+      },
+      "K18": {
+        "median_us": 16.1,
+        "p95_us": 32.2
+      }
+    },
+    "note_adapter_a_and_supcon": "adapter_formulation_a's shape-only number also stands in for supcon (same scores() code, sota_enhanced_heads.py:454); both ALSO have REAL trained-weight decision_latency_us per task in the per-task scorecard below (phase4 report), which is the number that actually matters -- these random-weight benches exist only so adapter_a/b/dual_manifold can be compared shape-for-shape on one host, one run.",
+    "pooling_T1536_D4096": {
+      "boundary": "GPU-extraction-time pooling cost (paid once per document when caching features), NOT a per-query CPU decision-head cost -- do not compare directly to the head latencies above (S7.3: report latency boundaries as they are).",
+      "partition_anchor_pooling": {
+        "median_us": 84586.4,
+        "p95_us": 93902.75
+      },
+      "uniform_mean": {
+        "median_us": 2162.12,
+        "p95_us": 2727.14
+      }
+    },
+    "cross_check_spec19_microbench_D8192_K18": {
+      "source": "benchmarks/results/spec19_head_latency_microbench_1t.json",
+      "linear_probe": {
+        "median_us": 14.9,
+        "p95_us": 30.7
+      },
+      "residual_adapter_folded_into_head": {
+        "median_us": 972.91,
+        "p95_us": 1141.37
+      }
+    }
+  },
+  "unit_test_evidence": {
+    "P1_partition_anchor_pooling": {
+      "path": "benchmarks/tests/test_spec20_anchor_pooling.py",
+      "exit_code": 0,
+      "summary": "38 passed in 1.69s",
+      "seconds": 2.6
+    },
+    "P3_formulation_b_adapter": {
+      "path": "benchmarks/tests/test_spec20_formulation_b.py",
+      "exit_code": 0,
+      "summary": "44 passed, 14 warnings in 8.63s",
+      "seconds": 10.9
+    },
+    "P4_dual_manifold": {
+      "path": "benchmarks/tests/test_spec20_dual_manifold.py",
+      "exit_code": 0,
+      "summary": "20 passed, 4 warnings in 6.37s",
+      "seconds": 8.1
+    }
+  },
+  "final_verdict": {
+    "only_real_end_to_end_combination": "q9b_diff_compact (8192-D) x {linear_probe, adapter_formulation_a, supcon} with strict nested 1-SE selection = macro 76.06% over 13 tasks, beating Jev (76.0%, delta +0.06pp) and Nimble (74.8%, delta +1.26pp).",
+    "headline_caveat": "This +0.06pp vs Jev is carried in part by 1 collapsed task(s): civil_comments (majority-class train prior=92.1%, our accuracy=88.67%). Excluding them, macro over the remaining 12 tasks is ours=75.005% vs Jev=75.583% (delta -0.58pp) vs Nimble=75.192% (delta -0.19pp): the sign vs Jev FLIPS from positive to negative. The 13-task bootstrap CI on our own macro is [66.3, 84.03]; Jev and Nimble sit inside it too, i.e. those reference scores are not distinguishable from our macro at this sample size.",
+    "not_yet_combinable_axes": [
+      "q9b_mid_8192d",
+      "q9b_diff_full_12288d",
+      "adapter_formulation_b",
+      "dual_manifold_qwen_gemma",
+      "partition_anchor_pooling"
+    ],
+    "why": "Each has real, passing algorithmic-correctness unit tests (see unit_test_evidence) but was never run through the nested-CV training/selection ladder on the real 13-task data. Fabricating an accuracy delta for them would violate Spec 20 S7.2's own instruction ('\u63a8\u7406\u8def\u5f84\u4e0d\u6839\u636e...\u4f2a\u88c5\u53cc\u6e90\u6210\u529f') and this task's anti-cheating mandate. Real P5 numbers for these axes require the \u672a\u5b8c\u6210 work S8:451 names: GPU extraction, CPU training, and a new nested-CV test evaluation -- none of which this report-generation script performs."
+  }
+}

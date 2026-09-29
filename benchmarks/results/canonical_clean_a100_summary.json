@@ -1,0 +1,404 @@
+{
+  "overall_accuracy_pct": 76.67,
+  "total_samples": 390,
+  "total_correct": 299,
+  "selective_accuracy_top_half_confidence_pct": 81.54,
+  "ece_final_fused": 0.1799,
+  "stage1_domain_accuracy_pct": 93.33,
+  "winning_expert_counts": {
+    "etf_probe": 302,
+    "ar_loglik": 49,
+    "cot_generate": 35,
+    "ncm_proto": 3,
+    "mcts_latent": 1
+  },
+  "prototype_fallback_samples": 61,
+  "nli_paired_tasks": {
+    "tasks": [
+      "multinli",
+      "vitaminc"
+    ],
+    "head": "cross_attention_etf_probe",
+    "canonical_classes": [
+      "entailment",
+      "neutral",
+      "contradiction"
+    ],
+    "posthoc_numeric_override": false
+  },
+  "summeval_expected_rating": {
+    "summeval": {
+      "samples": 30,
+      "accuracy_argmax_pct": 43.33,
+      "accuracy_expected_round_pct": 43.33,
+      "within_1_expected_round_pct": 63.33,
+      "mae_expected_vs_label": 1.2235,
+      "mae_argmax_vs_label": 1.4333,
+      "mae_expected_vs_raw_score": 1.2653,
+      "spearman_expected_vs_raw_score": 0.472
+    }
+  },
+  "gsm8k_adaptive_cot": {
+    "ran": 106,
+    "parsed_pct": 50.0,
+    "escalated": 32,
+    "avg_tokens": 198.8,
+    "answer_accuracy_when_parsed_pct": 58.49,
+    "token_budget": {
+      "initial": 128,
+      "ceiling": 384
+    }
+  },
+  "whitening": {
+    "mean_pairwise_cosine_raw": 0.7281,
+    "mean_pairwise_cosine_whitened_centered": 0.0002,
+    "zca_rank": 103,
+    "zca_energy_kept": 0.9504,
+    "zca_eps": 4.355795258915026
+  },
+  "probe_calibration": {
+    "ece_uncalibrated_tau_0.07": 0.2309,
+    "ece_loo_temperature": 0.2309,
+    "samples": 330
+  },
+  "latency_forward_ms": {
+    "mean": 142.57,
+    "p50": 106.33,
+    "p90": 256.78,
+    "p99": 395.91
+  },
+  "task_breakdown": {
+    "aegis_safety": {
+      "domain": "safety",
+      "k": 2,
+      "positional_labels": false,
+      "wide_choice_gt_16": false,
+      "majority_baseline_pct": 63.33,
+      "samples": 30,
+      "correct": 25,
+      "accuracy_pct": 83.33,
+      "avg_forward_ms": 101.96,
+      "avg_confidence": 1.0,
+      "avg_entropy": 0.0002,
+      "single_expert_accuracy_pct": {
+        "etf_probe": 83.33,
+        "ncm_proto": 76.67,
+        "mcts_latent": 83.33,
+        "ar_loglik": 90.0
+      }
+    },
+    "arc_challenge": {
+      "domain": "mcq",
+      "k": 4,
+      "positional_labels": true,
+      "wide_choice_gt_16": false,
+      "majority_baseline_pct": 36.67,
+      "samples": 30,
+      "correct": 28,
+      "accuracy_pct": 93.33,
+      "avg_forward_ms": 95.35,
+      "avg_confidence": 0.8202,
+      "avg_entropy": 0.5289,
+      "single_expert_accuracy_pct": {
+        "ar_loglik": 93.33
+      }
+    },
+    "boolq": {
+      "domain": "reading",
+      "k": 2,
+      "positional_labels": false,
+      "wide_choice_gt_16": false,
+      "majority_baseline_pct": 83.33,
+      "samples": 30,
+      "correct": 25,
+      "accuracy_pct": 83.33,
+      "avg_forward_ms": 103.33,
+      "avg_confidence": 1.0,
+      "avg_entropy": 0.0001,
+      "single_expert_accuracy_pct": {
+        "etf_probe": 83.33,
+        "ncm_proto": 70.0,
+        "mcts_latent": 83.33,
+        "ar_loglik": 83.33
+      }
+    },
+    "civil_comments": {
+      "domain": "safety",
+      "k": 2,
+      "positional_labels": false,
+      "wide_choice_gt_16": false,
+      "majority_baseline_pct": 86.67,
+      "samples": 30,
+      "correct": 26,
+      "accuracy_pct": 86.67,
+      "avg_forward_ms": 92.25,
+      "avg_confidence": 0.9998,
+      "avg_entropy": 0.0016,
+      "single_expert_accuracy_pct": {
+        "etf_probe": 86.67,
+        "ncm_proto": 70.0,
+        "mcts_latent": 86.67,
+        "ar_loglik": 90.0
+      }
+    },
+    "gsm8k": {
+      "domain": "math",
+      "k": 4,
+      "positional_labels": true,
+      "wide_choice_gt_16": false,
+      "majority_baseline_pct": 36.67,
+      "samples": 30,
+      "correct": 21,
+      "accuracy_pct": 70.0,
+      "avg_forward_ms": 102.15,
+      "avg_confidence": 0.7261,
+      "avg_entropy": 0.8428,
+      "single_expert_accuracy_pct": {
+        "ar_loglik": 43.33,
+        "cot_generate": 71.43
+      }
+    },
+    "massive_de": {
+      "domain": "intent",
+      "k": 18,
+      "positional_labels": false,
+      "wide_choice_gt_16": true,
+      "majority_baseline_pct": 23.33,
+      "samples": 30,
+      "correct": 27,
+      "accuracy_pct": 90.0,
+      "avg_forward_ms": 92.66,
+      "avg_confidence": 0.979,
+      "avg_entropy": 0.0736,
+      "single_expert_accuracy_pct": {
+        "etf_probe": 90.0,
+        "ncm_proto": 80.0,
+        "mcts_latent": 90.0
+      }
+    },
+    "massive_en": {
+      "domain": "intent",
+      "k": 18,
+      "positional_labels": false,
+      "wide_choice_gt_16": true,
+      "majority_baseline_pct": 23.33,
+      "samples": 30,
+      "correct": 27,
+      "accuracy_pct": 90.0,
+      "avg_forward_ms": 80.46,
+      "avg_confidence": 0.9721,
+      "avg_entropy": 0.0885,
+      "single_expert_accuracy_pct": {
+        "etf_probe": 90.0,
+        "ncm_proto": 90.0,
+        "mcts_latent": 90.0
+      }
+    },
+    "multinli": {
+      "domain": "reading",
+      "k": 3,
+      "positional_labels": false,
+      "wide_choice_gt_16": false,
+      "majority_baseline_pct": 40.0,
+      "nli_head": "cross_attention_etf_probe",
+      "nli_canonical_classes": [
+        "entailment",
+        "neutral",
+        "contradiction"
+      ],
+      "nli_candidate_to_canonical": [
+        "entailment",
+        "neutral",
+        "contradiction"
+      ],
+      "relational_features": true,
+      "numeric_override_enabled": false,
+      "samples": 30,
+      "correct": 22,
+      "accuracy_pct": 73.33,
+      "avg_forward_ms": 298.68,
+      "avg_confidence": 0.9611,
+      "avg_entropy": 0.0805,
+      "single_expert_accuracy_pct": {
+        "etf_probe": 70.0,
+        "ncm_proto": 86.67,
+        "mcts_latent": 70.0,
+        "ar_loglik": 20.0
+      }
+    },
+    "paws": {
+      "domain": "reading",
+      "k": 2,
+      "positional_labels": false,
+      "wide_choice_gt_16": false,
+      "majority_baseline_pct": 66.67,
+      "relational_features": true,
+      "samples": 30,
+      "correct": 26,
+      "accuracy_pct": 86.67,
+      "avg_forward_ms": 268.47,
+      "avg_confidence": 1.0,
+      "avg_entropy": 0.0,
+      "single_expert_accuracy_pct": {
+        "etf_probe": 86.67,
+        "ncm_proto": 83.33,
+        "mcts_latent": 86.67,
+        "ar_loglik": 53.33
+      }
+    },
+    "pubmedqa": {
+      "domain": "reading",
+      "k": 3,
+      "positional_labels": false,
+      "wide_choice_gt_16": false,
+      "majority_baseline_pct": 70.0,
+      "samples": 30,
+      "correct": 20,
+      "accuracy_pct": 66.67,
+      "avg_forward_ms": 127.53,
+      "avg_confidence": 0.945,
+      "avg_entropy": 0.1412,
+      "single_expert_accuracy_pct": {
+        "etf_probe": 70.0,
+        "ncm_proto": 63.33,
+        "mcts_latent": 70.0,
+        "ar_loglik": 73.33
+      }
+    },
+    "squad2": {
+      "domain": "reading",
+      "k": 2,
+      "positional_labels": false,
+      "wide_choice_gt_16": false,
+      "majority_baseline_pct": 53.33,
+      "samples": 30,
+      "correct": 21,
+      "accuracy_pct": 70.0,
+      "avg_forward_ms": 102.47,
+      "avg_confidence": 1.0,
+      "avg_entropy": 0.0002,
+      "single_expert_accuracy_pct": {
+        "etf_probe": 70.0,
+        "ncm_proto": 76.67,
+        "mcts_latent": 70.0,
+        "ar_loglik": 53.33
+      }
+    },
+    "summeval": {
+      "domain": "ordinal",
+      "k": 5,
+      "positional_labels": false,
+      "wide_choice_gt_16": false,
+      "majority_baseline_pct": 33.33,
+      "samples": 30,
+      "correct": 13,
+      "accuracy_pct": 43.33,
+      "avg_forward_ms": 112.39,
+      "avg_confidence": 0.8891,
+      "avg_entropy": 0.2914,
+      "single_expert_accuracy_pct": {
+        "etf_probe": 43.33,
+        "ncm_proto": 30.0,
+        "mcts_latent": 43.33,
+        "ar_loglik": 43.33,
+        "cot_generate": 44.0
+      }
+    },
+    "vitaminc": {
+      "domain": "reading",
+      "k": 3,
+      "positional_labels": false,
+      "wide_choice_gt_16": false,
+      "majority_baseline_pct": 36.67,
+      "nli_head": "cross_attention_etf_probe",
+      "nli_canonical_classes": [
+        "entailment",
+        "neutral",
+        "contradiction"
+      ],
+      "nli_candidate_to_canonical": [
+        "entailment",
+        "contradiction",
+        "neutral"
+      ],
+      "relational_features": true,
+      "numeric_override_enabled": false,
+      "samples": 30,
+      "correct": 18,
+      "accuracy_pct": 60.0,
+      "avg_forward_ms": 275.67,
+      "avg_confidence": 0.9635,
+      "avg_entropy": 0.0853,
+      "single_expert_accuracy_pct": {
+        "etf_probe": 56.67,
+        "ncm_proto": 40.0,
+        "mcts_latent": 56.67,
+        "ar_loglik": 36.67
+      }
+    }
+  },
+  "error_count": 0,
+  "miss_count": 91,
+  "latent_mcts_cpu": {
+    "samples": 330,
+    "tokens_generated": 0,
+    "latency_ms": {
+      "mean": 4.146,
+      "p50": 3.459,
+      "p90": 6.199,
+      "max": 9.075
+    },
+    "agrees_with_map_pct": 100.0,
+    "simulations": {
+      "default": 64,
+      "hard": 128
+    }
+  },
+  "latent_vs_cot": {
+    "cot_latency_ms": {
+      "mean": 13132.808,
+      "p50": 8510.746,
+      "p90": 25862.035,
+      "max": 30538.814
+    },
+    "cot_samples": 106,
+    "mcts_latency_ms": {
+      "mean": 4.146,
+      "p50": 3.459,
+      "p90": 6.199,
+      "max": 9.075
+    },
+    "p50_speedup_x": 2460.464,
+    "note": "MCTS accuracy comes from non-positional tasks (reading/intent/safety/ordinal); CoT latency comes from gsm8k. Letter-label tasks never run latent MCTS."
+  },
+  "benchmark_version": "v4",
+  "timestamp": "2026-09-21T21:10:01Z",
+  "hardware": {
+    "device_name": "NVIDIA A100 80GB PCIe",
+    "cuda": "12.4",
+    "torch": "2.5.1+cu124",
+    "is_mock": false
+  },
+  "model_id": "custom",
+  "probe_fit": "leave_one_out",
+  "whitening_fit": "pooled_unsupervised",
+  "temperature_fit": "loo_nll_grid_per_task_and_expert",
+  "route_mode": "predicted",
+  "hyperparameters": {
+    "ridge_lambda": 0.1,
+    "zca_energy": 0.95,
+    "zca_shrink": 0.1,
+    "limit_per_task": 30,
+    "cot_enabled": true,
+    "max_new_tokens": 384
+  },
+  "limitations": [
+    "Probe fit is leave-one-out on 30 samples per task: an estimate, not a held-out test set.",
+    "Whitening statistics use all pooled features without labels (transductive).",
+    "Temperature selection has second-order leakage: other samples' LOO scores saw this sample as an exemplar.",
+    "Tasks with letter labels (ARC, GSM8K) never use probes: a position prior would score by artifact.",
+    "Latency covers hidden-state forwards, including both PAWS sentences; LOO head cost is excluded.",
+    "VitaminC and MultiNLI use separate premise/hypothesis forwards and the contrastive manifold head; no rule-based posthoc override applies.",
+    "mcts_latent runs only where the ETF probe runs: letter-label tasks (ARC, GSM8K) are excluded by the positional guard, so its accuracy and CoT latency are measured on different tasks."
+  ]
+}

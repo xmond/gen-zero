@@ -1,0 +1,837 @@
+{
+  "is_synthetic": true,
+  "notice": "Simulated LeagueArena payoff game with seeded fixtures; not evidence from real agents or a real-world task distribution.",
+  "seed": 42,
+  "generations": 100,
+  "matches_per_agent": 12,
+  "domain": "LeagueArena simulated payoff game",
+  "initial_elo": 1200.0,
+  "final_elo": 1090.3657583044358,
+  "elo_gain": -109.63424169556424,
+  "convergence": {
+    "passed": true,
+    "window": 20,
+    "score_tolerance": 0.05,
+    "elo_equivalence_margin": 34.86007028756008,
+    "drift_elo": 0.8799999999998818,
+    "drift_ci95": [
+      -6.61213220556926,
+      8.372132205569024
+    ],
+    "late_elo_std": 12.310723727068641,
+    "limitation": "descriptive interval; training samples are serially correlated"
+  },
+  "historical_evaluation": {
+    "tested_historical_snapshots": 100,
+    "rounds_per_opponent": 100,
+    "mean_win_rate": 0.4946,
+    "min_win_rate": 0.38,
+    "max_win_rate": 0.62,
+    "elo_delta": 17.218442020383463,
+    "win_rates": [
+      0.46,
+      0.5,
+      0.5,
+      0.55,
+      0.5,
+      0.58,
+      0.56,
+      0.48,
+      0.56,
+      0.5,
+      0.42,
+      0.47,
+      0.5,
+      0.48,
+      0.45,
+      0.56,
+      0.54,
+      0.43,
+      0.57,
+      0.51,
+      0.54,
+      0.43,
+      0.44,
+      0.57,
+      0.46,
+      0.55,
+      0.48,
+      0.41,
+      0.49,
+      0.52,
+      0.6,
+      0.5,
+      0.5,
+      0.48,
+      0.49,
+      0.5,
+      0.45,
+      0.49,
+      0.48,
+      0.51,
+      0.52,
+      0.49,
+      0.38,
+      0.57,
+      0.51,
+      0.54,
+      0.42,
+      0.48,
+      0.53,
+      0.58,
+      0.53,
+      0.47,
+      0.45,
+      0.47,
+      0.49,
+      0.49,
+      0.58,
+      0.41,
+      0.55,
+      0.45,
+      0.6,
+      0.45,
+      0.55,
+      0.4,
+      0.4,
+      0.53,
+      0.43,
+      0.42,
+      0.49,
+      0.44,
+      0.49,
+      0.5,
+      0.45,
+      0.47,
+      0.52,
+      0.5,
+      0.45,
+      0.46,
+      0.43,
+      0.46,
+      0.45,
+      0.48,
+      0.43,
+      0.53,
+      0.47,
+      0.41,
+      0.54,
+      0.62,
+      0.56,
+      0.47,
+      0.46,
+      0.44,
+      0.48,
+      0.5,
+      0.59,
+      0.51,
+      0.59,
+      0.56,
+      0.51,
+      0.5
+    ]
+  },
+  "history": [
+    {
+      "generation": 1,
+      "main_elo": 1110.84,
+      "main_exploiter_elo": 1257.21,
+      "league_exploiter_elo": 1192.82,
+      "archive_size": 4
+    },
+    {
+      "generation": 2,
+      "main_elo": 1067.35,
+      "main_exploiter_elo": 1284.16,
+      "league_exploiter_elo": 1189.98,
+      "archive_size": 5
+    },
+    {
+      "generation": 3,
+      "main_elo": 1077.33,
+      "main_exploiter_elo": 1288.44,
+      "league_exploiter_elo": 1171.09,
+      "archive_size": 6
+    },
+    {
+      "generation": 4,
+      "main_elo": 1082.47,
+      "main_exploiter_elo": 1298.09,
+      "league_exploiter_elo": 1168.93,
+      "archive_size": 7
+    },
+    {
+      "generation": 5,
+      "main_elo": 1074.65,
+      "main_exploiter_elo": 1306.4,
+      "league_exploiter_elo": 1159.02,
+      "archive_size": 8
+    },
+    {
+      "generation": 6,
+      "main_elo": 1075.51,
+      "main_exploiter_elo": 1309.01,
+      "league_exploiter_elo": 1164.6,
+      "archive_size": 9
+    },
+    {
+      "generation": 7,
+      "main_elo": 1098.16,
+      "main_exploiter_elo": 1309.44,
+      "league_exploiter_elo": 1165.13,
+      "archive_size": 10
+    },
+    {
+      "generation": 8,
+      "main_elo": 1111.01,
+      "main_exploiter_elo": 1297.87,
+      "league_exploiter_elo": 1168.81,
+      "archive_size": 11
+    },
+    {
+      "generation": 9,
+      "main_elo": 1137.44,
+      "main_exploiter_elo": 1281.58,
+      "league_exploiter_elo": 1154.08,
+      "archive_size": 12
+    },
+    {
+      "generation": 10,
+      "main_elo": 1116.4,
+      "main_exploiter_elo": 1291.89,
+      "league_exploiter_elo": 1171.89,
+      "archive_size": 13
+    },
+    {
+      "generation": 11,
+      "main_elo": 1115.11,
+      "main_exploiter_elo": 1296.78,
+      "league_exploiter_elo": 1146.33,
+      "archive_size": 14
+    },
+    {
+      "generation": 12,
+      "main_elo": 1108.13,
+      "main_exploiter_elo": 1290.74,
+      "league_exploiter_elo": 1153.0,
+      "archive_size": 15
+    },
+    {
+      "generation": 13,
+      "main_elo": 1110.82,
+      "main_exploiter_elo": 1285.49,
+      "league_exploiter_elo": 1160.63,
+      "archive_size": 16
+    },
+    {
+      "generation": 14,
+      "main_elo": 1119.98,
+      "main_exploiter_elo": 1284.62,
+      "league_exploiter_elo": 1153.46,
+      "archive_size": 17
+    },
+    {
+      "generation": 15,
+      "main_elo": 1134.27,
+      "main_exploiter_elo": 1282.64,
+      "league_exploiter_elo": 1152.64,
+      "archive_size": 18
+    },
+    {
+      "generation": 16,
+      "main_elo": 1133.46,
+      "main_exploiter_elo": 1279.43,
+      "league_exploiter_elo": 1152.28,
+      "archive_size": 19
+    },
+    {
+      "generation": 17,
+      "main_elo": 1120.99,
+      "main_exploiter_elo": 1255.42,
+      "league_exploiter_elo": 1156.62,
+      "archive_size": 20
+    },
+    {
+      "generation": 18,
+      "main_elo": 1129.07,
+      "main_exploiter_elo": 1254.15,
+      "league_exploiter_elo": 1167.09,
+      "archive_size": 21
+    },
+    {
+      "generation": 19,
+      "main_elo": 1118.47,
+      "main_exploiter_elo": 1261.03,
+      "league_exploiter_elo": 1159.93,
+      "archive_size": 22
+    },
+    {
+      "generation": 20,
+      "main_elo": 1126.51,
+      "main_exploiter_elo": 1262.11,
+      "league_exploiter_elo": 1176.75,
+      "archive_size": 23
+    },
+    {
+      "generation": 21,
+      "main_elo": 1112.84,
+      "main_exploiter_elo": 1244.77,
+      "league_exploiter_elo": 1183.68,
+      "archive_size": 24
+    },
+    {
+      "generation": 22,
+      "main_elo": 1116.23,
+      "main_exploiter_elo": 1252.92,
+      "league_exploiter_elo": 1175.75,
+      "archive_size": 25
+    },
+    {
+      "generation": 23,
+      "main_elo": 1121.29,
+      "main_exploiter_elo": 1240.75,
+      "league_exploiter_elo": 1177.17,
+      "archive_size": 26
+    },
+    {
+      "generation": 24,
+      "main_elo": 1124.74,
+      "main_exploiter_elo": 1248.98,
+      "league_exploiter_elo": 1165.04,
+      "archive_size": 27
+    },
+    {
+      "generation": 25,
+      "main_elo": 1106.21,
+      "main_exploiter_elo": 1253.27,
+      "league_exploiter_elo": 1169.13,
+      "archive_size": 28
+    },
+    {
+      "generation": 26,
+      "main_elo": 1111.63,
+      "main_exploiter_elo": 1249.19,
+      "league_exploiter_elo": 1179.82,
+      "archive_size": 29
+    },
+    {
+      "generation": 27,
+      "main_elo": 1117.21,
+      "main_exploiter_elo": 1246.19,
+      "league_exploiter_elo": 1186.35,
+      "archive_size": 30
+    },
+    {
+      "generation": 28,
+      "main_elo": 1095.26,
+      "main_exploiter_elo": 1267.71,
+      "league_exploiter_elo": 1171.19,
+      "archive_size": 31
+    },
+    {
+      "generation": 29,
+      "main_elo": 1091.35,
+      "main_exploiter_elo": 1269.46,
+      "league_exploiter_elo": 1156.48,
+      "archive_size": 32
+    },
+    {
+      "generation": 30,
+      "main_elo": 1103.86,
+      "main_exploiter_elo": 1267.37,
+      "league_exploiter_elo": 1168.1,
+      "archive_size": 33
+    },
+    {
+      "generation": 31,
+      "main_elo": 1106.49,
+      "main_exploiter_elo": 1271.3,
+      "league_exploiter_elo": 1178.46,
+      "archive_size": 34
+    },
+    {
+      "generation": 32,
+      "main_elo": 1102.27,
+      "main_exploiter_elo": 1282.28,
+      "league_exploiter_elo": 1169.02,
+      "archive_size": 35
+    },
+    {
+      "generation": 33,
+      "main_elo": 1101.03,
+      "main_exploiter_elo": 1302.94,
+      "league_exploiter_elo": 1163.38,
+      "archive_size": 36
+    },
+    {
+      "generation": 34,
+      "main_elo": 1115.79,
+      "main_exploiter_elo": 1293.53,
+      "league_exploiter_elo": 1154.94,
+      "archive_size": 37
+    },
+    {
+      "generation": 35,
+      "main_elo": 1110.99,
+      "main_exploiter_elo": 1298.76,
+      "league_exploiter_elo": 1158.19,
+      "archive_size": 38
+    },
+    {
+      "generation": 36,
+      "main_elo": 1109.07,
+      "main_exploiter_elo": 1294.35,
+      "league_exploiter_elo": 1151.54,
+      "archive_size": 39
+    },
+    {
+      "generation": 37,
+      "main_elo": 1116.57,
+      "main_exploiter_elo": 1298.85,
+      "league_exploiter_elo": 1168.54,
+      "archive_size": 40
+    },
+    {
+      "generation": 38,
+      "main_elo": 1087.21,
+      "main_exploiter_elo": 1304.94,
+      "league_exploiter_elo": 1175.87,
+      "archive_size": 41
+    },
+    {
+      "generation": 39,
+      "main_elo": 1099.81,
+      "main_exploiter_elo": 1308.62,
+      "league_exploiter_elo": 1178.34,
+      "archive_size": 42
+    },
+    {
+      "generation": 40,
+      "main_elo": 1094.15,
+      "main_exploiter_elo": 1309.26,
+      "league_exploiter_elo": 1186.28,
+      "archive_size": 43
+    },
+    {
+      "generation": 41,
+      "main_elo": 1088.96,
+      "main_exploiter_elo": 1310.53,
+      "league_exploiter_elo": 1173.64,
+      "archive_size": 44
+    },
+    {
+      "generation": 42,
+      "main_elo": 1125.59,
+      "main_exploiter_elo": 1290.29,
+      "league_exploiter_elo": 1173.46,
+      "archive_size": 45
+    },
+    {
+      "generation": 43,
+      "main_elo": 1118.9,
+      "main_exploiter_elo": 1287.45,
+      "league_exploiter_elo": 1159.62,
+      "archive_size": 46
+    },
+    {
+      "generation": 44,
+      "main_elo": 1116.39,
+      "main_exploiter_elo": 1276.76,
+      "league_exploiter_elo": 1145.08,
+      "archive_size": 47
+    },
+    {
+      "generation": 45,
+      "main_elo": 1110.27,
+      "main_exploiter_elo": 1269.13,
+      "league_exploiter_elo": 1163.77,
+      "archive_size": 48
+    },
+    {
+      "generation": 46,
+      "main_elo": 1086.02,
+      "main_exploiter_elo": 1283.91,
+      "league_exploiter_elo": 1174.81,
+      "archive_size": 49
+    },
+    {
+      "generation": 47,
+      "main_elo": 1104.83,
+      "main_exploiter_elo": 1297.08,
+      "league_exploiter_elo": 1172.03,
+      "archive_size": 50
+    },
+    {
+      "generation": 48,
+      "main_elo": 1117.76,
+      "main_exploiter_elo": 1275.64,
+      "league_exploiter_elo": 1174.78,
+      "archive_size": 51
+    },
+    {
+      "generation": 49,
+      "main_elo": 1125.63,
+      "main_exploiter_elo": 1264.49,
+      "league_exploiter_elo": 1154.61,
+      "archive_size": 52
+    },
+    {
+      "generation": 50,
+      "main_elo": 1111.15,
+      "main_exploiter_elo": 1270.08,
+      "league_exploiter_elo": 1160.89,
+      "archive_size": 53
+    },
+    {
+      "generation": 51,
+      "main_elo": 1116.96,
+      "main_exploiter_elo": 1276.62,
+      "league_exploiter_elo": 1153.54,
+      "archive_size": 54
+    },
+    {
+      "generation": 52,
+      "main_elo": 1113.69,
+      "main_exploiter_elo": 1257.58,
+      "league_exploiter_elo": 1146.49,
+      "archive_size": 55
+    },
+    {
+      "generation": 53,
+      "main_elo": 1127.31,
+      "main_exploiter_elo": 1255.19,
+      "league_exploiter_elo": 1161.56,
+      "archive_size": 56
+    },
+    {
+      "generation": 54,
+      "main_elo": 1136.82,
+      "main_exploiter_elo": 1244.57,
+      "league_exploiter_elo": 1165.07,
+      "archive_size": 57
+    },
+    {
+      "generation": 55,
+      "main_elo": 1125.67,
+      "main_exploiter_elo": 1249.93,
+      "league_exploiter_elo": 1156.29,
+      "archive_size": 58
+    },
+    {
+      "generation": 56,
+      "main_elo": 1123.21,
+      "main_exploiter_elo": 1248.12,
+      "league_exploiter_elo": 1158.75,
+      "archive_size": 59
+    },
+    {
+      "generation": 57,
+      "main_elo": 1108.28,
+      "main_exploiter_elo": 1254.28,
+      "league_exploiter_elo": 1180.4,
+      "archive_size": 60
+    },
+    {
+      "generation": 58,
+      "main_elo": 1114.31,
+      "main_exploiter_elo": 1248.36,
+      "league_exploiter_elo": 1167.63,
+      "archive_size": 61
+    },
+    {
+      "generation": 59,
+      "main_elo": 1114.16,
+      "main_exploiter_elo": 1250.28,
+      "league_exploiter_elo": 1170.33,
+      "archive_size": 62
+    },
+    {
+      "generation": 60,
+      "main_elo": 1109.17,
+      "main_exploiter_elo": 1253.53,
+      "league_exploiter_elo": 1166.7,
+      "archive_size": 63
+    },
+    {
+      "generation": 61,
+      "main_elo": 1106.79,
+      "main_exploiter_elo": 1266.9,
+      "league_exploiter_elo": 1168.39,
+      "archive_size": 64
+    },
+    {
+      "generation": 62,
+      "main_elo": 1115.71,
+      "main_exploiter_elo": 1264.53,
+      "league_exploiter_elo": 1169.37,
+      "archive_size": 65
+    },
+    {
+      "generation": 63,
+      "main_elo": 1114.6,
+      "main_exploiter_elo": 1256.01,
+      "league_exploiter_elo": 1163.87,
+      "archive_size": 66
+    },
+    {
+      "generation": 64,
+      "main_elo": 1123.95,
+      "main_exploiter_elo": 1254.12,
+      "league_exploiter_elo": 1165.61,
+      "archive_size": 67
+    },
+    {
+      "generation": 65,
+      "main_elo": 1114.66,
+      "main_exploiter_elo": 1254.74,
+      "league_exploiter_elo": 1162.19,
+      "archive_size": 68
+    },
+    {
+      "generation": 66,
+      "main_elo": 1116.3,
+      "main_exploiter_elo": 1258.71,
+      "league_exploiter_elo": 1163.98,
+      "archive_size": 69
+    },
+    {
+      "generation": 67,
+      "main_elo": 1116.83,
+      "main_exploiter_elo": 1241.72,
+      "league_exploiter_elo": 1145.61,
+      "archive_size": 70
+    },
+    {
+      "generation": 68,
+      "main_elo": 1106.15,
+      "main_exploiter_elo": 1248.9,
+      "league_exploiter_elo": 1165.21,
+      "archive_size": 71
+    },
+    {
+      "generation": 69,
+      "main_elo": 1113.0,
+      "main_exploiter_elo": 1237.66,
+      "league_exploiter_elo": 1171.81,
+      "archive_size": 72
+    },
+    {
+      "generation": 70,
+      "main_elo": 1104.83,
+      "main_exploiter_elo": 1241.63,
+      "league_exploiter_elo": 1164.51,
+      "archive_size": 73
+    },
+    {
+      "generation": 71,
+      "main_elo": 1121.11,
+      "main_exploiter_elo": 1232.59,
+      "league_exploiter_elo": 1148.66,
+      "archive_size": 74
+    },
+    {
+      "generation": 72,
+      "main_elo": 1108.78,
+      "main_exploiter_elo": 1246.6,
+      "league_exploiter_elo": 1158.71,
+      "archive_size": 75
+    },
+    {
+      "generation": 73,
+      "main_elo": 1090.82,
+      "main_exploiter_elo": 1244.74,
+      "league_exploiter_elo": 1156.76,
+      "archive_size": 76
+    },
+    {
+      "generation": 74,
+      "main_elo": 1098.13,
+      "main_exploiter_elo": 1238.3,
+      "league_exploiter_elo": 1158.76,
+      "archive_size": 77
+    },
+    {
+      "generation": 75,
+      "main_elo": 1115.78,
+      "main_exploiter_elo": 1240.98,
+      "league_exploiter_elo": 1167.24,
+      "archive_size": 78
+    },
+    {
+      "generation": 76,
+      "main_elo": 1105.13,
+      "main_exploiter_elo": 1248.07,
+      "league_exploiter_elo": 1163.29,
+      "archive_size": 79
+    },
+    {
+      "generation": 77,
+      "main_elo": 1076.77,
+      "main_exploiter_elo": 1265.37,
+      "league_exploiter_elo": 1159.25,
+      "archive_size": 80
+    },
+    {
+      "generation": 78,
+      "main_elo": 1091.18,
+      "main_exploiter_elo": 1265.95,
+      "league_exploiter_elo": 1163.99,
+      "archive_size": 81
+    },
+    {
+      "generation": 79,
+      "main_elo": 1093.75,
+      "main_exploiter_elo": 1258.03,
+      "league_exploiter_elo": 1144.75,
+      "archive_size": 82
+    },
+    {
+      "generation": 80,
+      "main_elo": 1104.6,
+      "main_exploiter_elo": 1256.71,
+      "league_exploiter_elo": 1133.13,
+      "archive_size": 83
+    },
+    {
+      "generation": 81,
+      "main_elo": 1118.4,
+      "main_exploiter_elo": 1246.24,
+      "league_exploiter_elo": 1157.11,
+      "archive_size": 84
+    },
+    {
+      "generation": 82,
+      "main_elo": 1114.33,
+      "main_exploiter_elo": 1248.43,
+      "league_exploiter_elo": 1151.4,
+      "archive_size": 85
+    },
+    {
+      "generation": 83,
+      "main_elo": 1127.07,
+      "main_exploiter_elo": 1238.46,
+      "league_exploiter_elo": 1165.4,
+      "archive_size": 86
+    },
+    {
+      "generation": 84,
+      "main_elo": 1123.49,
+      "main_exploiter_elo": 1238.83,
+      "league_exploiter_elo": 1168.39,
+      "archive_size": 87
+    },
+    {
+      "generation": 85,
+      "main_elo": 1103.56,
+      "main_exploiter_elo": 1237.29,
+      "league_exploiter_elo": 1169.6,
+      "archive_size": 88
+    },
+    {
+      "generation": 86,
+      "main_elo": 1106.77,
+      "main_exploiter_elo": 1229.65,
+      "league_exploiter_elo": 1160.6,
+      "archive_size": 89
+    },
+    {
+      "generation": 87,
+      "main_elo": 1095.56,
+      "main_exploiter_elo": 1238.47,
+      "league_exploiter_elo": 1161.89,
+      "archive_size": 90
+    },
+    {
+      "generation": 88,
+      "main_elo": 1106.69,
+      "main_exploiter_elo": 1233.46,
+      "league_exploiter_elo": 1168.9,
+      "archive_size": 91
+    },
+    {
+      "generation": 89,
+      "main_elo": 1113.28,
+      "main_exploiter_elo": 1231.45,
+      "league_exploiter_elo": 1152.84,
+      "archive_size": 92
+    },
+    {
+      "generation": 90,
+      "main_elo": 1116.68,
+      "main_exploiter_elo": 1228.54,
+      "league_exploiter_elo": 1161.29,
+      "archive_size": 93
+    },
+    {
+      "generation": 91,
+      "main_elo": 1120.85,
+      "main_exploiter_elo": 1229.26,
+      "league_exploiter_elo": 1152.64,
+      "archive_size": 94
+    },
+    {
+      "generation": 92,
+      "main_elo": 1101.6,
+      "main_exploiter_elo": 1232.06,
+      "league_exploiter_elo": 1167.77,
+      "archive_size": 95
+    },
+    {
+      "generation": 93,
+      "main_elo": 1083.05,
+      "main_exploiter_elo": 1259.39,
+      "league_exploiter_elo": 1140.26,
+      "archive_size": 96
+    },
+    {
+      "generation": 94,
+      "main_elo": 1092.09,
+      "main_exploiter_elo": 1264.87,
+      "league_exploiter_elo": 1150.28,
+      "archive_size": 97
+    },
+    {
+      "generation": 95,
+      "main_elo": 1092.72,
+      "main_exploiter_elo": 1266.64,
+      "league_exploiter_elo": 1144.79,
+      "archive_size": 98
+    },
+    {
+      "generation": 96,
+      "main_elo": 1105.19,
+      "main_exploiter_elo": 1263.68,
+      "league_exploiter_elo": 1138.59,
+      "archive_size": 99
+    },
+    {
+      "generation": 97,
+      "main_elo": 1108.16,
+      "main_exploiter_elo": 1266.66,
+      "league_exploiter_elo": 1138.15,
+      "archive_size": 100
+    },
+    {
+      "generation": 98,
+      "main_elo": 1117.57,
+      "main_exploiter_elo": 1259.41,
+      "league_exploiter_elo": 1159.3,
+      "archive_size": 101
+    },
+    {
+      "generation": 99,
+      "main_elo": 1119.04,
+      "main_exploiter_elo": 1248.11,
+      "league_exploiter_elo": 1149.95,
+      "archive_size": 102
+    },
+    {
+      "generation": 100,
+      "main_elo": 1090.37,
+      "main_exploiter_elo": 1268.55,
+      "league_exploiter_elo": 1141.02,
+      "archive_size": 103
+    }
+  ],
+  "passed": true
+}

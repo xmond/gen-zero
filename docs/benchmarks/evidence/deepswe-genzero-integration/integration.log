@@ -1,0 +1,11 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.16, pytest-9.1.1, pluggy-1.6.0
+rootdir: /ebs/pj/gen-zero-worktree/wire-deepswe
+configfile: pytest.ini
+plugins: anyio-4.12.1
+collected 29 items
+
+benchmarks/tests/test_deepswe_adapter_genzero_integration.py ........... [ 37%]
+..................                                                       [100%]
+
+============================== 29 passed in 7.68s ==============================

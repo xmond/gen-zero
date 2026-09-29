@@ -1,0 +1,44 @@
+[package]
+name = "gen-zero-service"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "MCP server (stdio and HTTP) exposing the Gen-Zero cognitive runtime through the `zero` tool."
+readme = "README.md"
+
+[dependencies]
+fs2 = "0.4"
+gen-zero-core = { workspace = true }
+gen-zero-storage = { workspace = true }
+gen-zero-model = { workspace = true }
+gen-zero-nanocore = { workspace = true }
+gen-zero-planner = { workspace = true }
+gen-zero-worldmodel = { workspace = true }
+gen-zero-lod = { workspace = true }
+gen-zero-gate = { workspace = true }
+gen-zero-provenance = { workspace = true }
+parking_lot = { workspace = true }
+tokio = { workspace = true }
+axum = { workspace = true }
+simd-json = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+zstd = { workspace = true }
+futures-util = "0.3"
+# Plain HTTP client for the co-located Python semantic scorer (no TLS on purpose).
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+thiserror = { workspace = true }
+blake3 = { workspace = true }
+# Spec 25 §5.3 mount digests are SHA-256 by contract (blake3 stays for token compare).
+sha2 = { workspace = true }
+arc-swap = { workspace = true }
+# Seeded Dirichlet root noise for the imagine PUCT search.
+rand = { workspace = true }
+
+[dev-dependencies]
+gen-zero-nanocore = { workspace = true, features = ["test-fixtures"] }
+tower = { workspace = true, features = ["util"] }

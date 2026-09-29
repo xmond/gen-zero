@@ -1,0 +1,20 @@
+[package]
+name = "gen-zero-gate"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+description = "Safety gates for Gen-Zero: linear constraint compiler, tiered policy gate, and sheaf relaxation certification."
+readme = "README.md"
+
+[dependencies]
+gen-zero-core = { workspace = true }
+gen-zero-lod = { workspace = true }
+arrayvec = { workspace = true }
+smallvec = { workspace = true }
+serde = { workspace = true }
+thiserror = { workspace = true }
+blake3 = { workspace = true }
+nalgebra = { workspace = true }

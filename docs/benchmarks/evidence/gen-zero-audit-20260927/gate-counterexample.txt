@@ -1,0 +1,5 @@
+input {'target': 'fixture-target', 'action': 'delete', 'confidence': 0.99, 'risk': 1.0}
+verdict {'action': 'proceed', 'passed': True, 'requires_confirmation': False, 'confidence': 0.99, 'risk_score': 1.0, 'triggered_rules': ['HARD_PATTERN_MATCH:delete', 'SOFT_RISK_BREACH:P(risk)=1.000>=0.2'], 'reason': "Whitelisted target 'fixture-target' overrode sensitive rule trigger.", 'metadata': {'whitelisted': True, 'profile': 'standard'}}
+input {'target': 'fixture-target', 'action': 'delete', 'confidence': 0.99, 'risk': nan}
+verdict {'action': 'proceed', 'passed': True, 'requires_confirmation': False, 'confidence': 0.99, 'risk_score': 1.0, 'triggered_rules': ['HARD_PATTERN_MATCH:delete', 'SOFT_RISK_BREACH:P(risk)=1.000>=0.2'], 'reason': "Whitelisted target 'fixture-target' overrode sensitive rule trigger.", 'metadata': {'whitelisted': True, 'profile': 'standard'}}
+missing {'action': 'proceed', 'passed': True, 'requires_confirmation': False, 'confidence': 0.5, 'risk_score': 0.0, 'triggered_rules': [], 'reason': 'Cleared all policy gates. Safe for autonomous execution.', 'metadata': {'profile': 'standard'}}

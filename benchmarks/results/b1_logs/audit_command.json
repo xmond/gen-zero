@@ -1,0 +1,9 @@
+{
+  "command": [
+    "python",
+    "benchmarks/results/b1_logs/audit_runner.py"
+  ],
+  "exit_code": 1,
+  "wall_seconds": 23.121349334716797,
+  "log": "benchmarks/results/b1_logs/04.log"
+}

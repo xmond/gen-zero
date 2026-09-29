@@ -1,0 +1,24 @@
+{
+  "command": [
+    "/tmp/r4-planners-venv/bin/python",
+    "-m",
+    "pytest",
+    "python/gen_zero/tests/test_issue_76_constraint_compiler.py",
+    "python/gen_zero/tests/test_league_arena.py",
+    "python/gen_zero/tests/test_issue_93_orthogonal_6_planner_engines.py",
+    "python/gen_zero/tests/test_r4_planner_constraint_regressions.py",
+    "python/gen_zero/tests/test_fail_closed_service.py",
+    "python/gen_zero/tests/test_round12_contract.py",
+    "python/gen_zero/tests/test_f4_fail_closed.py",
+    "-q"
+  ],
+  "cwd": "/ebs/pj/gen-zero-worktree/rm-r4-planners",
+  "exit_code": 1,
+  "elapsed_s": 51.707507371902466,
+  "log": "/ebs/pj/gen-zero-worktree/rm-r4-planners/benchmarks/results/r4_evidence/tests_final.log",
+  "environment": {
+    "PYTHONPATH": "python",
+    "OPENBLAS_NUM_THREADS": null,
+    "OMP_NUM_THREADS": null
+  }
+}

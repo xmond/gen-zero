@@ -1,0 +1,13 @@
+Gen-Zero
+Copyright 2024-2026 The Gen-Zero Authors (Gen-Zero Core Team <core@gen-zero.ai>)
+
+This project is licensed under the Apache License, Version 2.0. See LICENSE.
+
+Dependency acknowledgments
+
+The Rust workspace uses open-source projects including Tokio, Axum, Serde,
+BLAKE3, and clap. The Python package uses open-source projects including
+NumPy, PyTorch, Pydantic, FastAPI, and Ruff (development tooling).
+Their authors retain their respective copyrights. Each dependency is governed
+by its own license; consult its distributed license and notice files when
+redistributing dependencies. This NOTICE does not change those licenses.

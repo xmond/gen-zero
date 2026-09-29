@@ -1,0 +1,170 @@
+{
+  "features_file": "/ebs/pj/gen-zero/benchmarks/artifacts/zero/zero_calibration_features_v1.npz",
+  "chosen_weight_decay": 0.03,
+  "epochs": 400,
+  "lr": 0.05,
+  "seed": 0,
+  "cross_validation": {
+    "folds": 4,
+    "grid": [
+      {
+        "weight_decay": 0.003,
+        "held_out_accuracy_mean": 0.46474358974358976,
+        "held_out_accuracy_per_fold": [
+          0.47435897435897434,
+          0.46153846153846156,
+          0.5,
+          0.4230769230769231
+        ],
+        "cosine_baseline_accuracy_mean": 0.3782051282051282
+      },
+      {
+        "weight_decay": 0.01,
+        "held_out_accuracy_mean": 0.4583333333333333,
+        "held_out_accuracy_per_fold": [
+          0.4230769230769231,
+          0.46153846153846156,
+          0.5128205128205128,
+          0.4358974358974359
+        ],
+        "cosine_baseline_accuracy_mean": 0.3782051282051282
+      },
+      {
+        "weight_decay": 0.03,
+        "held_out_accuracy_mean": 0.46794871794871795,
+        "held_out_accuracy_per_fold": [
+          0.47435897435897434,
+          0.4230769230769231,
+          0.5128205128205128,
+          0.46153846153846156
+        ],
+        "cosine_baseline_accuracy_mean": 0.3782051282051282
+      },
+      {
+        "weight_decay": 0.1,
+        "held_out_accuracy_mean": 0.46474358974358976,
+        "held_out_accuracy_per_fold": [
+          0.5128205128205128,
+          0.48717948717948717,
+          0.4358974358974359,
+          0.4230769230769231
+        ],
+        "cosine_baseline_accuracy_mean": 0.3782051282051282
+      },
+      {
+        "weight_decay": 0.3,
+        "held_out_accuracy_mean": 0.3942307692307692,
+        "held_out_accuracy_per_fold": [
+          0.3974358974358974,
+          0.3974358974358974,
+          0.38461538461538464,
+          0.3974358974358974
+        ],
+        "cosine_baseline_accuracy_mean": 0.3782051282051282
+      },
+      {
+        "weight_decay": 1.0,
+        "held_out_accuracy_mean": 0.3717948717948718,
+        "held_out_accuracy_per_fold": [
+          0.38461538461538464,
+          0.3717948717948718,
+          0.3076923076923077,
+          0.4230769230769231
+        ],
+        "cosine_baseline_accuracy_mean": 0.3782051282051282
+      }
+    ]
+  },
+  "cross_validation_per_task": {
+    "aegis_safety": {
+      "n": 24,
+      "head_cv_accuracy": 0.5,
+      "cosine_baseline_accuracy": 0.5416666666666666
+    },
+    "arc_challenge": {
+      "n": 24,
+      "head_cv_accuracy": 0.375,
+      "cosine_baseline_accuracy": 0.5
+    },
+    "boolq": {
+      "n": 24,
+      "head_cv_accuracy": 0.4583333333333333,
+      "cosine_baseline_accuracy": 0.4583333333333333
+    },
+    "civil_comments": {
+      "n": 24,
+      "head_cv_accuracy": 0.9583333333333334,
+      "cosine_baseline_accuracy": 0.625
+    },
+    "gsm8k": {
+      "n": 24,
+      "head_cv_accuracy": 0.3333333333333333,
+      "cosine_baseline_accuracy": 0.4166666666666667
+    },
+    "massive_de": {
+      "n": 24,
+      "head_cv_accuracy": 0.2916666666666667,
+      "cosine_baseline_accuracy": 0.125
+    },
+    "massive_en": {
+      "n": 24,
+      "head_cv_accuracy": 0.4583333333333333,
+      "cosine_baseline_accuracy": 0.20833333333333334
+    },
+    "multinli": {
+      "n": 24,
+      "head_cv_accuracy": 0.375,
+      "cosine_baseline_accuracy": 0.16666666666666666
+    },
+    "paws": {
+      "n": 24,
+      "head_cv_accuracy": 0.7083333333333334,
+      "cosine_baseline_accuracy": 0.2916666666666667
+    },
+    "pubmedqa": {
+      "n": 24,
+      "head_cv_accuracy": 0.4166666666666667,
+      "cosine_baseline_accuracy": 0.375
+    },
+    "squad2": {
+      "n": 24,
+      "head_cv_accuracy": 0.5833333333333334,
+      "cosine_baseline_accuracy": 0.4583333333333333
+    },
+    "summeval": {
+      "n": 24,
+      "head_cv_accuracy": 0.4166666666666667,
+      "cosine_baseline_accuracy": 0.3333333333333333
+    },
+    "vitaminc": {
+      "n": 24,
+      "head_cv_accuracy": 0.20833333333333334,
+      "cosine_baseline_accuracy": 0.4166666666666667
+    }
+  },
+  "final_train_fit": {
+    "records": 312,
+    "head_accuracy_on_training_records": 0.5448717948717948,
+    "cosine_baseline_accuracy_on_training_records": 0.3782051282051282,
+    "initial_loss": 1.290513741548476,
+    "final_loss": 1.264951033768884
+  },
+  "artifact": "/ebs/pj/gen-zero/benchmarks/artifacts/zero/zero_task_head_v1.npz",
+  "artifact_provenance": {
+    "version": 1,
+    "dim": 64,
+    "encoder_id": "zero-qwen2.5-0.5b-trunk:int8:last-token",
+    "manifold_sha256": "670539b71f384e17db05e1f1e94c1b8796569d66d83b2c783ecc04289ca52de3",
+    "source": "calibration_clean_16.jsonl:bd45f4df430e",
+    "split": "calibration",
+    "samples": 312,
+    "weight_decay": 0.03,
+    "epochs": 400,
+    "lr": 0.05,
+    "seed": 0,
+    "training_sha256": "e8f0dd206bbc01ab389855fa8a6b0f675143497efdee4fb853101159483cdc6f",
+    "initial_loss": 1.290513741548476,
+    "final_loss": 1.264951033768884
+  },
+  "honesty_note": "head_accuracy_on_training_records is an in-sample number (the head was fit on these same 312 rows) and is reported only as a training diagnostic; cross_validation/cross_validation_per_task are the only numbers in this report that estimate out-of-sample accuracy, and even those are held out within the 312-row calibration split, not the frozen 930-row test set."
+}

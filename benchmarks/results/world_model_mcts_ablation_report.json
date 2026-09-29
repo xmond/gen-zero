@@ -1,0 +1,1732 @@
+{
+  "is_synthetic": true,
+  "notice": "Paired seeded torus diagnostic using privileged exact graph dynamics; no neural model was trained or evaluated.",
+  "method": "paired seeded torus; greedy coordinate baseline vs MCTS with privileged exact graph dynamics; no neural training",
+  "episodes": 100,
+  "seed_start": 0,
+  "simulations_per_decision": 32,
+  "max_steps": 20,
+  "metrics": {
+    "baseline": {
+      "success_rate_pct": 0.0,
+      "trap_rate_pct": 100.0,
+      "mean_steps": 1,
+      "mean_decision_latency_ms": 0.01056555,
+      "total_model_calls": 0
+    },
+    "world_model": {
+      "success_rate_pct": 100.0,
+      "trap_rate_pct": 0.0,
+      "mean_steps": 4.71,
+      "mean_decision_latency_ms": 0.681617912,
+      "total_model_calls": 145364
+    }
+  },
+  "mcnemar_success": {
+    "baseline_only": 0,
+    "world_model_only": 100,
+    "p_exact_two_sided": 1.5777218104420236e-30
+  },
+  "paired_rows": [
+    {
+      "seed": 0,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.015099,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.58040225,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 1,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0155,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.739631,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 2,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.012499,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.635775,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 3,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.012199,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.5728775,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 4,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.012499,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.638925,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 5,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.012099,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7248114,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 6,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.011799,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.715812,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 7,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0126,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7317714,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 8,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0114,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7205716,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 9,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0098,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6813932,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 10,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.010399,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7554104,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 11,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.023399,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6691536,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 12,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009399,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7247716,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 13,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009199,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7009128,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 14,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0097,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.93468825,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 15,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.010199,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6890729999999999,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 16,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0113,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6705136,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 17,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0102,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.688813,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 18,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0096,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6981728,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 19,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.010199,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.5732524999999999,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 20,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0084,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7261316,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 21,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009399,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7029124,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 22,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0097,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.578627,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 23,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.031298,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.57645225,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 24,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0088,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.55730325,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 25,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009099,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.587452,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 26,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0095,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.685273,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 27,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0098,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7292714,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 28,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0092,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7511904,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 29,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0099,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6679538,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 30,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.010099,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7841692,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 31,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.013299,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.660149,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 32,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009699,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.59217675,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 33,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009599,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7093322,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 34,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0103,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.713272,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 35,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009599,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.6277755,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 36,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0103,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.58920175,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 37,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009599,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.58850225,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 38,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0099,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7127519999999999,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 39,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009499,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6793134,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 40,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009799,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.57172775,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 41,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0095,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.56877775,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 42,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.008699,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7141922,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 43,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009099,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7212718,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 44,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0095,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7010926000000001,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 45,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009799,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7123722,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 46,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0094,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.61457575,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 47,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0097,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7028324,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 48,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009499,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.58985225,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 49,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0093,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7013526,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 50,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0087,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6928528,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 51,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0091,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.737731,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 52,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0095,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6953126000000001,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 53,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0098,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7101722,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 54,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009599,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7218716,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 55,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009399,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.587002,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 56,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0095,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6909928,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 57,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.008799,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7302312,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 58,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009499,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7298514,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 59,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009599,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7058724,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 60,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0098,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.714412,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 61,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0104,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7007926,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 62,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009499,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.5764025,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 63,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.010299,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7334912,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 64,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0093,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7214716,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 65,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0091,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7004326000000001,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 66,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0087,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6823132000000001,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 67,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0086,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6974726,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 68,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0099,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.5726775,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 69,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0096,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.6494745,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 70,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0103,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.8724656000000001,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 71,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.010299,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.8031286,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 72,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.012,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7620502,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 73,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0091,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7287314,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 74,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0099,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7206116,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 75,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009899,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7048924,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 76,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0101,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6978325999999999,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 77,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0094,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.5657525,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 78,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0093,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6801532,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 79,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0099,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.713072,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 80,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0093,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7330912,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 81,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.010199,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6990526,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 82,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0095,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.689013,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 83,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009999,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.57642725,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 84,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0094,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7076524,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 85,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0097,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.715632,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 86,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0107,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7225518,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 87,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0095,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7119722,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 88,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0093,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6737734,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 89,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0098,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.582377,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 90,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009599,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.666314,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 91,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.01,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.709152,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 92,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009199,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7356312,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 93,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.018599,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.585652,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 94,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009899,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.5987264999999999,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 95,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0098,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7289114,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 96,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0102,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7035322,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 97,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.023299,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7035926,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 98,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0098,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6799732,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 99,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009499,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.5752525,
+        "model_calls": 1048
+      }
+    }
+  ]
+}

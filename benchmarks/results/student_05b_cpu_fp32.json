@@ -1,0 +1,58 @@
+{
+  "model": "/home/user/.cache/huggingface/hub/models--Qwen--Qwen2.5-0.5B/snapshots/060db6499f32faf8b98477b0a26969ef7d8b9987",
+  "precision": "fp32",
+  "device": "cpu",
+  "cpu": {
+    "logical_cores": 24,
+    "threads_used": 8
+  },
+  "input_tokens": 10,
+  "hidden_size": 896,
+  "manifold_size": 64,
+  "memory": {
+    "snapshot_storage_bytes": 999586050,
+    "registered_parameter_bytes": 1976131072,
+    "rss_before_load_bytes": 363278336,
+    "rss_after_load_bytes": 2505445376,
+    "rss_load_peak_bytes": 3491799040,
+    "rss_inference_peak_bytes": 2515587072,
+    "rss_final_bytes": 2515582976,
+    "rss_model_load_delta_bytes": 2142167040,
+    "gpu_peak_bytes": 0
+  },
+  "encoder_forward": {
+    "iterations": 10,
+    "p50_ms": 98.099087132141,
+    "p90_ms": 99.478022987023,
+    "mean_ms": 97.78067031875253,
+    "samples_per_second": 10.226970184803678,
+    "input_tokens_per_second": 102.26970184803677
+  },
+  "cached_hidden_to_uncalibrated_logits": {
+    "iterations": 10,
+    "p50_ms": 0.7960179354995489,
+    "p90_ms": 1.0147694498300552,
+    "mean_ms": 0.8009079378098249,
+    "samples_per_second": 1248.582955407603,
+    "input_tokens_per_second": 12485.82955407603
+  },
+  "text_to_uncalibrated_logits": {
+    "iterations": 10,
+    "p50_ms": 100.82647926174104,
+    "p90_ms": 105.74360187165439,
+    "mean_ms": 101.3610374648124,
+    "samples_per_second": 9.865723802868052,
+    "input_tokens_per_second": 98.65723802868051
+  },
+  "bridge": {
+    "rank": 8,
+    "dynamics_steps": 4,
+    "finite": true,
+    "semantic_decision_emitted": false,
+    "calibrated": false
+  },
+  "accuracy": {
+    "measured": false,
+    "reason": "no trained projector/dynamics/decision artifact or labelled evaluation set was supplied"
+  }
+}

@@ -1,0 +1,2 @@
+PASS: candidate identities, released BoN combinatorics, ties, AUC, Spearman, failures, source/checkpoint hashes
+reference_evaluator_sha256=8f7ca75ad07691de81542ca06ed8ce40f277eeddce0c2147802a000fbc18e4ad

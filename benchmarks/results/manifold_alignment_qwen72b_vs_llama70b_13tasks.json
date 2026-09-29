@@ -1,0 +1,616 @@
+{
+  "dir_a": "/ebs/data/extracted_features/qwen72b/features",
+  "dir_b": "/ebs/data/extracted_features/llama70b",
+  "tasks": [
+    "aegis_safety",
+    "boolq",
+    "civil_comments",
+    "helpsteer2",
+    "massive_de",
+    "massive_en",
+    "multinli",
+    "paws",
+    "pubmedqa",
+    "squad2",
+    "summeval_consistency",
+    "summeval_relevance",
+    "vitaminc"
+  ],
+  "n_tasks": 13,
+  "controls": true,
+  "summary_unweighted_mean_over_tasks": {
+    "train_full": {
+      "linear_cka_mean": 0.4815050081370108,
+      "procrustes_residual_mean": 0.7790347298019243,
+      "linear_cka_zscore_mean": 0.5983997225997746,
+      "null_linear_cka_mean": 0.016711461004903512,
+      "null_procrustes_residual_mean": 1.1826851395934228
+    },
+    "test_full": {
+      "linear_cka_mean": 0.5160477349901652,
+      "procrustes_residual_mean": 0.6791202720377658,
+      "linear_cka_zscore_mean": 0.6399652088055938,
+      "null_linear_cka_mean": 0.0569058421939859,
+      "null_procrustes_residual_mean": 1.0580115922356577
+    }
+  },
+  "per_task": {
+    "aegis_safety": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/aegis_safety.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/aegis_safety.npz",
+      "n_train": 1000,
+      "n_test": 250,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 1000,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.3859947507570052,
+          "procrustes_residual": 0.8596846023854176,
+          "linear_cka_zscore": 0.6265828001866125,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.007177262849670574,
+            "linear_cka_max": 0.008522915832517226,
+            "procrustes_residual_mean": 1.243426424675908,
+            "procrustes_residual_min": 1.23948421794799
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 250,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.41227902436526653,
+          "procrustes_residual": 0.8025213017629396,
+          "linear_cka_zscore": 0.6292885302752335,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.02431407106836617,
+            "linear_cka_max": 0.025850037261881387,
+            "procrustes_residual_mean": 1.147638110798851,
+            "procrustes_residual_min": 1.145110768606735
+          }
+        }
+      ],
+      "sha256_a": "1a549d60906f4d93039c3219277a7eaf17508f88ea0df8599f50e88d0b9d5c1b",
+      "sha256_b": "ef2960039e5970a5a9c7d7c8fdd3e7a287c8eaf66ade743fcbd8a2ddae989e4a"
+    },
+    "boolq": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/boolq.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/boolq.npz",
+      "n_train": 9264,
+      "n_test": 300,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 9264,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.7324856375055793,
+          "procrustes_residual": 0.8018523212325891,
+          "linear_cka_zscore": 0.7811605876646501,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.0008365654278825627,
+            "linear_cka_max": 0.000915617971362128,
+            "procrustes_residual_mean": 1.3184618615601755,
+            "procrustes_residual_min": 1.3176680943984338
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 300,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.7345055680824827,
+          "procrustes_residual": 0.6474144077870406,
+          "linear_cka_zscore": 0.7908666167808297,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.023238250969579526,
+            "linear_cka_max": 0.02633698685369099,
+            "procrustes_residual_mean": 1.086110599346303,
+            "procrustes_residual_min": 1.0812860537117015
+          }
+        }
+      ],
+      "sha256_a": "0b5bb874e4905ff62574294f646d0a5eef15c8a6e7bb3518938615e6b0897f2c",
+      "sha256_b": "d3b0172849c785016ee76ea01dde4f3c05c448e2ae49a29be9e2c88080d0da8b"
+    },
+    "civil_comments": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/civil_comments.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/civil_comments.npz",
+      "n_train": 1000,
+      "n_test": 300,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 1000,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.44637577827983876,
+          "procrustes_residual": 0.8236235941679835,
+          "linear_cka_zscore": 0.6320974009729764,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.009017968755507687,
+            "linear_cka_max": 0.011124796373450136,
+            "procrustes_residual_mean": 1.2040782250335178,
+            "procrustes_residual_min": 1.1999875121864316
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 300,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.40518364973069027,
+          "procrustes_residual": 0.7729422618501062,
+          "linear_cka_zscore": 0.6183758776469666,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.030036752589993387,
+            "linear_cka_max": 0.033074303706841696,
+            "procrustes_residual_mean": 1.1009733916572457,
+            "procrustes_residual_min": 1.0968458043039788
+          }
+        }
+      ],
+      "sha256_a": "81e12de1a1db9a3ea2033444bef54e381fe852a5a84232bebc3288d28a7057b6",
+      "sha256_b": "3254b02807e72215284eae762a666984bd4c729083c46d2b0a5c2af1c9824e5b"
+    },
+    "helpsteer2": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/helpsteer2.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/helpsteer2.npz",
+      "n_train": 1000,
+      "n_test": 249,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 1000,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.49488431523560983,
+          "procrustes_residual": 0.8368928795961967,
+          "linear_cka_zscore": 0.585017549628405,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.01166141127968405,
+            "linear_cka_max": 0.012451942978846262,
+            "procrustes_residual_mean": 1.1916862799410028,
+            "procrustes_residual_min": 1.18934304599362
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 249,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.5315545577743578,
+          "procrustes_residual": 0.7415833271295177,
+          "linear_cka_zscore": 0.622444034527542,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.03659013809606379,
+            "linear_cka_max": 0.037669200346048363,
+            "procrustes_residual_mean": 1.0983552281425322,
+            "procrustes_residual_min": 1.0961904800152527
+          }
+        }
+      ],
+      "sha256_a": "62568fd84eda03651a536de838025b9ae5239143b4bf6b6c7f88ad6ff421807b",
+      "sha256_b": "1765cda1421617ca321c52c3d9f837c67e3a35ecf474b68873c457a518d7db2a"
+    },
+    "massive_de": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/massive_de.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/massive_de.npz",
+      "n_train": 11247,
+      "n_test": 350,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 11247,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.6632734037125517,
+          "procrustes_residual": 0.6335915470112793,
+          "linear_cka_zscore": 0.8195637575242763,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.0026964807281259213,
+            "linear_cka_max": 0.0027256052448184223,
+            "procrustes_residual_mean": 1.3202377439314323,
+            "procrustes_residual_min": 1.3200881699596634
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 350,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.678704982245728,
+          "procrustes_residual": 0.4887976821413476,
+          "linear_cka_zscore": 0.8266050110296177,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.08182667457946562,
+            "linear_cka_max": 0.08375902214388542,
+            "procrustes_residual_mean": 1.0016340788334157,
+            "procrustes_residual_min": 0.9998139937672766
+          }
+        }
+      ],
+      "sha256_a": "522db7e482cf5aa65cbb3aa99a5d441e6c608f8e2633392f5e35e917766a168c",
+      "sha256_b": "62bb38bc9e080d95f372d1206de2c4a21376bed95fc42f25fef1f679026d7baa"
+    },
+    "massive_en": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/massive_en.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/massive_en.npz",
+      "n_train": 1000,
+      "n_test": 350,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 1000,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.7296411103099202,
+          "procrustes_residual": 0.5167260953435598,
+          "linear_cka_zscore": 0.8302363268077939,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.025865630121442527,
+            "linear_cka_max": 0.02694667044484322,
+            "procrustes_residual_mean": 1.1562019977781688,
+            "procrustes_residual_min": 1.1552832688424066
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 350,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.7413746413964772,
+          "procrustes_residual": 0.45738393124287313,
+          "linear_cka_zscore": 0.8422196485885417,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.06534179163801283,
+            "linear_cka_max": 0.0683888652963601,
+            "procrustes_residual_mean": 1.0405251407393978,
+            "procrustes_residual_min": 1.0352944633717422
+          }
+        }
+      ],
+      "sha256_a": "6bf96fd909a0883d26d58fcec2ed3c3e6234b831f0885093bac92b6a4fb6c1a8",
+      "sha256_b": "bbb91c2a9a579a04e5ae97224e3be8af34ed18a0c7659f470a55477894aca7ef"
+    },
+    "multinli": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/multinli.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/multinli.npz",
+      "n_train": 1000,
+      "n_test": 299,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 1000,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.204594773797735,
+          "procrustes_residual": 0.9186089232931759,
+          "linear_cka_zscore": 0.3024314107503192,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.011892914643083103,
+            "linear_cka_max": 0.013124695065708984,
+            "procrustes_residual_mean": 1.1801174021354839,
+            "procrustes_residual_min": 1.1773825949119685
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 299,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.21954256555790788,
+          "procrustes_residual": 0.8423907140204067,
+          "linear_cka_zscore": 0.32957873682596217,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.04135715896556114,
+            "linear_cka_max": 0.05006768659244662,
+            "procrustes_residual_mean": 1.092308998441753,
+            "procrustes_residual_min": 1.0858108440761371
+          }
+        }
+      ],
+      "sha256_a": "53fcfbee86975b7110147179d6c9a0813e881631889a7c618434a7d01eea8728",
+      "sha256_b": "1b8165fe5c72e6e8859d24b4f9c7d0065147c92336ae46a2d994c4e210fe4504"
+    },
+    "paws": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/paws.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/paws.npz",
+      "n_train": 1000,
+      "n_test": 250,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 1000,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.3970712551664645,
+          "procrustes_residual": 0.8773105382172317,
+          "linear_cka_zscore": 0.4539825253455443,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.019992962107413217,
+            "linear_cka_max": 0.021248906745203293,
+            "procrustes_residual_mean": 1.140614170083384,
+            "procrustes_residual_min": 1.138795628176266
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 250,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.42401563285659355,
+          "procrustes_residual": 0.7742347064029681,
+          "linear_cka_zscore": 0.4852722438315295,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.07131746629610541,
+            "linear_cka_max": 0.0776932519322741,
+            "procrustes_residual_mean": 0.9978356305167914,
+            "procrustes_residual_min": 0.9895831669146558
+          }
+        }
+      ],
+      "sha256_a": "987e9db1cfbfe34305fe3615fb0f7c06d8e56c3b9f6b0d3c3d78ec4e0b7ee415",
+      "sha256_b": "1df188764d1e8d89e18a11d5f52209242360cd708c1aa6d08eb0b3f63e818e4a"
+    },
+    "pubmedqa": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/pubmedqa.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/pubmedqa.npz",
+      "n_train": 750,
+      "n_test": 250,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 750,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.4565788372518421,
+          "procrustes_residual": 0.6235439591835461,
+          "linear_cka_zscore": 0.6310965332007878,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.07333341024066552,
+            "linear_cka_max": 0.07621451033604124,
+            "procrustes_residual_mean": 0.9272327557768634,
+            "procrustes_residual_min": 0.9257369360483767
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 250,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.5397655609097808,
+          "procrustes_residual": 0.5222294612394416,
+          "linear_cka_zscore": 0.7073237294505272,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.19713886256053112,
+            "linear_cka_max": 0.19850931887275858,
+            "procrustes_residual_mean": 0.7587135709287208,
+            "procrustes_residual_min": 0.7580721876685418
+          }
+        }
+      ],
+      "sha256_a": "aa07455d2972410bc77e0fb075e0ba606421f398a7f5595b8fb0bee3eca0b6b1",
+      "sha256_b": "8c2980c43d71d4409b6d7dc6c6eedc80c5a8c74a03793d5e338f5329a67f606d"
+    },
+    "squad2": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/squad2.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/squad2.npz",
+      "n_train": 1000,
+      "n_test": 299,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 1000,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.5788397553608853,
+          "procrustes_residual": 0.7980112359546603,
+          "linear_cka_zscore": 0.6597884943748716,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.011565244047796311,
+            "linear_cka_max": 0.012453069475315418,
+            "procrustes_residual_mean": 1.1488286778380272,
+            "procrustes_residual_min": 1.148089791157302
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 299,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.5984971086147088,
+          "procrustes_residual": 0.6718829099551782,
+          "linear_cka_zscore": 0.6965033513637319,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.03940241176153105,
+            "linear_cka_max": 0.042585223920827045,
+            "procrustes_residual_mean": 1.0935966809423936,
+            "procrustes_residual_min": 1.089769338771373
+          }
+        }
+      ],
+      "sha256_a": "00d1b4ff0d09633c49cb61d66de55bd50c0e49e57e3169d950d87e2ec65b0899",
+      "sha256_b": "cad113956b9e1dde9faeaf7113ae9cdba0c85549fccffa22a0d74801d93ed7f4"
+    },
+    "summeval_consistency": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/summeval_consistency.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/summeval_consistency.npz",
+      "n_train": 1000,
+      "n_test": 144,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 1000,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.5022910514785824,
+          "procrustes_residual": 0.7494685422433695,
+          "linear_cka_zscore": 0.5548876984891116,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.012848933209393476,
+            "linear_cka_max": 0.0138877414217518,
+            "procrustes_residual_mean": 1.1875639536219378,
+            "procrustes_residual_min": 1.1856186225703886
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 144,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.6169391934742879,
+          "procrustes_residual": 0.5921513588002895,
+          "linear_cka_zscore": 0.7185465583710114,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.06346715478646343,
+            "linear_cka_max": 0.06376839733885098,
+            "procrustes_residual_mean": 1.057605606440714,
+            "procrustes_residual_min": 1.0548625403370888
+          }
+        }
+      ],
+      "sha256_a": "77479cf6057d9cb4cc2b4c9e6f738a3e02441c455cafe5b6b826d448763d8d23",
+      "sha256_b": "99300d5a00a6032981cacfda0110696f4c403607267f69d48a6e4e1a4272075d"
+    },
+    "summeval_relevance": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/summeval_relevance.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/summeval_relevance.npz",
+      "n_train": 1000,
+      "n_test": 240,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 1000,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.3318360940584274,
+          "procrustes_residual": 0.8629217458986144,
+          "linear_cka_zscore": 0.44904266207979077,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.009563281820407549,
+            "linear_cka_max": 0.010551538210721485,
+            "procrustes_residual_mean": 1.2407356795728994,
+            "procrustes_residual_min": 1.238863270166085
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 240,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.42817674447855936,
+          "procrustes_residual": 0.7530445144274934,
+          "linear_cka_zscore": 0.5653476756385258,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.033425452610887724,
+            "linear_cka_max": 0.03708560946695894,
+            "procrustes_residual_mean": 1.1547670092172007,
+            "procrustes_residual_min": 1.1495222404845338
+          }
+        }
+      ],
+      "sha256_a": "23d3e573f72d9fb931300c16ae866da6ac60da05b87c5ae2d5c68fb6949a8598",
+      "sha256_b": "bd9b99aa47841bf4e26bf3e91d88aba12a9dc4d9090d122649750fbf6ccff7bc"
+    },
+    "vitaminc": {
+      "path_a": "/ebs/data/extracted_features/qwen72b/features/vitaminc.npz",
+      "path_b": "/ebs/data/extracted_features/llama70b/vitaminc.npz",
+      "n_train": 1000,
+      "n_test": 599,
+      "blocks": [
+        {
+          "block": "train_full",
+          "n_samples": 1000,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.3356983428666975,
+          "procrustes_residual": 0.825215502897393,
+          "linear_cka_zscore": 0.45330864677193067,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.02079692783267321,
+            "linear_cka_max": 0.022317481640634577,
+            "procrustes_residual_mean": 1.115721642765694,
+            "procrustes_residual_min": 1.1140044776224505
+          }
+        },
+        {
+          "block": "test_full",
+          "n_samples": 599,
+          "dim_a": 8192,
+          "dim_b": 8192,
+          "linear_cka": 0.3780813253853054,
+          "procrustes_residual": 0.7619869597313541,
+          "linear_cka_zscore": 0.4871757001427008,
+          "null_row_permutation": {
+            "permutations": 3,
+            "seed": 0,
+            "linear_cka_mean": 0.03231976259925556,
+            "linear_cka_max": 0.03626833325599645,
+            "procrustes_residual_mean": 1.1240866530582303,
+            "procrustes_residual_min": 1.1217908862742427
+          }
+        }
+      ],
+      "sha256_a": "93cc2f1482ac513e7a12f87309554fe80fea6f31126d2738224e5dc8be19bba9",
+      "sha256_b": "7687fc0dfdd2358a0693f36a87f078cdf406b78ef57dabe36d91680d9a3fe6f0"
+    }
+  },
+  "loadavg_at_end": [
+    25.708984375,
+    26.072265625,
+    27.74755859375
+  ]
+}

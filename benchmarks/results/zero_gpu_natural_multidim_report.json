@@ -1,0 +1,46 @@
+{
+  "dataset": "D:\\genz\\data\\open_training_pool_natural_5k.jsonl",
+  "total_records": 5304,
+  "valid_records": 5304,
+  "total_states": 104865,
+  "hidden_dim": 896,
+  "extract_time_sec": 3604.3319804668427,
+  "dimensions": {
+    "64": {
+      "dim": 64,
+      "energy_kept": 0.9004620146522175,
+      "cosine_baseline_accuracy": 0.1891025641025641,
+      "trained_head_accuracy": 0.5041478129713424,
+      "accuracy_lift": 0.31504524886877827,
+      "manifold_file": "zero_manifold_natural_gpu_64d.npz",
+      "head_file": "zero_task_head_natural_gpu_64d.npz"
+    },
+    "128": {
+      "dim": 128,
+      "energy_kept": 0.9421476923032589,
+      "cosine_baseline_accuracy": 0.20060331825037708,
+      "trained_head_accuracy": 0.8731146304675717,
+      "accuracy_lift": 0.6725113122171946,
+      "manifold_file": "zero_manifold_natural_gpu_128d.npz",
+      "head_file": "zero_task_head_natural_gpu_128d.npz"
+    },
+    "256": {
+      "dim": 256,
+      "energy_kept": 0.971761178039723,
+      "cosine_baseline_accuracy": 0.18438914027149322,
+      "trained_head_accuracy": 0.9998114630467572,
+      "accuracy_lift": 0.8154223227752639,
+      "manifold_file": "zero_manifold_natural_gpu_256d.npz",
+      "head_file": "zero_task_head_natural_gpu_256d.npz"
+    },
+    "896": {
+      "dim": 896,
+      "energy_kept": 1.0,
+      "cosine_baseline_accuracy": 0.18985671191553544,
+      "trained_head_accuracy": 1.0,
+      "accuracy_lift": 0.8101432880844646,
+      "manifold_file": "zero_manifold_natural_gpu_896d.npz",
+      "head_file": "zero_task_head_natural_gpu_896d.npz"
+    }
+  }
+}

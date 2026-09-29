@@ -1,0 +1,88 @@
+# Rust target directory
+/target/
+**/*.rs.bk
+Cargo.lock
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Secrets
+.env
+.env.*
+
+# Temporary & benchmarks
+runs/
+*.log
+*.err
+*.out
+*.jsonl
+# Risk classifier demonstrations and calibration sets are source data.
+!python/gen_zero/service/risk_data/*.jsonl
+!benchmarks/data/*.jsonl
+!benchmarks/data/**/*.jsonl
+scratch/
+/results/
+
+# Offline model weights and checkpoints. Listed before the artifacts
+# section so its negations still re-include the tracked production checkpoint.
+*.gguf
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+*.onnx
+*.bin
+!benchmarks/results/causal_codebook.bin
+checkpoints/
+models/
+
+.firecrawl/
+**/artifacts/*
+!artifacts/qwen35_9b/
+artifacts/qwen35_9b/*
+!artifacts/qwen35_9b/zero_rnn_set_adapter_qwen35_9b.npz
+# benchmarks/artifacts/ is disposable except the production world-model checkpoint,
+# which scripts/train_world_model_dynamics.py and gen_zero/config.py load by path.
+# The bare "artifacts/" rule above excludes this whole subtree by directory name,
+# so each level must be re-included explicitly before re-excluding its contents.
+!benchmarks/artifacts/
+benchmarks/artifacts/*
+!benchmarks/artifacts/zero/
+benchmarks/artifacts/zero/*
+!benchmarks/artifacts/zero/world_model_dynamics_v1.pt
+notes/*.out
+notes/*.log
+# agent prompt scratch, git-log dumps and resumable eval checkpoints (all reproducible / disposable)
+notes/prompt_*.txt
+notes/*raw-git-log.txt
+*.partial.json
+nul
+
+# Extracted LLM features and last-run feature snapshots live in the research repo.
+data/deepswe/
+data/extracted_features/
+data/*_last
+data/*_last/
+
+# Ad-hoc test/benchmark run exit-code markers and tool caches (disposable).
+# Evidence dirs keep their .exitcode files as part of the recorded verification trail.
+*.exitcode
+!docs/zero/evidence/**/*.exitcode
+# Python build/test tooling
+dist/
+build/
+*.egg-info/
+.coverage
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.hypothesis/
+__pycache__/
+*.pyc
+*.pyo

@@ -1,0 +1,2847 @@
+{
+  "enhanced": {
+    "bon": {
+      "1": {
+        "accuracy": 0.7368421052631579,
+        "solved_task_equivalents": 28.0
+      },
+      "2": {
+        "accuracy": 0.7280701754385965,
+        "solved_task_equivalents": 27.666666666666668
+      },
+      "4": {
+        "accuracy": 0.7631578947368421,
+        "solved_task_equivalents": 29.0
+      }
+    },
+    "auc": 0.4139639639639639,
+    "spearman": -0.13152099245240734,
+    "tasks": 38,
+    "trajectories": 151,
+    "oracle_tasks": 34,
+    "wrong_tasks": [
+      {
+        "task_id": "anko-typed-variable-bindings",
+        "selected": [
+          "anko-typed-variable-bindings__FXr5aC6"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "anko-typed-variable-bindings__FXr5aC6",
+            "reward": 0,
+            "score": 0.5886322025666804
+          },
+          {
+            "trajectory_id": "anko-typed-variable-bindings__FnZQuTD",
+            "reward": 1,
+            "score": 0.34125656079689487
+          },
+          {
+            "trajectory_id": "anko-typed-variable-bindings__UukuN2t",
+            "reward": 1,
+            "score": 0.3579190865804277
+          },
+          {
+            "trajectory_id": "anko-typed-variable-bindings__nRHCiPs",
+            "reward": 0,
+            "score": 0.4489935804722056
+          }
+        ]
+      },
+      {
+        "task_id": "bandit-structured-nosec-directives",
+        "selected": [
+          "bandit-structured-nosec-directiv__XHnMS5t"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__TYM7wB6",
+            "reward": 0,
+            "score": 0.2361116144216257
+          },
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__XHnMS5t",
+            "reward": 0,
+            "score": 0.583625054269628
+          },
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__ae5KeaD",
+            "reward": 0,
+            "score": 0.39076542280334653
+          },
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__jQmhbFN",
+            "reward": 0,
+            "score": 0.5403952365432816
+          }
+        ]
+      },
+      {
+        "task_id": "claude-code-by-agents-recursive-delegation",
+        "selected": [
+          "claude-code-by-agents-recursive__93894d5"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "claude-code-by-agents-recursive__93894d5",
+            "reward": 0,
+            "score": 0.37324177034007655
+          },
+          {
+            "trajectory_id": "claude-code-by-agents-recursive__BNRWEzu",
+            "reward": 0,
+            "score": 0.3512572293976805
+          },
+          {
+            "trajectory_id": "claude-code-by-agents-recursive__RHx8JRs",
+            "reward": 0,
+            "score": 0.029100747039893793
+          },
+          {
+            "trajectory_id": "claude-code-by-agents-recursive__oi7gSEL",
+            "reward": 1,
+            "score": 0.23660599178548547
+          }
+        ]
+      },
+      {
+        "task_id": "kcp-go-multiplexed-kcp-streams",
+        "selected": [
+          "kcp-go-multiplexed-kcp-streams__kaZJqJG"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__AG2dNLj",
+            "reward": 0,
+            "score": 0.669847443899795
+          },
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__e4e6zmS",
+            "reward": 0,
+            "score": 0.60815729894946
+          },
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__gFas97a",
+            "reward": 0,
+            "score": 0.5505323505302582
+          },
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__kaZJqJG",
+            "reward": 0,
+            "score": 0.8480218462790815
+          }
+        ]
+      },
+      {
+        "task_id": "meriyah-explicit-resource-declarations",
+        "selected": [
+          "meriyah-explicit-resource-declar__ecDFqDH"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__GGbHkgJ",
+            "reward": 0,
+            "score": 0.5763821886412475
+          },
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__TYKdJPn",
+            "reward": 0,
+            "score": 0.4359556680588
+          },
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__ecDFqDH",
+            "reward": 0,
+            "score": 0.6575496773374353
+          },
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__t4itFnv",
+            "reward": 0,
+            "score": 0.42257022052401066
+          }
+        ]
+      },
+      {
+        "task_id": "obsidian-linter-link-format-conversion",
+        "selected": [
+          "obsidian-linter-link-format-conv__iiA2vAr"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__7fYMNLB",
+            "reward": 0,
+            "score": 0.3388174133206111
+          },
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__9mqhUhe",
+            "reward": 0,
+            "score": 0.0956121083502578
+          },
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__JMtW5ra",
+            "reward": 0,
+            "score": 0.06934979846725081
+          },
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__iiA2vAr",
+            "reward": 0,
+            "score": 0.35020308511684894
+          }
+        ]
+      },
+      {
+        "task_id": "prometheus-transactional-reload-status",
+        "selected": [
+          "prometheus-transactional-reload__d5GtMv5"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "prometheus-transactional-reload__F9Rktwa",
+            "reward": 0,
+            "score": 0.6607702310222212
+          },
+          {
+            "trajectory_id": "prometheus-transactional-reload__d5GtMv5",
+            "reward": 0,
+            "score": 0.690027553881718
+          },
+          {
+            "trajectory_id": "prometheus-transactional-reload__qyRAxEQ",
+            "reward": 1,
+            "score": 0.562136666993033
+          },
+          {
+            "trajectory_id": "prometheus-transactional-reload__wSRx9VE",
+            "reward": 1,
+            "score": 0.6177018117804538
+          }
+        ]
+      },
+      {
+        "task_id": "tengo-callable-instance-isolation",
+        "selected": [
+          "tengo-callable-instance-isolatio__kjry4XS"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "tengo-callable-instance-isolatio__GL4gCiF",
+            "reward": 1,
+            "score": 0.5741587101544909
+          },
+          {
+            "trajectory_id": "tengo-callable-instance-isolatio__QJ56QTB",
+            "reward": 1,
+            "score": 0.5705632065205783
+          },
+          {
+            "trajectory_id": "tengo-callable-instance-isolatio__SKXkGuT",
+            "reward": 1,
+            "score": 0.46975491776099876
+          },
+          {
+            "trajectory_id": "tengo-callable-instance-isolatio__kjry4XS",
+            "reward": 0,
+            "score": 0.5955566879957721
+          }
+        ]
+      },
+      {
+        "task_id": "textual-richlog-follow-state",
+        "selected": [
+          "textual-richlog-follow-state__o69Jht4"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "textual-richlog-follow-state__CsKLQHV",
+            "reward": 1,
+            "score": 0.1207131766253286
+          },
+          {
+            "trajectory_id": "textual-richlog-follow-state__U4jUeLi",
+            "reward": 1,
+            "score": 0.07577977675223596
+          },
+          {
+            "trajectory_id": "textual-richlog-follow-state__mimVdAH",
+            "reward": 1,
+            "score": 0.3024754404765631
+          },
+          {
+            "trajectory_id": "textual-richlog-follow-state__o69Jht4",
+            "reward": 0,
+            "score": 0.4878196343010413
+          }
+        ]
+      }
+    ],
+    "per_task": [
+      {
+        "task_id": "abs-module-cache-flags",
+        "selected": [
+          "abs-module-cache-flags__eCgZ5z2"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "abs-module-cache-flags__eCgZ5z2",
+            "reward": 1,
+            "score": 0.5482647767935658
+          },
+          {
+            "trajectory_id": "abs-module-cache-flags__ekAFAM2",
+            "reward": 1,
+            "score": 0.4274293069982721
+          },
+          {
+            "trajectory_id": "abs-module-cache-flags__nwc88dn",
+            "reward": 1,
+            "score": 0.5370905116528644
+          },
+          {
+            "trajectory_id": "abs-module-cache-flags__zCtMx26",
+            "reward": 1,
+            "score": 0.2382016246583865
+          }
+        ]
+      },
+      {
+        "task_id": "abs-stepped-slices",
+        "selected": [
+          "abs-stepped-slices__Ebwcncy"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "abs-stepped-slices__4Hf3i2i",
+            "reward": 1,
+            "score": 0.18466319177987955
+          },
+          {
+            "trajectory_id": "abs-stepped-slices__Ebwcncy",
+            "reward": 1,
+            "score": 0.3541939891306762
+          },
+          {
+            "trajectory_id": "abs-stepped-slices__KFr98nT",
+            "reward": 1,
+            "score": 0.30914274907211814
+          },
+          {
+            "trajectory_id": "abs-stepped-slices__WaRqvCW",
+            "reward": 1,
+            "score": 0.30861427972183225
+          }
+        ]
+      },
+      {
+        "task_id": "adaptix-name-mapping-aliases",
+        "selected": [
+          "adaptix-name-mapping-aliases__VpWjnLD"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "adaptix-name-mapping-aliases__QEWcFrd",
+            "reward": 1,
+            "score": 0.23271142411781043
+          },
+          {
+            "trajectory_id": "adaptix-name-mapping-aliases__VpWjnLD",
+            "reward": 1,
+            "score": 0.32698570557514867
+          },
+          {
+            "trajectory_id": "adaptix-name-mapping-aliases__t9G5GmA",
+            "reward": 1,
+            "score": 0.31837940653378144
+          },
+          {
+            "trajectory_id": "adaptix-name-mapping-aliases__zH9MJtf",
+            "reward": 1,
+            "score": 0.23729601346069545
+          }
+        ]
+      },
+      {
+        "task_id": "anko-default-function-arguments",
+        "selected": [
+          "anko-default-function-arguments__4ps8RRN"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "anko-default-function-arguments__4ps8RRN",
+            "reward": 1,
+            "score": 0.5589746625601038
+          },
+          {
+            "trajectory_id": "anko-default-function-arguments__dZyERVf",
+            "reward": 0,
+            "score": 0.3467199832437931
+          },
+          {
+            "trajectory_id": "anko-default-function-arguments__tRT7dWW",
+            "reward": 0,
+            "score": 0.5483662096323766
+          },
+          {
+            "trajectory_id": "anko-default-function-arguments__wFdmhQn",
+            "reward": 1,
+            "score": 0.3628799457946621
+          }
+        ]
+      },
+      {
+        "task_id": "anko-typed-variable-bindings",
+        "selected": [
+          "anko-typed-variable-bindings__FXr5aC6"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "anko-typed-variable-bindings__FXr5aC6",
+            "reward": 0,
+            "score": 0.5886322025666804
+          },
+          {
+            "trajectory_id": "anko-typed-variable-bindings__FnZQuTD",
+            "reward": 1,
+            "score": 0.34125656079689487
+          },
+          {
+            "trajectory_id": "anko-typed-variable-bindings__UukuN2t",
+            "reward": 1,
+            "score": 0.3579190865804277
+          },
+          {
+            "trajectory_id": "anko-typed-variable-bindings__nRHCiPs",
+            "reward": 0,
+            "score": 0.4489935804722056
+          }
+        ]
+      },
+      {
+        "task_id": "bandit-structured-nosec-directives",
+        "selected": [
+          "bandit-structured-nosec-directiv__XHnMS5t"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__TYM7wB6",
+            "reward": 0,
+            "score": 0.2361116144216257
+          },
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__XHnMS5t",
+            "reward": 0,
+            "score": 0.583625054269628
+          },
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__ae5KeaD",
+            "reward": 0,
+            "score": 0.39076542280334653
+          },
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__jQmhbFN",
+            "reward": 0,
+            "score": 0.5403952365432816
+          }
+        ]
+      },
+      {
+        "task_id": "claude-code-by-agents-recursive-delegation",
+        "selected": [
+          "claude-code-by-agents-recursive__93894d5"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "claude-code-by-agents-recursive__93894d5",
+            "reward": 0,
+            "score": 0.37324177034007655
+          },
+          {
+            "trajectory_id": "claude-code-by-agents-recursive__BNRWEzu",
+            "reward": 0,
+            "score": 0.3512572293976805
+          },
+          {
+            "trajectory_id": "claude-code-by-agents-recursive__RHx8JRs",
+            "reward": 0,
+            "score": 0.029100747039893793
+          },
+          {
+            "trajectory_id": "claude-code-by-agents-recursive__oi7gSEL",
+            "reward": 1,
+            "score": 0.23660599178548547
+          }
+        ]
+      },
+      {
+        "task_id": "dasel-html-document-format",
+        "selected": [
+          "dasel-html-document-format__raXBKWA"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "dasel-html-document-format__gzUAd9Q",
+            "reward": 1,
+            "score": 0.07605021380833099
+          },
+          {
+            "trajectory_id": "dasel-html-document-format__iGzTZaN",
+            "reward": 1,
+            "score": 0.22048056758590617
+          },
+          {
+            "trajectory_id": "dasel-html-document-format__raXBKWA",
+            "reward": 1,
+            "score": 0.5671058971014238
+          },
+          {
+            "trajectory_id": "dasel-html-document-format__zKYafPr",
+            "reward": 1,
+            "score": 0.4828017579724345
+          }
+        ]
+      },
+      {
+        "task_id": "dynamodb-toolbox-conditional-attribute-requirements",
+        "selected": [
+          "dynamodb-toolbox-conditional-att__FMwsrig"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "dynamodb-toolbox-conditional-att__FMwsrig",
+            "reward": 1,
+            "score": 0.7249714726016466
+          },
+          {
+            "trajectory_id": "dynamodb-toolbox-conditional-att__XdP8UZy",
+            "reward": 1,
+            "score": 0.34735998027197706
+          },
+          {
+            "trajectory_id": "dynamodb-toolbox-conditional-att__si9GvxG",
+            "reward": 1,
+            "score": 0.5598141914167024
+          },
+          {
+            "trajectory_id": "dynamodb-toolbox-conditional-att__tvBK3Uq",
+            "reward": 1,
+            "score": 0.39277092933166613
+          }
+        ]
+      },
+      {
+        "task_id": "fastapi-implicit-head-options",
+        "selected": [
+          "fastapi-implicit-head-options__kfeK2Dg"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "fastapi-implicit-head-options__BwcG6QG",
+            "reward": 1,
+            "score": 0.470132179028062
+          },
+          {
+            "trajectory_id": "fastapi-implicit-head-options__bVzQb7M",
+            "reward": 1,
+            "score": 0.4752427545577796
+          },
+          {
+            "trajectory_id": "fastapi-implicit-head-options__kfeK2Dg",
+            "reward": 1,
+            "score": 0.6865713477811678
+          },
+          {
+            "trajectory_id": "fastapi-implicit-head-options__sn9Wf7z",
+            "reward": 1,
+            "score": 0.519025033619652
+          }
+        ]
+      },
+      {
+        "task_id": "fd-deterministic-multi-key-sorting",
+        "selected": [
+          "fd-deterministic-multi-key-sorti__R6WQfun"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "fd-deterministic-multi-key-sorti__R6WQfun",
+            "reward": 1,
+            "score": 0.4938472115239965
+          },
+          {
+            "trajectory_id": "fd-deterministic-multi-key-sorti__WGCxVZs",
+            "reward": 1,
+            "score": 0.45088595136818754
+          },
+          {
+            "trajectory_id": "fd-deterministic-multi-key-sorti__iERyM5Z",
+            "reward": 1,
+            "score": 0.22155988927004028
+          },
+          {
+            "trajectory_id": "fd-deterministic-multi-key-sorti__rytfZYh",
+            "reward": 1,
+            "score": 0.19017928139279866
+          }
+        ]
+      },
+      {
+        "task_id": "httpx-multipart-response-parsing",
+        "selected": [
+          "httpx-multipart-response-parsing__SKNvqFQ"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "httpx-multipart-response-parsing__NVZcQ5G",
+            "reward": 1,
+            "score": 0.32713843440296875
+          },
+          {
+            "trajectory_id": "httpx-multipart-response-parsing__SKNvqFQ",
+            "reward": 1,
+            "score": 0.6145287052405894
+          },
+          {
+            "trajectory_id": "httpx-multipart-response-parsing__peyqgmz",
+            "reward": 1,
+            "score": 0.4427792599258113
+          },
+          {
+            "trajectory_id": "httpx-multipart-response-parsing__zdnogp5",
+            "reward": 1,
+            "score": 0.2229388477019406
+          }
+        ]
+      },
+      {
+        "task_id": "igel-persist-feature-schema",
+        "selected": [
+          "igel-persist-feature-schema__X5zs8RX"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "igel-persist-feature-schema__X5zs8RX",
+            "reward": 1,
+            "score": 0.5887909435058141
+          },
+          {
+            "trajectory_id": "igel-persist-feature-schema__aBJdzYQ",
+            "reward": 0,
+            "score": 0.24890457629623747
+          },
+          {
+            "trajectory_id": "igel-persist-feature-schema__hHFY2Eh",
+            "reward": 1,
+            "score": 0.3622898705474958
+          },
+          {
+            "trajectory_id": "igel-persist-feature-schema__kS9vgxh",
+            "reward": 0,
+            "score": 0.35442192813588047
+          }
+        ]
+      },
+      {
+        "task_id": "kcp-go-multiplexed-kcp-streams",
+        "selected": [
+          "kcp-go-multiplexed-kcp-streams__kaZJqJG"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__AG2dNLj",
+            "reward": 0,
+            "score": 0.669847443899795
+          },
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__e4e6zmS",
+            "reward": 0,
+            "score": 0.60815729894946
+          },
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__gFas97a",
+            "reward": 0,
+            "score": 0.5505323505302582
+          },
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__kaZJqJG",
+            "reward": 0,
+            "score": 0.8480218462790815
+          }
+        ]
+      },
+      {
+        "task_id": "kgateway-consistent-hash-policy",
+        "selected": [
+          "kgateway-consistent-hash-policy__jYKzbRJ"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "kgateway-consistent-hash-policy__G3qTSvm",
+            "reward": 0,
+            "score": 0.5738122871921978
+          },
+          {
+            "trajectory_id": "kgateway-consistent-hash-policy__GL2Ekz3",
+            "reward": 0,
+            "score": 0.44603579153629247
+          },
+          {
+            "trajectory_id": "kgateway-consistent-hash-policy__H9sUDMc",
+            "reward": 0,
+            "score": 0.517146688751065
+          },
+          {
+            "trajectory_id": "kgateway-consistent-hash-policy__jYKzbRJ",
+            "reward": 1,
+            "score": 0.7542815134379641
+          }
+        ]
+      },
+      {
+        "task_id": "kombu-single-active-consumer-priority",
+        "selected": [
+          "kombu-single-active-consumer-pri__Psvrjqj"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "kombu-single-active-consumer-pri__B45gRkv",
+            "reward": 1,
+            "score": 0.5669642577092102
+          },
+          {
+            "trajectory_id": "kombu-single-active-consumer-pri__Psvrjqj",
+            "reward": 1,
+            "score": 0.7190282224249458
+          },
+          {
+            "trajectory_id": "kombu-single-active-consumer-pri__dmvMsyV",
+            "reward": 1,
+            "score": 0.6055698495536423
+          },
+          {
+            "trajectory_id": "kombu-single-active-consumer-pri__yp4mXHy",
+            "reward": 1,
+            "score": 0.4896625962119686
+          }
+        ]
+      },
+      {
+        "task_id": "koota-composite-trait-aspects",
+        "selected": [
+          "koota-composite-trait-aspects__BovXHwu"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "koota-composite-trait-aspects__BovXHwu",
+            "reward": 1,
+            "score": 0.731204175844422
+          },
+          {
+            "trajectory_id": "koota-composite-trait-aspects__HiPfAHW",
+            "reward": 1,
+            "score": 0.46777691439585
+          },
+          {
+            "trajectory_id": "koota-composite-trait-aspects__Poq3thQ",
+            "reward": 0,
+            "score": 0.6214554032344077
+          },
+          {
+            "trajectory_id": "koota-composite-trait-aspects__YRRYyma",
+            "reward": 1,
+            "score": 0.4160012880237659
+          }
+        ]
+      },
+      {
+        "task_id": "koota-deferred-mutation-buffer",
+        "selected": [
+          "koota-deferred-mutation-buffer__ZWeCuqQ"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "koota-deferred-mutation-buffer__NDHTz8Q",
+            "reward": 0,
+            "score": 0.5815916979399096
+          },
+          {
+            "trajectory_id": "koota-deferred-mutation-buffer__URYFY3q",
+            "reward": 0,
+            "score": 0.48408158803855156
+          },
+          {
+            "trajectory_id": "koota-deferred-mutation-buffer__ZWeCuqQ",
+            "reward": 1,
+            "score": 0.6931481500446992
+          },
+          {
+            "trajectory_id": "koota-deferred-mutation-buffer__ku4SfBf",
+            "reward": 0,
+            "score": 0.50037803225421
+          }
+        ]
+      },
+      {
+        "task_id": "koota-entity-snapshot-rollback",
+        "selected": [
+          "koota-entity-snapshot-rollback__xm4Dv3f"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "koota-entity-snapshot-rollback__dRWuTiR",
+            "reward": 1,
+            "score": 0.47813145293773796
+          },
+          {
+            "trajectory_id": "koota-entity-snapshot-rollback__gXFaqPB",
+            "reward": 1,
+            "score": 0.37088704696154295
+          },
+          {
+            "trajectory_id": "koota-entity-snapshot-rollback__wxC27Kq",
+            "reward": 1,
+            "score": 0.4256545918065653
+          },
+          {
+            "trajectory_id": "koota-entity-snapshot-rollback__xm4Dv3f",
+            "reward": 1,
+            "score": 0.6125894157419036
+          }
+        ]
+      },
+      {
+        "task_id": "koota-pair-relation-tracking",
+        "selected": [
+          "koota-pair-relation-tracking__j6mr6ub"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "koota-pair-relation-tracking__ToLh8HH",
+            "reward": 1,
+            "score": 0.44267884085557374
+          },
+          {
+            "trajectory_id": "koota-pair-relation-tracking__e4YzugW",
+            "reward": 1,
+            "score": 0.3577218390361866
+          },
+          {
+            "trajectory_id": "koota-pair-relation-tracking__j6mr6ub",
+            "reward": 1,
+            "score": 0.8696412295325708
+          },
+          {
+            "trajectory_id": "koota-pair-relation-tracking__mfNeFn3",
+            "reward": 0,
+            "score": 0.6289760323500867
+          }
+        ]
+      },
+      {
+        "task_id": "meriyah-explicit-resource-declarations",
+        "selected": [
+          "meriyah-explicit-resource-declar__ecDFqDH"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__GGbHkgJ",
+            "reward": 0,
+            "score": 0.5763821886412475
+          },
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__TYKdJPn",
+            "reward": 0,
+            "score": 0.4359556680588
+          },
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__ecDFqDH",
+            "reward": 0,
+            "score": 0.6575496773374353
+          },
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__t4itFnv",
+            "reward": 0,
+            "score": 0.42257022052401066
+          }
+        ]
+      },
+      {
+        "task_id": "mobly-grouped-test-barriers",
+        "selected": [
+          "mobly-grouped-test-barriers__VwCGTYo"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "mobly-grouped-test-barriers__NDoi4oY",
+            "reward": 1,
+            "score": 0.4538657326566095
+          },
+          {
+            "trajectory_id": "mobly-grouped-test-barriers__Qx3GK4C",
+            "reward": 1,
+            "score": 0.4685012963546396
+          },
+          {
+            "trajectory_id": "mobly-grouped-test-barriers__VwCGTYo",
+            "reward": 1,
+            "score": 0.5333501042351129
+          },
+          {
+            "trajectory_id": "mobly-grouped-test-barriers__swXoPYk",
+            "reward": 1,
+            "score": 0.20005159369469988
+          }
+        ]
+      },
+      {
+        "task_id": "numba-stencil-boundary-modes",
+        "selected": [
+          "numba-stencil-boundary-modes__ujrYZJQ"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "numba-stencil-boundary-modes__6hN7jqf",
+            "reward": 1,
+            "score": 0.5822757746641063
+          },
+          {
+            "trajectory_id": "numba-stencil-boundary-modes__Gan9PBK",
+            "reward": 1,
+            "score": 0.6693589680856078
+          },
+          {
+            "trajectory_id": "numba-stencil-boundary-modes__MDUbSR6",
+            "reward": 1,
+            "score": 0.4534438156784126
+          },
+          {
+            "trajectory_id": "numba-stencil-boundary-modes__ujrYZJQ",
+            "reward": 1,
+            "score": 0.7596445131881929
+          }
+        ]
+      },
+      {
+        "task_id": "obsidian-linter-link-format-conversion",
+        "selected": [
+          "obsidian-linter-link-format-conv__iiA2vAr"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__7fYMNLB",
+            "reward": 0,
+            "score": 0.3388174133206111
+          },
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__9mqhUhe",
+            "reward": 0,
+            "score": 0.0956121083502578
+          },
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__JMtW5ra",
+            "reward": 0,
+            "score": 0.06934979846725081
+          },
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__iiA2vAr",
+            "reward": 0,
+            "score": 0.35020308511684894
+          }
+        ]
+      },
+      {
+        "task_id": "opa-template-string-reconstruction",
+        "selected": [
+          "opa-template-string-reconstructi__SACMXdH"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "opa-template-string-reconstructi__SACMXdH",
+            "reward": 1,
+            "score": 0.6381272393534143
+          },
+          {
+            "trajectory_id": "opa-template-string-reconstructi__Wh83vPJ",
+            "reward": 1,
+            "score": 0.6346258991707132
+          },
+          {
+            "trajectory_id": "opa-template-string-reconstructi__pvKMBw6",
+            "reward": 1,
+            "score": 0.6209836479018707
+          }
+        ]
+      },
+      {
+        "task_id": "participle-grammar-conflict-analysis",
+        "selected": [
+          "participle-grammar-conflict-anal__ZW9aCRW"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "participle-grammar-conflict-anal__47iL2mD",
+            "reward": 1,
+            "score": 0.44736300842415305
+          },
+          {
+            "trajectory_id": "participle-grammar-conflict-anal__6ZF8BFo",
+            "reward": 1,
+            "score": 0.26970395849026035
+          },
+          {
+            "trajectory_id": "participle-grammar-conflict-anal__ZW9aCRW",
+            "reward": 1,
+            "score": 0.5126335492835077
+          },
+          {
+            "trajectory_id": "participle-grammar-conflict-anal__i5nCFk6",
+            "reward": 1,
+            "score": 0.3667354550293648
+          }
+        ]
+      },
+      {
+        "task_id": "prometheus-transactional-reload-status",
+        "selected": [
+          "prometheus-transactional-reload__d5GtMv5"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "prometheus-transactional-reload__F9Rktwa",
+            "reward": 0,
+            "score": 0.6607702310222212
+          },
+          {
+            "trajectory_id": "prometheus-transactional-reload__d5GtMv5",
+            "reward": 0,
+            "score": 0.690027553881718
+          },
+          {
+            "trajectory_id": "prometheus-transactional-reload__qyRAxEQ",
+            "reward": 1,
+            "score": 0.562136666993033
+          },
+          {
+            "trajectory_id": "prometheus-transactional-reload__wSRx9VE",
+            "reward": 1,
+            "score": 0.6177018117804538
+          }
+        ]
+      },
+      {
+        "task_id": "returns-validated-error-accumulation",
+        "selected": [
+          "returns-validated-error-accumula__NuNcdLu"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "returns-validated-error-accumula__9ECVrrG",
+            "reward": 1,
+            "score": 0.1872224186074133
+          },
+          {
+            "trajectory_id": "returns-validated-error-accumula__MnEPhvn",
+            "reward": 1,
+            "score": 0.33342122762268533
+          },
+          {
+            "trajectory_id": "returns-validated-error-accumula__NuNcdLu",
+            "reward": 1,
+            "score": 0.34175626617842536
+          },
+          {
+            "trajectory_id": "returns-validated-error-accumula__XCbfVCT",
+            "reward": 1,
+            "score": 0.16199268362026475
+          }
+        ]
+      },
+      {
+        "task_id": "sql-formatter-bigquery-pipe-formatting",
+        "selected": [
+          "sql-formatter-bigquery-pipe-form__7H6Ba5J"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "sql-formatter-bigquery-pipe-form__7H6Ba5J",
+            "reward": 1,
+            "score": 0.8096631519193307
+          },
+          {
+            "trajectory_id": "sql-formatter-bigquery-pipe-form__EB3vk4v",
+            "reward": 1,
+            "score": 0.5855490527455088
+          },
+          {
+            "trajectory_id": "sql-formatter-bigquery-pipe-form__Yd7P5P4",
+            "reward": 1,
+            "score": 0.4504295503493313
+          },
+          {
+            "trajectory_id": "sql-formatter-bigquery-pipe-form__zW6ptRQ",
+            "reward": 0,
+            "score": 0.6393874858750421
+          }
+        ]
+      },
+      {
+        "task_id": "sqlite-utils-safe-import-checkpoints",
+        "selected": [
+          "sqlite-utils-safe-import-checkpo__v2ErSsT"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "sqlite-utils-safe-import-checkpo__bCbPTAe",
+            "reward": 1,
+            "score": 0.327510738565947
+          },
+          {
+            "trajectory_id": "sqlite-utils-safe-import-checkpo__pRsBvGa",
+            "reward": 1,
+            "score": 0.3394281858462696
+          },
+          {
+            "trajectory_id": "sqlite-utils-safe-import-checkpo__v2ErSsT",
+            "reward": 1,
+            "score": 0.5120140455179579
+          },
+          {
+            "trajectory_id": "sqlite-utils-safe-import-checkpo__y4zR25A",
+            "reward": 1,
+            "score": 0.48512689371764756
+          }
+        ]
+      },
+      {
+        "task_id": "tengo-callable-instance-isolation",
+        "selected": [
+          "tengo-callable-instance-isolatio__kjry4XS"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "tengo-callable-instance-isolatio__GL4gCiF",
+            "reward": 1,
+            "score": 0.5741587101544909
+          },
+          {
+            "trajectory_id": "tengo-callable-instance-isolatio__QJ56QTB",
+            "reward": 1,
+            "score": 0.5705632065205783
+          },
+          {
+            "trajectory_id": "tengo-callable-instance-isolatio__SKXkGuT",
+            "reward": 1,
+            "score": 0.46975491776099876
+          },
+          {
+            "trajectory_id": "tengo-callable-instance-isolatio__kjry4XS",
+            "reward": 0,
+            "score": 0.5955566879957721
+          }
+        ]
+      },
+      {
+        "task_id": "tengo-destructuring-bindings",
+        "selected": [
+          "tengo-destructuring-bindings__bqKDkCN"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "tengo-destructuring-bindings__535Jumg",
+            "reward": 1,
+            "score": 0.2711628501148865
+          },
+          {
+            "trajectory_id": "tengo-destructuring-bindings__bqKDkCN",
+            "reward": 1,
+            "score": 0.5170730645763044
+          },
+          {
+            "trajectory_id": "tengo-destructuring-bindings__qW2jvcr",
+            "reward": 1,
+            "score": 0.36210699793819323
+          },
+          {
+            "trajectory_id": "tengo-destructuring-bindings__yf7iFkt",
+            "reward": 1,
+            "score": 0.322656770407205
+          }
+        ]
+      },
+      {
+        "task_id": "testem-bail-on-test-failure",
+        "selected": [
+          "testem-bail-on-test-failure__tSqpM2P"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "testem-bail-on-test-failure__KMVBBiw",
+            "reward": 1,
+            "score": 0.5358203905149371
+          },
+          {
+            "trajectory_id": "testem-bail-on-test-failure__Lu4bMCa",
+            "reward": 0,
+            "score": 0.5260716477090442
+          },
+          {
+            "trajectory_id": "testem-bail-on-test-failure__PaLtGpQ",
+            "reward": 0,
+            "score": 0.5459578945367214
+          },
+          {
+            "trajectory_id": "testem-bail-on-test-failure__tSqpM2P",
+            "reward": 1,
+            "score": 0.6261429794854771
+          }
+        ]
+      },
+      {
+        "task_id": "testem-per-launcher-reports",
+        "selected": [
+          "testem-per-launcher-reports__uGwQj4f"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "testem-per-launcher-reports__7TseWjC",
+            "reward": 1,
+            "score": 0.3986678770972113
+          },
+          {
+            "trajectory_id": "testem-per-launcher-reports__nVESPAi",
+            "reward": 1,
+            "score": 0.3876192323183815
+          },
+          {
+            "trajectory_id": "testem-per-launcher-reports__qvFBJPH",
+            "reward": 1,
+            "score": 0.36554896003275245
+          },
+          {
+            "trajectory_id": "testem-per-launcher-reports__uGwQj4f",
+            "reward": 1,
+            "score": 0.4719340250815764
+          }
+        ]
+      },
+      {
+        "task_id": "textual-richlog-follow-state",
+        "selected": [
+          "textual-richlog-follow-state__o69Jht4"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "textual-richlog-follow-state__CsKLQHV",
+            "reward": 1,
+            "score": 0.1207131766253286
+          },
+          {
+            "trajectory_id": "textual-richlog-follow-state__U4jUeLi",
+            "reward": 1,
+            "score": 0.07577977675223596
+          },
+          {
+            "trajectory_id": "textual-richlog-follow-state__mimVdAH",
+            "reward": 1,
+            "score": 0.3024754404765631
+          },
+          {
+            "trajectory_id": "textual-richlog-follow-state__o69Jht4",
+            "reward": 0,
+            "score": 0.4878196343010413
+          }
+        ]
+      },
+      {
+        "task_id": "true-myth-iterable-collection-combinators",
+        "selected": [
+          "true-myth-iterable-collection-co__5NTYwjb"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "true-myth-iterable-collection-co__5NTYwjb",
+            "reward": 1,
+            "score": 0.9231227894967154
+          },
+          {
+            "trajectory_id": "true-myth-iterable-collection-co__5V33sqA",
+            "reward": 1,
+            "score": 0.26403069248870725
+          },
+          {
+            "trajectory_id": "true-myth-iterable-collection-co__BbPHaLb",
+            "reward": 1,
+            "score": 0.4628324460967523
+          },
+          {
+            "trajectory_id": "true-myth-iterable-collection-co__HoeTwxe",
+            "reward": 1,
+            "score": 0.49265315040834656
+          }
+        ]
+      },
+      {
+        "task_id": "ts-pattern-match-each",
+        "selected": [
+          "ts-pattern-match-each__YKadDey"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "ts-pattern-match-each__3bPAaap",
+            "reward": 1,
+            "score": 0.45684413333083684
+          },
+          {
+            "trajectory_id": "ts-pattern-match-each__YKadDey",
+            "reward": 1,
+            "score": 0.5433661939730673
+          },
+          {
+            "trajectory_id": "ts-pattern-match-each__fMevtz8",
+            "reward": 1,
+            "score": 0.09124417616825958
+          },
+          {
+            "trajectory_id": "ts-pattern-match-each__sdKd7v8",
+            "reward": 1,
+            "score": 0.2864736599798479
+          }
+        ]
+      },
+      {
+        "task_id": "ytt-jsonpath-query-api",
+        "selected": [
+          "ytt-jsonpath-query-api__XXSoaAz"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "ytt-jsonpath-query-api__XXSoaAz",
+            "reward": 1,
+            "score": 0.5823392871675228
+          },
+          {
+            "trajectory_id": "ytt-jsonpath-query-api__c6n5xBA",
+            "reward": 1,
+            "score": 0.4995190800302227
+          },
+          {
+            "trajectory_id": "ytt-jsonpath-query-api__wytyHwK",
+            "reward": 1,
+            "score": 0.3213396025399899
+          },
+          {
+            "trajectory_id": "ytt-jsonpath-query-api__yG55kiA",
+            "reward": 1,
+            "score": 0.4289846954509532
+          }
+        ]
+      }
+    ]
+  },
+  "baseline": {
+    "bon": {
+      "1": {
+        "accuracy": 0.7368421052631579,
+        "solved_task_equivalents": 28.0
+      },
+      "2": {
+        "accuracy": 0.7543859649122807,
+        "solved_task_equivalents": 28.666666666666668
+      },
+      "4": {
+        "accuracy": 0.8157894736842105,
+        "solved_task_equivalents": 31.0
+      }
+    },
+    "auc": 0.5195945945945946,
+    "spearman": 0.029953733883139898,
+    "tasks": 38,
+    "trajectories": 151,
+    "oracle_tasks": 34,
+    "wrong_tasks": [
+      {
+        "task_id": "anko-default-function-arguments",
+        "selected": [
+          "anko-default-function-arguments__dZyERVf"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "anko-default-function-arguments__4ps8RRN",
+            "reward": 1,
+            "score": 0.19890112926562628
+          },
+          {
+            "trajectory_id": "anko-default-function-arguments__dZyERVf",
+            "reward": 0,
+            "score": 0.2162542628745238
+          },
+          {
+            "trajectory_id": "anko-default-function-arguments__tRT7dWW",
+            "reward": 0,
+            "score": 0.19525191312034926
+          },
+          {
+            "trajectory_id": "anko-default-function-arguments__wFdmhQn",
+            "reward": 1,
+            "score": 0.21304276461402574
+          }
+        ]
+      },
+      {
+        "task_id": "bandit-structured-nosec-directives",
+        "selected": [
+          "bandit-structured-nosec-directiv__jQmhbFN"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__TYM7wB6",
+            "reward": 0,
+            "score": 0.2006166142721971
+          },
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__XHnMS5t",
+            "reward": 0,
+            "score": 0.21145925174156824
+          },
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__ae5KeaD",
+            "reward": 0,
+            "score": 0.21498025581240654
+          },
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__jQmhbFN",
+            "reward": 0,
+            "score": 0.225086177388827
+          }
+        ]
+      },
+      {
+        "task_id": "kcp-go-multiplexed-kcp-streams",
+        "selected": [
+          "kcp-go-multiplexed-kcp-streams__e4e6zmS"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__AG2dNLj",
+            "reward": 0,
+            "score": 0.2010896404584249
+          },
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__e4e6zmS",
+            "reward": 0,
+            "score": 0.21420668934782347
+          },
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__gFas97a",
+            "reward": 0,
+            "score": 0.21279041593273482
+          },
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__kaZJqJG",
+            "reward": 0,
+            "score": 0.2040355900923411
+          }
+        ]
+      },
+      {
+        "task_id": "meriyah-explicit-resource-declarations",
+        "selected": [
+          "meriyah-explicit-resource-declar__t4itFnv"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__GGbHkgJ",
+            "reward": 0,
+            "score": 0.19170265272259712
+          },
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__TYKdJPn",
+            "reward": 0,
+            "score": 0.2072866354137659
+          },
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__ecDFqDH",
+            "reward": 0,
+            "score": 0.19885765264431635
+          },
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__t4itFnv",
+            "reward": 0,
+            "score": 0.2090863399207592
+          }
+        ]
+      },
+      {
+        "task_id": "obsidian-linter-link-format-conversion",
+        "selected": [
+          "obsidian-linter-link-format-conv__iiA2vAr"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__7fYMNLB",
+            "reward": 0,
+            "score": 0.20466349025567374
+          },
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__9mqhUhe",
+            "reward": 0,
+            "score": 0.20672185843189558
+          },
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__JMtW5ra",
+            "reward": 0,
+            "score": 0.2171123226483663
+          },
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__iiA2vAr",
+            "reward": 0,
+            "score": 0.21771641820669174
+          }
+        ]
+      },
+      {
+        "task_id": "sql-formatter-bigquery-pipe-formatting",
+        "selected": [
+          "sql-formatter-bigquery-pipe-form__zW6ptRQ"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "sql-formatter-bigquery-pipe-form__7H6Ba5J",
+            "reward": 1,
+            "score": 0.2006419040262699
+          },
+          {
+            "trajectory_id": "sql-formatter-bigquery-pipe-form__EB3vk4v",
+            "reward": 1,
+            "score": 0.20095656191309294
+          },
+          {
+            "trajectory_id": "sql-formatter-bigquery-pipe-form__Yd7P5P4",
+            "reward": 1,
+            "score": 0.20775018880764642
+          },
+          {
+            "trajectory_id": "sql-formatter-bigquery-pipe-form__zW6ptRQ",
+            "reward": 0,
+            "score": 0.21246755744020143
+          }
+        ]
+      },
+      {
+        "task_id": "textual-richlog-follow-state",
+        "selected": [
+          "textual-richlog-follow-state__o69Jht4"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "textual-richlog-follow-state__CsKLQHV",
+            "reward": 1,
+            "score": 0.22098766267299652
+          },
+          {
+            "trajectory_id": "textual-richlog-follow-state__U4jUeLi",
+            "reward": 1,
+            "score": 0.19594347476959229
+          },
+          {
+            "trajectory_id": "textual-richlog-follow-state__mimVdAH",
+            "reward": 1,
+            "score": 0.20737839241822562
+          },
+          {
+            "trajectory_id": "textual-richlog-follow-state__o69Jht4",
+            "reward": 0,
+            "score": 0.22728239993254343
+          }
+        ]
+      }
+    ],
+    "per_task": [
+      {
+        "task_id": "abs-module-cache-flags",
+        "selected": [
+          "abs-module-cache-flags__nwc88dn"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "abs-module-cache-flags__eCgZ5z2",
+            "reward": 1,
+            "score": 0.19320816174149513
+          },
+          {
+            "trajectory_id": "abs-module-cache-flags__ekAFAM2",
+            "reward": 1,
+            "score": 0.18915909404555956
+          },
+          {
+            "trajectory_id": "abs-module-cache-flags__nwc88dn",
+            "reward": 1,
+            "score": 0.20047987500826517
+          },
+          {
+            "trajectory_id": "abs-module-cache-flags__zCtMx26",
+            "reward": 1,
+            "score": 0.1932472288608551
+          }
+        ]
+      },
+      {
+        "task_id": "abs-stepped-slices",
+        "selected": [
+          "abs-stepped-slices__Ebwcncy"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "abs-stepped-slices__4Hf3i2i",
+            "reward": 1,
+            "score": 0.20527218778928122
+          },
+          {
+            "trajectory_id": "abs-stepped-slices__Ebwcncy",
+            "reward": 1,
+            "score": 0.20820154870549837
+          },
+          {
+            "trajectory_id": "abs-stepped-slices__KFr98nT",
+            "reward": 1,
+            "score": 0.1956184059381485
+          },
+          {
+            "trajectory_id": "abs-stepped-slices__WaRqvCW",
+            "reward": 1,
+            "score": 0.20306293418010077
+          }
+        ]
+      },
+      {
+        "task_id": "adaptix-name-mapping-aliases",
+        "selected": [
+          "adaptix-name-mapping-aliases__zH9MJtf"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "adaptix-name-mapping-aliases__QEWcFrd",
+            "reward": 1,
+            "score": 0.20488565415143967
+          },
+          {
+            "trajectory_id": "adaptix-name-mapping-aliases__VpWjnLD",
+            "reward": 1,
+            "score": 0.20294255142410597
+          },
+          {
+            "trajectory_id": "adaptix-name-mapping-aliases__t9G5GmA",
+            "reward": 1,
+            "score": 0.20386519779761633
+          },
+          {
+            "trajectory_id": "adaptix-name-mapping-aliases__zH9MJtf",
+            "reward": 1,
+            "score": 0.21050255000591278
+          }
+        ]
+      },
+      {
+        "task_id": "anko-default-function-arguments",
+        "selected": [
+          "anko-default-function-arguments__dZyERVf"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "anko-default-function-arguments__4ps8RRN",
+            "reward": 1,
+            "score": 0.19890112926562628
+          },
+          {
+            "trajectory_id": "anko-default-function-arguments__dZyERVf",
+            "reward": 0,
+            "score": 0.2162542628745238
+          },
+          {
+            "trajectory_id": "anko-default-function-arguments__tRT7dWW",
+            "reward": 0,
+            "score": 0.19525191312034926
+          },
+          {
+            "trajectory_id": "anko-default-function-arguments__wFdmhQn",
+            "reward": 1,
+            "score": 0.21304276461402574
+          }
+        ]
+      },
+      {
+        "task_id": "anko-typed-variable-bindings",
+        "selected": [
+          "anko-typed-variable-bindings__UukuN2t"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "anko-typed-variable-bindings__FXr5aC6",
+            "reward": 0,
+            "score": 0.20620152105887732
+          },
+          {
+            "trajectory_id": "anko-typed-variable-bindings__FnZQuTD",
+            "reward": 1,
+            "score": 0.19468251491586366
+          },
+          {
+            "trajectory_id": "anko-typed-variable-bindings__UukuN2t",
+            "reward": 1,
+            "score": 0.2071083722015222
+          },
+          {
+            "trajectory_id": "anko-typed-variable-bindings__nRHCiPs",
+            "reward": 0,
+            "score": 0.20598041514555612
+          }
+        ]
+      },
+      {
+        "task_id": "bandit-structured-nosec-directives",
+        "selected": [
+          "bandit-structured-nosec-directiv__jQmhbFN"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__TYM7wB6",
+            "reward": 0,
+            "score": 0.2006166142721971
+          },
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__XHnMS5t",
+            "reward": 0,
+            "score": 0.21145925174156824
+          },
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__ae5KeaD",
+            "reward": 0,
+            "score": 0.21498025581240654
+          },
+          {
+            "trajectory_id": "bandit-structured-nosec-directiv__jQmhbFN",
+            "reward": 0,
+            "score": 0.225086177388827
+          }
+        ]
+      },
+      {
+        "task_id": "claude-code-by-agents-recursive-delegation",
+        "selected": [
+          "claude-code-by-agents-recursive__oi7gSEL"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "claude-code-by-agents-recursive__93894d5",
+            "reward": 0,
+            "score": 0.19718571628133455
+          },
+          {
+            "trajectory_id": "claude-code-by-agents-recursive__BNRWEzu",
+            "reward": 0,
+            "score": 0.19253501668572426
+          },
+          {
+            "trajectory_id": "claude-code-by-agents-recursive__RHx8JRs",
+            "reward": 0,
+            "score": 0.18329931671420732
+          },
+          {
+            "trajectory_id": "claude-code-by-agents-recursive__oi7gSEL",
+            "reward": 1,
+            "score": 0.19728756323456764
+          }
+        ]
+      },
+      {
+        "task_id": "dasel-html-document-format",
+        "selected": [
+          "dasel-html-document-format__zKYafPr"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "dasel-html-document-format__gzUAd9Q",
+            "reward": 1,
+            "score": 0.17591315632065138
+          },
+          {
+            "trajectory_id": "dasel-html-document-format__iGzTZaN",
+            "reward": 1,
+            "score": 0.2075675589342912
+          },
+          {
+            "trajectory_id": "dasel-html-document-format__raXBKWA",
+            "reward": 1,
+            "score": 0.18105513229966164
+          },
+          {
+            "trajectory_id": "dasel-html-document-format__zKYafPr",
+            "reward": 1,
+            "score": 0.21288969864447913
+          }
+        ]
+      },
+      {
+        "task_id": "dynamodb-toolbox-conditional-attribute-requirements",
+        "selected": [
+          "dynamodb-toolbox-conditional-att__tvBK3Uq"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "dynamodb-toolbox-conditional-att__FMwsrig",
+            "reward": 1,
+            "score": 0.20791971062620482
+          },
+          {
+            "trajectory_id": "dynamodb-toolbox-conditional-att__XdP8UZy",
+            "reward": 1,
+            "score": 0.20913344621658325
+          },
+          {
+            "trajectory_id": "dynamodb-toolbox-conditional-att__si9GvxG",
+            "reward": 1,
+            "score": 0.2075231969356537
+          },
+          {
+            "trajectory_id": "dynamodb-toolbox-conditional-att__tvBK3Uq",
+            "reward": 1,
+            "score": 0.21097230662902197
+          }
+        ]
+      },
+      {
+        "task_id": "fastapi-implicit-head-options",
+        "selected": [
+          "fastapi-implicit-head-options__kfeK2Dg"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "fastapi-implicit-head-options__BwcG6QG",
+            "reward": 1,
+            "score": 0.21546277528007826
+          },
+          {
+            "trajectory_id": "fastapi-implicit-head-options__bVzQb7M",
+            "reward": 1,
+            "score": 0.21223110084732374
+          },
+          {
+            "trajectory_id": "fastapi-implicit-head-options__kfeK2Dg",
+            "reward": 1,
+            "score": 0.2169198915362358
+          },
+          {
+            "trajectory_id": "fastapi-implicit-head-options__sn9Wf7z",
+            "reward": 1,
+            "score": 0.19874544441699982
+          }
+        ]
+      },
+      {
+        "task_id": "fd-deterministic-multi-key-sorting",
+        "selected": [
+          "fd-deterministic-multi-key-sorti__WGCxVZs"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "fd-deterministic-multi-key-sorti__R6WQfun",
+            "reward": 1,
+            "score": 0.20069321990013123
+          },
+          {
+            "trajectory_id": "fd-deterministic-multi-key-sorti__WGCxVZs",
+            "reward": 1,
+            "score": 0.20547470450401306
+          },
+          {
+            "trajectory_id": "fd-deterministic-multi-key-sorti__iERyM5Z",
+            "reward": 1,
+            "score": 0.1819590081771215
+          },
+          {
+            "trajectory_id": "fd-deterministic-multi-key-sorti__rytfZYh",
+            "reward": 1,
+            "score": 0.19305695841709772
+          }
+        ]
+      },
+      {
+        "task_id": "httpx-multipart-response-parsing",
+        "selected": [
+          "httpx-multipart-response-parsing__SKNvqFQ"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "httpx-multipart-response-parsing__NVZcQ5G",
+            "reward": 1,
+            "score": 0.20044436057408652
+          },
+          {
+            "trajectory_id": "httpx-multipart-response-parsing__SKNvqFQ",
+            "reward": 1,
+            "score": 0.21008961275219917
+          },
+          {
+            "trajectory_id": "httpx-multipart-response-parsing__peyqgmz",
+            "reward": 1,
+            "score": 0.20109464103976885
+          },
+          {
+            "trajectory_id": "httpx-multipart-response-parsing__zdnogp5",
+            "reward": 1,
+            "score": 0.19479395697514215
+          }
+        ]
+      },
+      {
+        "task_id": "igel-persist-feature-schema",
+        "selected": [
+          "igel-persist-feature-schema__X5zs8RX"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "igel-persist-feature-schema__X5zs8RX",
+            "reward": 1,
+            "score": 0.21226481596628824
+          },
+          {
+            "trajectory_id": "igel-persist-feature-schema__aBJdzYQ",
+            "reward": 0,
+            "score": 0.20681695019205412
+          },
+          {
+            "trajectory_id": "igel-persist-feature-schema__hHFY2Eh",
+            "reward": 1,
+            "score": 0.20019042864441872
+          },
+          {
+            "trajectory_id": "igel-persist-feature-schema__kS9vgxh",
+            "reward": 0,
+            "score": 0.20126453414559364
+          }
+        ]
+      },
+      {
+        "task_id": "kcp-go-multiplexed-kcp-streams",
+        "selected": [
+          "kcp-go-multiplexed-kcp-streams__e4e6zmS"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__AG2dNLj",
+            "reward": 0,
+            "score": 0.2010896404584249
+          },
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__e4e6zmS",
+            "reward": 0,
+            "score": 0.21420668934782347
+          },
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__gFas97a",
+            "reward": 0,
+            "score": 0.21279041593273482
+          },
+          {
+            "trajectory_id": "kcp-go-multiplexed-kcp-streams__kaZJqJG",
+            "reward": 0,
+            "score": 0.2040355900923411
+          }
+        ]
+      },
+      {
+        "task_id": "kgateway-consistent-hash-policy",
+        "selected": [
+          "kgateway-consistent-hash-policy__jYKzbRJ"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "kgateway-consistent-hash-policy__G3qTSvm",
+            "reward": 0,
+            "score": 0.20363793522119522
+          },
+          {
+            "trajectory_id": "kgateway-consistent-hash-policy__GL2Ekz3",
+            "reward": 0,
+            "score": 0.19555345426003137
+          },
+          {
+            "trajectory_id": "kgateway-consistent-hash-policy__H9sUDMc",
+            "reward": 0,
+            "score": 0.1915536808470885
+          },
+          {
+            "trajectory_id": "kgateway-consistent-hash-policy__jYKzbRJ",
+            "reward": 1,
+            "score": 0.21418376018603644
+          }
+        ]
+      },
+      {
+        "task_id": "kombu-single-active-consumer-priority",
+        "selected": [
+          "kombu-single-active-consumer-pri__yp4mXHy"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "kombu-single-active-consumer-pri__B45gRkv",
+            "reward": 1,
+            "score": 0.20688325415054956
+          },
+          {
+            "trajectory_id": "kombu-single-active-consumer-pri__Psvrjqj",
+            "reward": 1,
+            "score": 0.20928754657506943
+          },
+          {
+            "trajectory_id": "kombu-single-active-consumer-pri__dmvMsyV",
+            "reward": 1,
+            "score": 0.20831221466263136
+          },
+          {
+            "trajectory_id": "kombu-single-active-consumer-pri__yp4mXHy",
+            "reward": 1,
+            "score": 0.21096625427405039
+          }
+        ]
+      },
+      {
+        "task_id": "koota-composite-trait-aspects",
+        "selected": [
+          "koota-composite-trait-aspects__YRRYyma"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "koota-composite-trait-aspects__BovXHwu",
+            "reward": 1,
+            "score": 0.21225633844733238
+          },
+          {
+            "trajectory_id": "koota-composite-trait-aspects__HiPfAHW",
+            "reward": 1,
+            "score": 0.1972851244111856
+          },
+          {
+            "trajectory_id": "koota-composite-trait-aspects__Poq3thQ",
+            "reward": 0,
+            "score": 0.19944296156366667
+          },
+          {
+            "trajectory_id": "koota-composite-trait-aspects__YRRYyma",
+            "reward": 1,
+            "score": 0.22148448477188745
+          }
+        ]
+      },
+      {
+        "task_id": "koota-deferred-mutation-buffer",
+        "selected": [
+          "koota-deferred-mutation-buffer__ZWeCuqQ"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "koota-deferred-mutation-buffer__NDHTz8Q",
+            "reward": 0,
+            "score": 0.19297321513295174
+          },
+          {
+            "trajectory_id": "koota-deferred-mutation-buffer__URYFY3q",
+            "reward": 0,
+            "score": 0.1945147936542829
+          },
+          {
+            "trajectory_id": "koota-deferred-mutation-buffer__ZWeCuqQ",
+            "reward": 1,
+            "score": 0.2002253606915474
+          },
+          {
+            "trajectory_id": "koota-deferred-mutation-buffer__ku4SfBf",
+            "reward": 0,
+            "score": 0.1907342846194903
+          }
+        ]
+      },
+      {
+        "task_id": "koota-entity-snapshot-rollback",
+        "selected": [
+          "koota-entity-snapshot-rollback__dRWuTiR"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "koota-entity-snapshot-rollback__dRWuTiR",
+            "reward": 1,
+            "score": 0.20896405229965845
+          },
+          {
+            "trajectory_id": "koota-entity-snapshot-rollback__gXFaqPB",
+            "reward": 1,
+            "score": 0.20695544903477034
+          },
+          {
+            "trajectory_id": "koota-entity-snapshot-rollback__wxC27Kq",
+            "reward": 1,
+            "score": 0.20754456147551537
+          },
+          {
+            "trajectory_id": "koota-entity-snapshot-rollback__xm4Dv3f",
+            "reward": 1,
+            "score": 0.20867567012707391
+          }
+        ]
+      },
+      {
+        "task_id": "koota-pair-relation-tracking",
+        "selected": [
+          "koota-pair-relation-tracking__ToLh8HH"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "koota-pair-relation-tracking__ToLh8HH",
+            "reward": 1,
+            "score": 0.21690664316217104
+          },
+          {
+            "trajectory_id": "koota-pair-relation-tracking__e4YzugW",
+            "reward": 1,
+            "score": 0.18769622718294462
+          },
+          {
+            "trajectory_id": "koota-pair-relation-tracking__j6mr6ub",
+            "reward": 1,
+            "score": 0.20868507027626038
+          },
+          {
+            "trajectory_id": "koota-pair-relation-tracking__mfNeFn3",
+            "reward": 0,
+            "score": 0.20589234804113707
+          }
+        ]
+      },
+      {
+        "task_id": "meriyah-explicit-resource-declarations",
+        "selected": [
+          "meriyah-explicit-resource-declar__t4itFnv"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__GGbHkgJ",
+            "reward": 0,
+            "score": 0.19170265272259712
+          },
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__TYKdJPn",
+            "reward": 0,
+            "score": 0.2072866354137659
+          },
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__ecDFqDH",
+            "reward": 0,
+            "score": 0.19885765264431635
+          },
+          {
+            "trajectory_id": "meriyah-explicit-resource-declar__t4itFnv",
+            "reward": 0,
+            "score": 0.2090863399207592
+          }
+        ]
+      },
+      {
+        "task_id": "mobly-grouped-test-barriers",
+        "selected": [
+          "mobly-grouped-test-barriers__NDoi4oY"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "mobly-grouped-test-barriers__NDoi4oY",
+            "reward": 1,
+            "score": 0.20353653902808824
+          },
+          {
+            "trajectory_id": "mobly-grouped-test-barriers__Qx3GK4C",
+            "reward": 1,
+            "score": 0.1964567576845487
+          },
+          {
+            "trajectory_id": "mobly-grouped-test-barriers__VwCGTYo",
+            "reward": 1,
+            "score": 0.1909178371230761
+          },
+          {
+            "trajectory_id": "mobly-grouped-test-barriers__swXoPYk",
+            "reward": 1,
+            "score": 0.19195413465301195
+          }
+        ]
+      },
+      {
+        "task_id": "numba-stencil-boundary-modes",
+        "selected": [
+          "numba-stencil-boundary-modes__MDUbSR6"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "numba-stencil-boundary-modes__6hN7jqf",
+            "reward": 1,
+            "score": 0.20615964755415916
+          },
+          {
+            "trajectory_id": "numba-stencil-boundary-modes__Gan9PBK",
+            "reward": 1,
+            "score": 0.1985164446135362
+          },
+          {
+            "trajectory_id": "numba-stencil-boundary-modes__MDUbSR6",
+            "reward": 1,
+            "score": 0.2073856107890606
+          },
+          {
+            "trajectory_id": "numba-stencil-boundary-modes__ujrYZJQ",
+            "reward": 1,
+            "score": 0.1933954767882824
+          }
+        ]
+      },
+      {
+        "task_id": "obsidian-linter-link-format-conversion",
+        "selected": [
+          "obsidian-linter-link-format-conv__iiA2vAr"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 0,
+        "candidates": [
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__7fYMNLB",
+            "reward": 0,
+            "score": 0.20466349025567374
+          },
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__9mqhUhe",
+            "reward": 0,
+            "score": 0.20672185843189558
+          },
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__JMtW5ra",
+            "reward": 0,
+            "score": 0.2171123226483663
+          },
+          {
+            "trajectory_id": "obsidian-linter-link-format-conv__iiA2vAr",
+            "reward": 0,
+            "score": 0.21771641820669174
+          }
+        ]
+      },
+      {
+        "task_id": "opa-template-string-reconstruction",
+        "selected": [
+          "opa-template-string-reconstructi__Wh83vPJ"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "opa-template-string-reconstructi__SACMXdH",
+            "reward": 1,
+            "score": 0.19272314757108688
+          },
+          {
+            "trajectory_id": "opa-template-string-reconstructi__Wh83vPJ",
+            "reward": 1,
+            "score": 0.20621276398499808
+          },
+          {
+            "trajectory_id": "opa-template-string-reconstructi__pvKMBw6",
+            "reward": 1,
+            "score": 0.1929476298391819
+          }
+        ]
+      },
+      {
+        "task_id": "participle-grammar-conflict-analysis",
+        "selected": [
+          "participle-grammar-conflict-anal__i5nCFk6"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "participle-grammar-conflict-anal__47iL2mD",
+            "reward": 1,
+            "score": 0.20910407975316048
+          },
+          {
+            "trajectory_id": "participle-grammar-conflict-anal__6ZF8BFo",
+            "reward": 1,
+            "score": 0.20743760218222937
+          },
+          {
+            "trajectory_id": "participle-grammar-conflict-anal__ZW9aCRW",
+            "reward": 1,
+            "score": 0.19789347300926843
+          },
+          {
+            "trajectory_id": "participle-grammar-conflict-anal__i5nCFk6",
+            "reward": 1,
+            "score": 0.20941664526859918
+          }
+        ]
+      },
+      {
+        "task_id": "prometheus-transactional-reload-status",
+        "selected": [
+          "prometheus-transactional-reload__qyRAxEQ"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "prometheus-transactional-reload__F9Rktwa",
+            "reward": 0,
+            "score": 0.20623000090320906
+          },
+          {
+            "trajectory_id": "prometheus-transactional-reload__d5GtMv5",
+            "reward": 0,
+            "score": 0.21039853493372598
+          },
+          {
+            "trajectory_id": "prometheus-transactional-reload__qyRAxEQ",
+            "reward": 1,
+            "score": 0.2163899801671505
+          },
+          {
+            "trajectory_id": "prometheus-transactional-reload__wSRx9VE",
+            "reward": 1,
+            "score": 0.20184411481022835
+          }
+        ]
+      },
+      {
+        "task_id": "returns-validated-error-accumulation",
+        "selected": [
+          "returns-validated-error-accumula__NuNcdLu"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "returns-validated-error-accumula__9ECVrrG",
+            "reward": 1,
+            "score": 0.2202780656516552
+          },
+          {
+            "trajectory_id": "returns-validated-error-accumula__MnEPhvn",
+            "reward": 1,
+            "score": 0.22153120984633765
+          },
+          {
+            "trajectory_id": "returns-validated-error-accumula__NuNcdLu",
+            "reward": 1,
+            "score": 0.2223290540277958
+          },
+          {
+            "trajectory_id": "returns-validated-error-accumula__XCbfVCT",
+            "reward": 1,
+            "score": 0.2101377621293068
+          }
+        ]
+      },
+      {
+        "task_id": "sql-formatter-bigquery-pipe-formatting",
+        "selected": [
+          "sql-formatter-bigquery-pipe-form__zW6ptRQ"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "sql-formatter-bigquery-pipe-form__7H6Ba5J",
+            "reward": 1,
+            "score": 0.2006419040262699
+          },
+          {
+            "trajectory_id": "sql-formatter-bigquery-pipe-form__EB3vk4v",
+            "reward": 1,
+            "score": 0.20095656191309294
+          },
+          {
+            "trajectory_id": "sql-formatter-bigquery-pipe-form__Yd7P5P4",
+            "reward": 1,
+            "score": 0.20775018880764642
+          },
+          {
+            "trajectory_id": "sql-formatter-bigquery-pipe-form__zW6ptRQ",
+            "reward": 0,
+            "score": 0.21246755744020143
+          }
+        ]
+      },
+      {
+        "task_id": "sqlite-utils-safe-import-checkpoints",
+        "selected": [
+          "sqlite-utils-safe-import-checkpo__v2ErSsT"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "sqlite-utils-safe-import-checkpo__bCbPTAe",
+            "reward": 1,
+            "score": 0.20477896804610887
+          },
+          {
+            "trajectory_id": "sqlite-utils-safe-import-checkpo__pRsBvGa",
+            "reward": 1,
+            "score": 0.20270999521017075
+          },
+          {
+            "trajectory_id": "sqlite-utils-safe-import-checkpo__v2ErSsT",
+            "reward": 1,
+            "score": 0.21437890455126762
+          },
+          {
+            "trajectory_id": "sqlite-utils-safe-import-checkpo__y4zR25A",
+            "reward": 1,
+            "score": 0.207151897251606
+          }
+        ]
+      },
+      {
+        "task_id": "tengo-callable-instance-isolation",
+        "selected": [
+          "tengo-callable-instance-isolatio__SKXkGuT"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "tengo-callable-instance-isolatio__GL4gCiF",
+            "reward": 1,
+            "score": 0.19505805522203445
+          },
+          {
+            "trajectory_id": "tengo-callable-instance-isolatio__QJ56QTB",
+            "reward": 1,
+            "score": 0.20245087519288063
+          },
+          {
+            "trajectory_id": "tengo-callable-instance-isolatio__SKXkGuT",
+            "reward": 1,
+            "score": 0.21666303525368372
+          },
+          {
+            "trajectory_id": "tengo-callable-instance-isolatio__kjry4XS",
+            "reward": 0,
+            "score": 0.2053196206688881
+          }
+        ]
+      },
+      {
+        "task_id": "tengo-destructuring-bindings",
+        "selected": [
+          "tengo-destructuring-bindings__yf7iFkt"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "tengo-destructuring-bindings__535Jumg",
+            "reward": 1,
+            "score": 0.21314230064551035
+          },
+          {
+            "trajectory_id": "tengo-destructuring-bindings__bqKDkCN",
+            "reward": 1,
+            "score": 0.21340866138537726
+          },
+          {
+            "trajectory_id": "tengo-destructuring-bindings__qW2jvcr",
+            "reward": 1,
+            "score": 0.2065188710888227
+          },
+          {
+            "trajectory_id": "tengo-destructuring-bindings__yf7iFkt",
+            "reward": 1,
+            "score": 0.2143711211780707
+          }
+        ]
+      },
+      {
+        "task_id": "testem-bail-on-test-failure",
+        "selected": [
+          "testem-bail-on-test-failure__KMVBBiw"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "testem-bail-on-test-failure__KMVBBiw",
+            "reward": 1,
+            "score": 0.20339273661375046
+          },
+          {
+            "trajectory_id": "testem-bail-on-test-failure__Lu4bMCa",
+            "reward": 0,
+            "score": 0.19318015625079474
+          },
+          {
+            "trajectory_id": "testem-bail-on-test-failure__PaLtGpQ",
+            "reward": 0,
+            "score": 0.1961184690395991
+          },
+          {
+            "trajectory_id": "testem-bail-on-test-failure__tSqpM2P",
+            "reward": 1,
+            "score": 0.19652111331621805
+          }
+        ]
+      },
+      {
+        "task_id": "testem-per-launcher-reports",
+        "selected": [
+          "testem-per-launcher-reports__uGwQj4f"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "testem-per-launcher-reports__7TseWjC",
+            "reward": 1,
+            "score": 0.20197938258449236
+          },
+          {
+            "trajectory_id": "testem-per-launcher-reports__nVESPAi",
+            "reward": 1,
+            "score": 0.19409295171499252
+          },
+          {
+            "trajectory_id": "testem-per-launcher-reports__qvFBJPH",
+            "reward": 1,
+            "score": 0.18330053302148977
+          },
+          {
+            "trajectory_id": "testem-per-launcher-reports__uGwQj4f",
+            "reward": 1,
+            "score": 0.20538915569583574
+          }
+        ]
+      },
+      {
+        "task_id": "textual-richlog-follow-state",
+        "selected": [
+          "textual-richlog-follow-state__o69Jht4"
+        ],
+        "selected_reward": 0.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "textual-richlog-follow-state__CsKLQHV",
+            "reward": 1,
+            "score": 0.22098766267299652
+          },
+          {
+            "trajectory_id": "textual-richlog-follow-state__U4jUeLi",
+            "reward": 1,
+            "score": 0.19594347476959229
+          },
+          {
+            "trajectory_id": "textual-richlog-follow-state__mimVdAH",
+            "reward": 1,
+            "score": 0.20737839241822562
+          },
+          {
+            "trajectory_id": "textual-richlog-follow-state__o69Jht4",
+            "reward": 0,
+            "score": 0.22728239993254343
+          }
+        ]
+      },
+      {
+        "task_id": "true-myth-iterable-collection-combinators",
+        "selected": [
+          "true-myth-iterable-collection-co__5NTYwjb"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "true-myth-iterable-collection-co__5NTYwjb",
+            "reward": 1,
+            "score": 0.21460560833414397
+          },
+          {
+            "trajectory_id": "true-myth-iterable-collection-co__5V33sqA",
+            "reward": 1,
+            "score": 0.1838721471528212
+          },
+          {
+            "trajectory_id": "true-myth-iterable-collection-co__BbPHaLb",
+            "reward": 1,
+            "score": 0.18522553083797297
+          },
+          {
+            "trajectory_id": "true-myth-iterable-collection-co__HoeTwxe",
+            "reward": 1,
+            "score": 0.1918077158431212
+          }
+        ]
+      },
+      {
+        "task_id": "ts-pattern-match-each",
+        "selected": [
+          "ts-pattern-match-each__YKadDey"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "ts-pattern-match-each__3bPAaap",
+            "reward": 1,
+            "score": 0.21184372901916504
+          },
+          {
+            "trajectory_id": "ts-pattern-match-each__YKadDey",
+            "reward": 1,
+            "score": 0.2237958274781704
+          },
+          {
+            "trajectory_id": "ts-pattern-match-each__fMevtz8",
+            "reward": 1,
+            "score": 0.20248151943087578
+          },
+          {
+            "trajectory_id": "ts-pattern-match-each__sdKd7v8",
+            "reward": 1,
+            "score": 0.21278132249911627
+          }
+        ]
+      },
+      {
+        "task_id": "ytt-jsonpath-query-api",
+        "selected": [
+          "ytt-jsonpath-query-api__yG55kiA"
+        ],
+        "selected_reward": 1.0,
+        "oracle": 1,
+        "candidates": [
+          {
+            "trajectory_id": "ytt-jsonpath-query-api__XXSoaAz",
+            "reward": 1,
+            "score": 0.2062151494125525
+          },
+          {
+            "trajectory_id": "ytt-jsonpath-query-api__c6n5xBA",
+            "reward": 1,
+            "score": 0.2069509911040465
+          },
+          {
+            "trajectory_id": "ytt-jsonpath-query-api__wytyHwK",
+            "reward": 1,
+            "score": 0.1827265421549479
+          },
+          {
+            "trajectory_id": "ytt-jsonpath-query-api__yG55kiA",
+            "reward": 1,
+            "score": 0.21070509031414986
+          }
+        ]
+      }
+    ]
+  },
+  "selected": {
+    "config": [
+      "semantic",
+      0
+    ],
+    "alpha": 0.001,
+    "outcome_weight": 0.1,
+    "bon4": 0.7733333333333333,
+    "pairwise_accuracy": 0.59,
+    "auc": 0.5402551942186089
+  },
+  "target_achieved": false,
+  "training_steps": 30372,
+  "training_trajectories": 298,
+  "provenance": {
+    "checkpoint": "benchmarks/artifacts/deepswe_prm/enhanced_rank_head.pt",
+    "checkpoint_sha256": "8c039e3fe48cc671797af3cfc0b8c75a6482a4c38b88760ce6c0e26ed4d51a17",
+    "baseline_sha256": "554989fe88635606cb978dc45a1ce083be1990c4a51e551ea3b6055ead1a029a",
+    "source_sha256": "a8de485360f0587f0022a3010d41720cff6330e46a910d7fcd16395c62ecf101",
+    "data_sha256": "bf0cea045fe0daa5206a47ee4142a9718205c91b7cf055dbf1b63bbc8b67b00c",
+    "train_sha256": "40f6d570d5162399c0395a35bef746ea93fa7849401425e10aedfa07cef20936",
+    "heldout_sha256": "d4e2e7639f9eace09fba50318a266111c080d591bfbe39d213c3ea611e7b65c1"
+  },
+  "comparison": {
+    "paired_wins": 2,
+    "paired_losses": 4,
+    "delta_bon4": -0.05263157894736842,
+    "task_bootstrap_95ci": [
+      -0.18421052631578946,
+      0.07894736842105263
+    ]
+  },
+  "protocol": {
+    "bon": "exact uniform N-subsets; uniform top-score ties; min(N,candidates)",
+    "auc_spearman_unit": "trajectory",
+    "baseline": "supplied best_head.pt; final 12 step cosine mean",
+    "selection": "5-fold task-grouped CV on 75 training tasks only",
+    "limitations": [
+      "Embedding associations do not establish causality.",
+      "30372 training rows are steps of 298 trajectories, not independent outcomes.",
+      "Training-task embeddings may retain task-specific information.",
+      "Historical baseline holdout results were already disclosed by the user.",
+      "A 38-task point estimate does not establish general statistical superiority."
+    ]
+  }
+}

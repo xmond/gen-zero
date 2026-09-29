@@ -1,0 +1,130 @@
+{
+  "features_file": "benchmarks/artifacts/zero/zero_open_features_v1.npz",
+  "chosen_weight_decay": 0.003,
+  "epochs": 400,
+  "lr": 0.05,
+  "seed": 0,
+  "cross_validation": {
+    "folds": 4,
+    "grid": [
+      {
+        "weight_decay": 0.003,
+        "held_out_accuracy_mean": 0.244110328248191,
+        "held_out_accuracy_per_fold": [
+          0.24476650563607086,
+          0.2730210016155089,
+          0.23462783171521034,
+          0.22402597402597402
+        ],
+        "cosine_baseline_accuracy_mean": 0.18346686989130598
+      },
+      {
+        "weight_decay": 0.01,
+        "held_out_accuracy_mean": 0.24169680452059675,
+        "held_out_accuracy_per_fold": [
+          0.2318840579710145,
+          0.27140549273021003,
+          0.24271844660194175,
+          0.22077922077922077
+        ],
+        "cosine_baseline_accuracy_mean": 0.18346686989130598
+      },
+      {
+        "weight_decay": 0.03,
+        "held_out_accuracy_mean": 0.2101902702822227,
+        "held_out_accuracy_per_fold": [
+          0.1964573268921095,
+          0.2358642972536349,
+          0.20064724919093851,
+          0.2077922077922078
+        ],
+        "cosine_baseline_accuracy_mean": 0.18346686989130598
+      },
+      {
+        "weight_decay": 0.1,
+        "held_out_accuracy_mean": 0.19722622603163087,
+        "held_out_accuracy_per_fold": [
+          0.19806763285024154,
+          0.2197092084006462,
+          0.1925566343042071,
+          0.17857142857142858
+        ],
+        "cosine_baseline_accuracy_mean": 0.18346686989130598
+      },
+      {
+        "weight_decay": 0.3,
+        "held_out_accuracy_mean": 0.1850882605349634,
+        "held_out_accuracy_per_fold": [
+          0.1932367149758454,
+          0.20678513731825526,
+          0.1779935275080906,
+          0.16233766233766234
+        ],
+        "cosine_baseline_accuracy_mean": 0.18346686989130598
+      },
+      {
+        "weight_decay": 1.0,
+        "held_out_accuracy_mean": 0.18468437063392282,
+        "held_out_accuracy_per_fold": [
+          0.19162640901771336,
+          0.20678513731825526,
+          0.1796116504854369,
+          0.16071428571428573
+        ],
+        "cosine_baseline_accuracy_mean": 0.18346686989130598
+      }
+    ]
+  },
+  "cross_validation_per_task": {
+    "apps_execution_prediction": {
+      "n": 298,
+      "head_cv_accuracy": 0.31208053691275167,
+      "cosine_baseline_accuracy": 0.2986577181208054
+    },
+    "arc_challenge_train": {
+      "n": 587,
+      "head_cv_accuracy": 0.2708688245315162,
+      "cosine_baseline_accuracy": 0.252129471890971
+    },
+    "arc_easy_train": {
+      "n": 515,
+      "head_cv_accuracy": 0.2737864077669903,
+      "cosine_baseline_accuracy": 0.22718446601941747
+    },
+    "banking77": {
+      "n": 525,
+      "head_cv_accuracy": 0.2838095238095238,
+      "cosine_baseline_accuracy": 0.06666666666666667
+    },
+    "mmlu_pro_test": {
+      "n": 549,
+      "head_cv_accuracy": 0.11293260473588343,
+      "cosine_baseline_accuracy": 0.11839708561020036
+    }
+  },
+  "final_train_fit": {
+    "records": 2474,
+    "head_accuracy_on_training_records": 0.26960388035569927,
+    "cosine_baseline_accuracy_on_training_records": 0.18350848827809216,
+    "initial_loss": 2.1703288144571933,
+    "final_loss": 2.102477491910046
+  },
+  "artifact": "benchmarks/artifacts/zero/zero_task_head_open_v1.npz",
+  "artifact_provenance": {
+    "version": 1,
+    "dim": 64,
+    "encoder_id": "zero-qwen2.5-0.5b-trunk:int8:last-token",
+    "manifold_sha256": "5de6013e52938e78a9417c0cf11759f5054c857ceff1ec08844b3c380fc62194",
+    "source": "open_train:open_training_pool_5k.jsonl",
+    "split": "train",
+    "samples": 2474,
+    "weight_decay": 0.003,
+    "epochs": 400,
+    "lr": 0.05,
+    "seed": 0,
+    "training_sha256": "8e4ad56a73bc3a261a53d686c4689b50252397f69fb2e74273446fb987a9bb1b",
+    "initial_loss": 2.1703288144571933,
+    "final_loss": 2.102477491910046
+  },
+  "honesty_note": "head_accuracy_on_training_records is an in-sample number (the head was fit on these same 312 rows) and is reported only as a training diagnostic; cross_validation/cross_validation_per_task are the only numbers in this report that estimate out-of-sample accuracy, and even those are held out within the 312-row calibration split, not the frozen 930-row test set."
+}

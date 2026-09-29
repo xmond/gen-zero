@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python",
+    "benchmarks/tests/verify_deepswe_prm_report.py",
+    "--report",
+    "benchmarks/results/deepswe_prm_enhanced_results.json",
+    "--reference-repo",
+    "/tmp/clmrepro/repo"
+  ],
+  "returncode": 0,
+  "seconds": 4.986593246459961
+}

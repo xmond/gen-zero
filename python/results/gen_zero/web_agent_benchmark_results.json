@@ -1,0 +1,45 @@
+{
+  "timestamp": "2026-09-23 12:37:53",
+  "is_synthetic": true,
+  "withdrawn_as_model_evidence": true,
+  "notice": "Historical synthetic benchmark run, not real browser/LLM evaluation.",
+  "evaluated_scenarios_count": 3,
+  "total_trials": 6,
+  "paradigms": {
+    "baseline_1_standard_llm": {
+      "paradigm_name": "Baseline 1: Standard Autoregressive LLM",
+      "task_success_rate_pct": 50.0,
+      "average_steps_per_task": 15.6,
+      "average_step_latency_ms": 1240.0,
+      "total_tokens_per_task": 14200,
+      "estimated_cost_per_1k_tasks_usd": 113.6,
+      "cost_reduction_ratio_vs_baseline": 1.0,
+      "description": "End-to-end autoregressive LLM generating raw DOM actions and arguments."
+    },
+    "baseline_2_raw_dom_blind": {
+      "paradigm_name": "Baseline 2: Raw DOM Blind Selection",
+      "task_success_rate_pct": 50.0,
+      "average_steps_per_task": 12.2,
+      "average_step_latency_ms": 4.2,
+      "total_tokens_per_task": 0,
+      "estimated_cost_per_1k_tasks_usd": 3.2,
+      "cost_reduction_ratio_vs_baseline": 35.5,
+      "description": "Gen-Zero reflex selection over raw uncompressed DOM nodes."
+    },
+    "experimental_3_decide_and_fill": {
+      "paradigm_name": "Experimental Group 3: Decide-and-Fill + Semantic Action Compression",
+      "task_success_rate_pct": 100.0,
+      "average_steps_per_task": 2.0,
+      "average_step_latency_ms": 0.03,
+      "total_tokens_per_task": 0,
+      "estimated_cost_per_1k_tasks_usd": 0.95,
+      "cost_reduction_ratio_vs_baseline": 119.6,
+      "description": "Two-stage System 1 prefill action selection + literal Word-Span argument filling."
+    }
+  },
+  "summary_conclusion": {
+    "success_rate_improvement_pct": 50.0,
+    "latency_speedup_factor": 12400.0,
+    "cost_reduction_factor": 119.6
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "path_a": "data/extracted_features/qwen72b/features/massive_en.npz",
+  "path_b": "data/extracted_features/gte7b_cpu/massive_en.npz",
+  "n_train": 1000,
+  "n_test": 350,
+  "blocks": [
+    {
+      "block": "train_full",
+      "n_samples": 1000,
+      "dim_a": 8192,
+      "dim_b": 3584,
+      "linear_cka": 0.6679740884814972,
+      "procrustes_residual": 0.5803541635491265
+    },
+    {
+      "block": "test_full",
+      "n_samples": 350,
+      "dim_a": 8192,
+      "dim_b": 3584,
+      "linear_cka": 0.6778960731479793,
+      "procrustes_residual": 0.5195888787859906
+    }
+  ]
+}

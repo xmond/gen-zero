@@ -1,0 +1,14 @@
+{
+  "command": [
+    "/tmp/b3-eval-venv/bin/python",
+    "benchmarks/b3_measure.py"
+  ],
+  "exit_code": 1,
+  "elapsed_seconds": 13.819332599639893,
+  "log": "benchmarks/results/b3_evidence/supplemental_final.log",
+  "environment": {
+    "OPENBLAS_NUM_THREADS": "1",
+    "OMP_NUM_THREADS": "1",
+    "PYTHONPATH": "python"
+  }
+}
