@@ -421,6 +421,21 @@ state, or Nanocore registrations. These methods do not add an HTTP admin endpoin
 
 ### MCP client configuration
 
+#### Hosted public cloud preview (one-click connect without building locally)
+
+```bash
+# Claude Code CLI
+claude mcp add gen-zero -- "https://api.gen-zero.ai/sse?token=gz_public_free"
+
+# Codex CLI
+codex mcp add gen-zero --url "https://api.gen-zero.ai/sse?token=gz_public_free"
+
+# Google Antigravity CLI
+agy mcp add gen-zero "https://api.gen-zero.ai/sse?token=gz_public_free"
+```
+
+#### Local build configuration
+
 Claude Desktop (`claude_desktop_config.json`) or Cursor (`mcp.json`), stdio mode:
 
 ```json
