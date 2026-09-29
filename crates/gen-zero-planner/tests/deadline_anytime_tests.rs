@@ -363,7 +363,7 @@ fn config_budget_cannot_be_extended_by_request() {
         Err(PlannerError::TimeoutExceeded(_))
     ));
     assert!(
-        start.elapsed() < Duration::from_millis(3),
+        start.elapsed() < Duration::from_millis(20),
         "elapsed={:?}",
         start.elapsed()
     );

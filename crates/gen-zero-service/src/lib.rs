@@ -6,6 +6,8 @@
 //! Python scorer used by the `ask`, `route` and `imagine` verbs, and the
 //! Spec 25 cognitive runtime (mount snapshot, tangent SSM, geometry gate).
 
+#![allow(clippy::result_large_err)]
+
 pub mod bridge;
 pub mod cognitive;
 pub mod error;
