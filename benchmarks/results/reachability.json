@@ -1914,6 +1914,10 @@
     },
     {
       "from": "gen_zero.model",
+      "to": "gen_zero.model.latent_updater"
+    },
+    {
+      "from": "gen_zero.model",
       "to": "gen_zero.model.market_state"
     },
     {
@@ -3644,6 +3648,7 @@
     "gen_zero.model.delta_encoder",
     "gen_zero.model.dual_head",
     "gen_zero.model.invertible_encoder",
+    "gen_zero.model.latent_updater",
     "gen_zero.model.market_state",
     "gen_zero.model.option_isolation",
     "gen_zero.model.prefix_cache",
@@ -15649,6 +15654,96 @@
       "status": "unresolved_symbol_dispatch"
     },
     {
+      "symbol": "gen_zero.model.latent_updater.LatentUpdaterTelemetry",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 45,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater._validate_config",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 71,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater.NumpyLatentUpdater",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 96,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater.__init__",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 111,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater._layer_norm",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 146,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater._sigmoid",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 153,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater._update_block",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 156,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater.__call__",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 164,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater.forward",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 167,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater._UpdateBlock",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 219,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater.LatentUpdater",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 235,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater.__init__",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 222,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater.forward",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 228,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater.__init__",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 256,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.latent_updater.forward",
+      "file": "python/gen_zero/model/latent_updater.py",
+      "line": 276,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
       "symbol": "gen_zero.model.market_state.L2OrderBookSnapshot",
       "file": "python/gen_zero/model/market_state.py",
       "line": 20,
@@ -20529,13 +20624,13 @@
     {
       "symbol": "gen_zero.runtime.subsecond_pipeline._default_reflex_scorer",
       "file": "python/gen_zero/runtime/subsecond_pipeline.py",
-      "line": 37,
+      "line": 44,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.subsecond_pipeline.process_tick",
       "file": "python/gen_zero/runtime/subsecond_pipeline.py",
-      "line": 64,
+      "line": 71,
       "status": "unresolved_symbol_dispatch"
     },
     {
