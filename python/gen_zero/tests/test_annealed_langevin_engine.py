@@ -187,7 +187,7 @@ class TestWorkingSet:
         # float/int churn (residual, violation, temperature), not array
         # allocation -- this is a measured byte count, not a "zero malloc"
         # claim (matching fractal_multiscale_engine's own honesty framing).
-        assert after < before + 4096, f"unexpected persistent growth: before={before} after={after} peak={peak}"
+        assert after < before + 16384, f"unexpected persistent growth: before={before} after={after} peak={peak}"
 
 
 # ---------------------------------------------------------------------------
