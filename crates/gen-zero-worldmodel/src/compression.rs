@@ -85,8 +85,8 @@ pub(crate) fn decode(
         )));
     }
     let mut result = Vec::with_capacity(value_count);
-    for chunk in raw.chunks_exact(4) {
-        let value = f32::from_bits(u32::from_le_bytes(chunk.try_into().unwrap()));
+    for chunk in raw.as_chunks::<4>().0 {
+        let value = f32::from_bits(u32::from_le_bytes(*chunk));
         if !value.is_finite() {
             return Err(error("non-finite decoded state value"));
         }

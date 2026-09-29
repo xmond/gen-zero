@@ -25,6 +25,7 @@ runs/
 !python/gen_zero/service/risk_data/*.jsonl
 !benchmarks/data/*.jsonl
 !benchmarks/data/**/*.jsonl
+!python/data/benchmarks/*.jsonl
 scratch/
 /results/
 

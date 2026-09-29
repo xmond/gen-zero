@@ -13,6 +13,8 @@ import numpy as np
 import pytest
 import torch
 
+pytest.importorskip("transformers")
+
 from gen_zero.train.distill_modernbert_gpu import (
     DistillConfig,
     derive_teacher_codebook,

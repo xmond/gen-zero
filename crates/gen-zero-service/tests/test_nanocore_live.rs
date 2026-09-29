@@ -168,6 +168,20 @@ async fn real_projected_128d_state_drives_a_real_nanocore_decision() {
 fn legacy_fixture_artifact_is_rejected_by_the_python_bridge() {
     // This historical artifact predates source/GCCA/anchor/core binding. Replaying
     // it as current production evidence would silently bypass the new contract.
+    let numpy_available = std::process::Command::new("python3")
+        .arg("-c")
+        .arg("import numpy")
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false);
+    if !numpy_available {
+        eprintln!(
+            "skipping legacy_fixture_artifact_is_rejected_by_the_python_bridge: \
+             python3 has no numpy, and gen_zero.causal.nanocore_bridge requires it"
+        );
+        return;
+    }
+
     let fixture = load_fixture();
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
