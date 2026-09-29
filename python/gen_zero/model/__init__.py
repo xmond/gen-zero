@@ -47,6 +47,10 @@ from .invertible_encoder import (
     InvertibleVectorOutput,
     InvertibleAdapter,
 )
+from .latent_updater import (
+    LatentUpdater,
+    LatentUpdaterTelemetry,
+)
 
 __all__ = [
     "assert_single_token_stability",
@@ -82,6 +86,8 @@ __all__ = [
     "InvertibleVectorEncoder",
     "InvertibleVectorOutput",
     "InvertibleAdapter",
+    "LatentUpdater",
+    "LatentUpdaterTelemetry",
 ]
 
 

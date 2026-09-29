@@ -28,11 +28,18 @@ class SubSecondDecisionPipeline:
         risk_gate: Optional[CPSATMarketRiskGate] = None,
         encoder: Optional[L2MarketStateEncoder] = None,
         safety_deadline_ms: float = 200.0,
+        latent_updater: Optional[Any] = None,
     ):
         self.encoder = encoder or L2MarketStateEncoder()
         self.risk_gate = risk_gate or CPSATMarketRiskGate()
         self.safety_deadline_ms = float(safety_deadline_ms)
         self.scorer_fn = scorer_fn or self._default_reflex_scorer
+        # Optional zero-token latent-space reasoning sub-stage (System 1
+        # "R>0" reflex depth). None by default: existing callers and tests
+        # are unaffected. When set, must be a `gen_zero.model.LatentUpdater`
+        # (or NumPy fallback) configured with input_dim=2, since it is fed
+        # `[imbalance, spread_bps]` below.
+        self.latent_updater = latent_updater
 
     def _default_reflex_scorer(
         self,
@@ -80,6 +87,24 @@ class SubSecondDecisionPipeline:
         spread_bps = features["spread_bps"]
         ingest_ms = (time.perf_counter() - t_ingest_start) * 1000.0
 
+        # Stage 2a (optional): Zero-token latent-space reasoning (System 1
+        # "R>0" reflex depth, G=0 generated tokens). Timed as its own
+        # sub-stage, separate from `scoring` below, so the `scoring` number
+        # stays unchanged whether or not this is configured. Default
+        # LatentUpdater configs (small T / latent_dim) keep this well under
+        # a few ms, comfortably inside the Stage 2 <= 50ms budget.
+        latent_update_ms: Optional[float] = None
+        latent_update_info: Optional[Dict[str, Any]] = None
+        if self.latent_updater is not None:
+            t_latent_start = time.perf_counter()
+            _, latent_telemetry = self.latent_updater([imbalance, spread_bps])
+            latent_update_ms = (time.perf_counter() - t_latent_start) * 1000.0
+            latent_update_info = {
+                "n_iterations": latent_telemetry.n_iterations,
+                "final_residual": round(float(latent_telemetry.final_residual), 6),
+                "converged": bool(latent_telemetry.converged),
+            }
+
         # Stage 2: Non-Autoregressive Scoring (<= 50ms)
         t_score_start = time.perf_counter()
         score_res = self.scorer_fn(state_text, active_candidates, imbalance)
@@ -112,7 +137,15 @@ class SubSecondDecisionPipeline:
             risk_verdict["passed"] = False
             risk_verdict["reason"] = f"late_breaker_triggered (latency {total_latency_ms:.1f}ms > {self.safety_deadline_ms:.1f}ms)"
 
-        return {
+        stage_breakdown_ms = {
+            "ingest": round(ingest_ms, 2),
+            "scoring": round(score_ms, 2),
+            "risk_gate": round(risk_ms, 2),
+        }
+        if latent_update_ms is not None:
+            stage_breakdown_ms["latent_update"] = round(latent_update_ms, 2)
+
+        result = {
             "tick_id": snapshot.tick_id,
             "timestamp_ms": snapshot.timestamp_ms,
             "action": final_action,
@@ -120,13 +153,12 @@ class SubSecondDecisionPipeline:
             "confidence": confidence,
             "latency_ms": round(total_latency_ms, 2),
             "late": is_late,
-            "stage_breakdown_ms": {
-                "ingest": round(ingest_ms, 2),
-                "scoring": round(score_ms, 2),
-                "risk_gate": round(risk_ms, 2),
-            },
+            "stage_breakdown_ms": stage_breakdown_ms,
             "risk_guard": {
                 "passed": risk_verdict["passed"],
                 "reason": risk_verdict["reason"],
             },
         }
+        if latent_update_info is not None:
+            result["latent_update"] = latent_update_info
+        return result
