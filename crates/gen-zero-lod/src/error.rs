@@ -44,6 +44,17 @@ pub enum LodError {
         residual: f64,
         tolerance: f64,
     },
+    #[error(
+        "Confidence map is not a contraction on a cycle of {block_size} node(s): Lipschitz \
+         bound {contraction} >= 1 at beta {beta}, gamma {gamma} (beta < 1 / (1 + gamma) \
+         guarantees one); nothing was committed"
+    )]
+    FixedPointNotContractive {
+        block_size: usize,
+        contraction: f64,
+        beta: f64,
+        gamma: f64,
+    },
     #[error("Empty input: {0}")]
     EmptyInput(String),
     #[error("Payload is {len} bytes; one chunk holds at most {max} bytes")]

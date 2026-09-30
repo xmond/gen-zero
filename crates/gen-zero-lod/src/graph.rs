@@ -9,12 +9,15 @@
 //! built with (`LodGraph::with_geometry`): curvature, sphere radius and the three
 //! metric weights. There is no other metric in this module.
 //!
-//! Confidence is the fixed point of `c = (1 - beta) pi + beta P c` over the
-//! `DependsOn` / `CausalTransition` / `CoarseGrain` edges
-//! (`evolve_epistemic_fixed_point`), a
-//! `beta`-contraction in the max norm, so cycles converge to one answer. Evidence
-//! enters through `falsify_node` and leaves through `retract_falsification`; the
-//! next evolution moves every dependent accordingly, in either direction.
+//! Confidence is the fixed point of
+//! `c = (1 - beta) pi + beta max(0, P+ c - gamma P- c)`: `P+` over the
+//! `DependsOn` / `CausalTransition` / `CoarseGrain` edges, `P-` over the
+//! `Falsifies` edges (`evolve_signed_epistemic_fixed_point_within`). The
+//! dependency graph is cut into strongly connected components (Tarjan) and
+//! solved sources first: a node on no cycle in one evaluation, a cycle by its
+//! own contraction, refused when it has none. Evidence enters through
+//! `falsify_node` and leaves through `retract_falsification`; the next
+//! evolution moves every dependent accordingly, in either direction.
 //!
 //! `hybrid_rag_search` chains the three retrieval stages under one read lock:
 //! HDC Hamming prefilter, product-geodesic rerank, then PPR diffusion from the
@@ -388,10 +391,14 @@ pub struct FlushReport {
     pub pending_edges: usize,
 }
 
-/// Most steps one confidence evolution may take. A request whose bound
-/// `k_max` is larger fails with [`LodError::FixedPointDiverged`] once it has used
-/// this many.
+/// Most steps one cyclic block of a confidence evolution may take. A block whose
+/// bound `k_max` is larger fails with [`LodError::FixedPointDiverged`] once it has
+/// used this many.
 pub const MAX_FIXED_POINT_STEPS: usize = 100_000;
+
+/// Falsification gain `gamma` of [`LodGraph::evolve_epistemic_fixed_point`]: a
+/// fully confident falsifier cancels a fully confident support.
+pub const DEFAULT_FALSIFICATION_GAIN: f32 = 1.0;
 
 /// One status change made by a confidence evolution.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -404,10 +411,16 @@ pub struct StatusTransition {
     pub confidence: f32,
 }
 
-/// Result of one [`LodGraph::evolve_epistemic_fixed_point`].
+/// Result of one [`LodGraph::evolve_signed_epistemic_fixed_point_within`].
+///
+/// `iterations`, `k_max`, `initial_delta` and `residual` describe one cyclic
+/// block: the one with the largest `k_max` (the first such in evaluation order).
+/// With no cyclic block they are 0.
 #[derive(Clone, Debug)]
 pub struct FixedPointReport {
     pub beta: f32,
+    /// Falsification gain: how strongly `Falsifies` edges press their targets.
+    pub gamma: f32,
     pub tolerance: f32,
     pub theta_lo: f32,
     pub theta_hi: f32,
@@ -415,21 +428,39 @@ pub struct FixedPointReport {
     pub nodes: usize,
     /// Nodes held at their prior by evidence: axioms at 1, refuted nodes at 0.
     pub pinned: usize,
-    /// Dependency edges (`DependsOn` / `CausalTransition` / `CoarseGrain`, positive weight, into
-    /// an unpinned node) the transition matrix was built from.
+    /// Support edges (`DependsOn` / `CausalTransition` / `CoarseGrain`, positive
+    /// weight, into an unpinned node) `P+` was built from.
     pub dependency_edges: usize,
-    /// The `k` of the first iterate with `||c^{k+1} - c^k||_inf < tolerance`.
-    /// Never above `k_max`.
+    /// `Falsifies` edges (positive weight, into an unpinned node) `P-` was built
+    /// from. 0 when `gamma` is 0: the edges are then left out of the graph.
+    pub falsification_edges: usize,
+    /// Strongly connected components of the dependency graph (Tarjan), each
+    /// solved once in topological order, sources first.
+    pub scc_count: usize,
+    /// Components of one node without a self-loop: evaluated in one step.
+    pub trivial_scc_count: usize,
+    /// Components with a cycle: iterated to their own fixed point.
+    pub cyclic_scc_count: usize,
+    pub max_scc_size: usize,
+    /// Largest Lipschitz bound `q` of the map on a cyclic block (0 without one).
+    /// Every block was checked to have `q < 1`.
+    pub contraction: f64,
+    /// Node evaluations made: one per trivial node, `|S| (k + 1)` per cyclic
+    /// block `S` that stopped at step `k`.
+    pub node_updates: usize,
+    /// The `k` of the first iterate with `||c^{k+1} - c^k||_inf < tolerance` on
+    /// the reported block. Never above its `k_max`.
     pub iterations: usize,
-    /// `ceil(ln(tolerance (1 - beta) / ||c^1 - c^0||_inf) / ln beta)`, or 0 when
-    /// the first step is already below the tolerance.
+    /// `ceil(ln(tolerance (1 - q) / ||c^1 - c^0||_inf) / ln q)` on the reported
+    /// block, or 0 when its first step is already below the tolerance.
     pub k_max: usize,
-    /// `||c^1 - c^0||_inf`.
+    /// `||c^1 - c^0||_inf` on the reported block.
     pub initial_delta: f64,
-    /// `||c^{k+1} - c^k||_inf` at the stop.
+    /// `||c^{k+1} - c^k||_inf` at the stop of the reported block.
     pub residual: f64,
-    /// A-posteriori bound on the distance from the committed confidences to the
-    /// exact fixed point: `beta / (1 - beta) * residual`.
+    /// A-posteriori bound on the max-norm distance from the committed
+    /// confidences to the exact fixed point. Each block adds its own stop error
+    /// `q r / (1 - q)` to the error it inherits from the blocks it reads.
     pub error_bound: f64,
     /// Status changes, in node order.
     pub transitions: Vec<StatusTransition>,
@@ -445,87 +476,209 @@ pub struct FixedPointReport {
     pub checkpoint: GraphCheckpoint,
 }
 
-/// `P` of the confidence iteration, stored by dependent (row). A row with no
-/// entries is the identity row: the node keeps its prior.
-struct DependencyRows {
+/// `P+` and `P-` of the confidence iteration, stored by dependent (row). Each
+/// entry is a support edge or a falsifier edge into the row's node; support
+/// probabilities sum to 1 over the row's support entries, falsifier
+/// probabilities to 1 over its falsifier entries.
+struct SignedRows {
     offsets: Vec<usize>,
     sources: Vec<u32>,
     probabilities: Vec<f64>,
+    falsifies: Vec<bool>,
+    /// The row has a support entry. A row without one is supported by the
+    /// node's own prior.
+    supported: Vec<bool>,
 }
 
-/// Outcome of [`iterate_to_fixed_point`].
-struct FixedPointRun {
-    confidences: Vec<f64>,
+impl SignedRows {
+    fn row(&self, v: usize) -> std::ops::Range<usize> {
+        self.offsets[v]..self.offsets[v + 1]
+    }
+
+    /// Weight of entry `i` in the Lipschitz bound of its row: its probability,
+    /// times `gamma` for a falsifier.
+    fn lipschitz_weight(&self, i: usize, gamma: f64) -> f64 {
+        if self.falsifies[i] {
+            gamma * self.probabilities[i]
+        } else {
+            self.probabilities[i]
+        }
+    }
+}
+
+/// Strongly connected components of a graph in CSR form (`targets[offsets[v]..
+/// offsets[v + 1]]` are the arcs out of `v`), by Tarjan's algorithm.
+///
+/// Iterative, so a long chain cannot overflow the call stack. Tarjan emits a
+/// component only after every component its arcs reach, so with arcs from a
+/// dependent to its sources the output lists sources first: the evaluation order.
+struct Condensation {
+    /// Nodes of component `k` are `members[starts[k]..starts[k + 1]]`.
+    starts: Vec<usize>,
+    members: Vec<u32>,
+}
+
+impl Condensation {
+    fn component_count(&self) -> usize {
+        self.starts.len() - 1
+    }
+
+    fn component(&self, k: usize) -> &[u32] {
+        &self.members[self.starts[k]..self.starts[k + 1]]
+    }
+}
+
+fn tarjan_scc(offsets: &[usize], targets: &[u32]) -> Condensation {
+    const UNVISITED: usize = usize::MAX;
+    let n = offsets.len() - 1;
+    let mut index = vec![UNVISITED; n];
+    let mut low = vec![0usize; n];
+    let mut on_stack = vec![false; n];
+    let mut stack: Vec<u32> = Vec::new();
+    // Simulated recursion: (node, position of its next unexplored arc).
+    let mut calls: Vec<(usize, usize)> = Vec::new();
+    let mut next_index = 0;
+    let mut members = Vec::with_capacity(n);
+    let mut starts = vec![0];
+
+    for root in 0..n {
+        if index[root] != UNVISITED {
+            continue;
+        }
+        // Number `v`, put it on the component stack and enter it.
+        macro_rules! visit {
+            ($v:expr) => {{
+                let v: usize = $v;
+                index[v] = next_index;
+                low[v] = next_index;
+                next_index += 1;
+                stack.push(v as u32);
+                on_stack[v] = true;
+                calls.push((v, offsets[v]));
+            }};
+        }
+        visit!(root);
+        while let Some(&(v, arc)) = calls.last() {
+            if arc < offsets[v + 1] {
+                calls.last_mut().expect("frame just read").1 += 1;
+                let w = targets[arc] as usize;
+                if index[w] == UNVISITED {
+                    visit!(w);
+                } else if on_stack[w] {
+                    low[v] = low[v].min(index[w]);
+                }
+                continue;
+            }
+            calls.pop();
+            if let Some(&(parent, _)) = calls.last() {
+                low[parent] = low[parent].min(low[v]);
+            }
+            if low[v] == index[v] {
+                loop {
+                    let w = stack.pop().expect("v is on the stack");
+                    on_stack[w as usize] = false;
+                    members.push(w);
+                    if w as usize == v {
+                        break;
+                    }
+                }
+                starts.push(members.len());
+            }
+        }
+    }
+    Condensation { starts, members }
+}
+
+/// `T_v(c) = (1 - beta) pi_v + beta max(0, P+_v c - gamma P-_v c)`, clamped to
+/// [0, 1]. A row without support entries uses `pi_v` for `P+_v c`, written so
+/// that a node with no falsifier either reproduces `pi_v` exactly.
+fn evaluate_node(
+    rows: &SignedRows,
+    prior: &[f64],
+    beta: f64,
+    gamma: f64,
+    c: &[f64],
+    v: usize,
+) -> f64 {
+    let (mut support, mut penalty) = (0.0_f64, 0.0_f64);
+    for i in rows.row(v) {
+        let term = rows.probabilities[i] * c[rows.sources[i] as usize];
+        if rows.falsifies[i] {
+            penalty += term;
+        } else {
+            support += term;
+        }
+    }
+    let value = if rows.supported[v] {
+        (1.0 - beta) * prior[v] + beta * (support - gamma * penalty).max(0.0)
+    } else {
+        // (1 - beta) pi + beta max(0, pi - gamma penalty), rearranged.
+        prior[v] - beta * prior[v].min(gamma * penalty)
+    };
+    value.clamp(0.0, 1.0)
+}
+
+/// How one cyclic block reached its fixed point.
+#[derive(Clone, Copy, Debug)]
+struct BlockRun {
     iterations: usize,
     k_max: usize,
     initial_delta: f64,
     residual: f64,
 }
 
-/// One application of `T(c) = (1 - beta) prior + beta P c` into `next`. Returns
-/// `||next - current||_inf`, or `None` when a value is not finite.
-fn apply_step(
-    rows: &DependencyRows,
-    prior: &[f64],
-    beta: f64,
-    current: &[f64],
-    next: &mut [f64],
-) -> Option<f64> {
-    let mut delta = 0.0_f64;
-    for (i, out) in next.iter_mut().enumerate() {
-        let (start, end) = (rows.offsets[i], rows.offsets[i + 1]);
-        *out = if start == end {
-            // Identity row, written so that `current == prior` is reproduced exactly.
-            current[i] + (1.0 - beta) * (prior[i] - current[i])
-        } else {
-            let inherited: f64 = rows.sources[start..end]
-                .iter()
-                .zip(&rows.probabilities[start..end])
-                .map(|(&u, p)| p * current[u as usize])
-                .sum();
-            (1.0 - beta) * prior[i] + beta * inherited
-        };
-        let step = (*out - current[i]).abs();
-        if !(out.is_finite() && step.is_finite()) {
-            return None;
-        }
-        delta = delta.max(step);
-    }
-    Some(delta)
-}
-
-/// Iterate `c^{k+1} = (1 - beta) prior + beta P c^k` from `start` until
-/// `||c^{k+1} - c^k||_inf < tolerance`.
+/// Iterate `T` on the nodes of one cyclic block `members`, every other node
+/// held at its value in `c`, from the block's values in `c`, until
+/// `||x^{k+1} - x^k||_inf < tolerance`. On success the block's entries of `c`
+/// hold the last iterate.
 ///
-/// `P` is row-stochastic, so the map contracts the max norm by `beta` and
-/// `||c^{k+1} - c^k|| <= beta^k ||c^1 - c^0||`. The stop is therefore reached by
-/// `k_max = ceil(ln(tolerance (1 - beta) / ||c^1 - c^0||) / ln beta)`. A run that
-/// has not stopped at `min(k_max, max_steps)`, or meets a non-finite value, is
-/// [`LodError::FixedPointDiverged`]: no partial vector is returned.
-fn iterate_to_fixed_point(
-    rows: &DependencyRows,
+/// `q < 1` is the Lipschitz bound of `T` on the block in the max norm, so
+/// `||x^{k+1} - x^k|| <= q^k ||x^1 - x^0||` and the stop is reached by
+/// `k_max = ceil(ln(tolerance (1 - q) / ||x^1 - x^0||) / ln q)`. A run that has
+/// not stopped at `min(k_max, max_steps)`, or meets a non-finite value, is
+/// [`LodError::FixedPointDiverged`].
+#[allow(clippy::too_many_arguments)]
+fn iterate_block(
+    rows: &SignedRows,
     prior: &[f64],
-    start: &[f64],
+    members: &[u32],
+    q: f64,
     beta: f64,
+    gamma: f64,
     tolerance: f64,
     max_steps: usize,
-) -> Result<FixedPointRun, LodError> {
-    let mut current = start.to_vec();
-    let mut next = vec![0.0; current.len()];
+    c: &mut [f64],
+) -> Result<BlockRun, LodError> {
     let diverged = |iterations, k_max, residual| LodError::FixedPointDiverged {
         iterations,
         k_max,
         residual,
         tolerance,
     };
-    let initial_delta = apply_step(rows, prior, beta, &current, &mut next)
-        .ok_or_else(|| diverged(0, 0, f64::NAN))?;
+    let mut next = vec![0.0_f64; members.len()];
+    // One Jacobi step into `next`; `||next - x||_inf`, or `None` on a non-finite value.
+    let step = |c: &[f64], next: &mut [f64]| -> Option<f64> {
+        let mut delta = 0.0_f64;
+        for (out, &v) in next.iter_mut().zip(members) {
+            let v = v as usize;
+            *out = evaluate_node(rows, prior, beta, gamma, c, v);
+            let moved = (*out - c[v]).abs();
+            if !(out.is_finite() && moved.is_finite()) {
+                return None;
+            }
+            delta = delta.max(moved);
+        }
+        Some(delta)
+    };
+    let initial_delta = step(c, &mut next).ok_or_else(|| diverged(0, 0, f64::NAN))?;
     let k_max = if initial_delta < tolerance {
         0
+    } else if q == 0.0 {
+        1
     } else {
         // Both logarithms are negative, so the ratio is positive. The cast
         // saturates; a bound that large can only fail against `max_steps`.
-        ((tolerance * (1.0 - beta) / initial_delta).ln() / beta.ln()).ceil() as usize
+        ((tolerance * (1.0 - q) / initial_delta).ln() / q.ln()).ceil() as usize
     };
     let limit = k_max.min(max_steps);
     let (mut iterations, mut residual) = (0, initial_delta);
@@ -533,18 +686,144 @@ fn iterate_to_fixed_point(
         if iterations == limit {
             return Err(diverged(iterations, k_max, residual));
         }
-        std::mem::swap(&mut current, &mut next);
+        for (&v, &x) in members.iter().zip(&next) {
+            c[v as usize] = x;
+        }
         iterations += 1;
-        residual = apply_step(rows, prior, beta, &current, &mut next)
-            .ok_or_else(|| diverged(iterations, k_max, f64::NAN))?;
+        residual = step(c, &mut next).ok_or_else(|| diverged(iterations, k_max, f64::NAN))?;
     }
-    Ok(FixedPointRun {
-        confidences: next,
+    for (&v, &x) in members.iter().zip(&next) {
+        c[v as usize] = x;
+    }
+    Ok(BlockRun {
         iterations,
         k_max,
         initial_delta,
         residual,
     })
+}
+
+/// The fixed point of `T` over the whole graph, solved block by block.
+struct BlockSolve {
+    confidences: Vec<f64>,
+    scc_count: usize,
+    trivial_scc_count: usize,
+    cyclic_scc_count: usize,
+    max_scc_size: usize,
+    contraction: f64,
+    node_updates: usize,
+    /// The cyclic block with the largest `k_max`, if any.
+    reported: Option<BlockRun>,
+    error_bound: f64,
+}
+
+/// Decompose the dependency graph into strongly connected components and solve
+/// them in topological order, sources first.
+///
+/// - A component of one node without a self-loop reads only nodes already
+///   solved: one evaluation of `T` gives its value, no iteration.
+/// - A cyclic component `S` is iterated alone, its inputs from outside held.
+///   Its Lipschitz bound is `q_S = beta max_{v in S} sum_{u in S} |P_vu|`, with
+///   `P- ` entries weighted by `gamma`. `q_S >= 1` is
+///   [`LodError::FixedPointNotContractive`]: without a contraction the
+///   iteration has no bound and the fixed point need not be unique.
+///
+/// Error propagation: a block reads upstream values that are off by at most
+/// their own bounds `e_u`, so its bound is
+/// `(q r + beta max_v sum_{u outside} |P_vu| e_u) / (1 - q)`, `r` its stop residual.
+fn solve_by_blocks(
+    rows: &SignedRows,
+    prior: &[f64],
+    beta: f64,
+    gamma: f64,
+    tolerance: f64,
+    max_steps: usize,
+) -> Result<BlockSolve, LodError> {
+    let n = prior.len();
+    let condensation = tarjan_scc(&rows.offsets, &rows.sources);
+    let mut block_of = vec![0usize; n];
+    for k in 0..condensation.component_count() {
+        for &v in condensation.component(k) {
+            block_of[v as usize] = k;
+        }
+    }
+    let mut c = prior.to_vec();
+    let mut error = vec![0.0_f64; n];
+    let mut solve = BlockSolve {
+        confidences: Vec::new(),
+        scc_count: condensation.component_count(),
+        trivial_scc_count: 0,
+        cyclic_scc_count: 0,
+        max_scc_size: 0,
+        contraction: 0.0,
+        node_updates: 0,
+        reported: None,
+        error_bound: 0.0,
+    };
+    for k in 0..condensation.component_count() {
+        let members = condensation.component(k);
+        solve.max_scc_size = solve.max_scc_size.max(members.len());
+        // Per node: Lipschitz weight inside the block, propagated upstream error.
+        let mut q = 0.0_f64;
+        let mut inherited = 0.0_f64;
+        for &v in members {
+            let (mut internal, mut external) = (0.0_f64, 0.0_f64);
+            for i in rows.row(v as usize) {
+                let u = rows.sources[i] as usize;
+                let weight = rows.lipschitz_weight(i, gamma);
+                if block_of[u] == k {
+                    internal += weight;
+                } else {
+                    external += weight * error[u];
+                }
+            }
+            q = q.max(beta * internal);
+            inherited = inherited.max(beta * external);
+        }
+        let cyclic =
+            members.len() > 1 || rows.sources[rows.row(members[0] as usize)].contains(&members[0]);
+        if !cyclic {
+            let v = members[0] as usize;
+            let value = evaluate_node(rows, prior, beta, gamma, &c, v);
+            if !value.is_finite() {
+                return Err(LodError::FixedPointDiverged {
+                    iterations: 0,
+                    k_max: 0,
+                    residual: f64::NAN,
+                    tolerance,
+                });
+            }
+            c[v] = value;
+            error[v] = inherited;
+            solve.trivial_scc_count += 1;
+            solve.node_updates += 1;
+            continue;
+        }
+        if q.is_nan() || q >= 1.0 {
+            return Err(LodError::FixedPointNotContractive {
+                block_size: members.len(),
+                contraction: q,
+                beta,
+                gamma,
+            });
+        }
+        let run = iterate_block(
+            rows, prior, members, q, beta, gamma, tolerance, max_steps, &mut c,
+        )?;
+        let bound = (q * run.residual + inherited) / (1.0 - q);
+        for &v in members {
+            error[v as usize] = bound;
+        }
+        solve.cyclic_scc_count += 1;
+        solve.contraction = solve.contraction.max(q);
+        solve.node_updates += members.len() * (run.iterations + 1);
+        if solve.reported.is_none_or(|r| run.k_max > r.k_max) {
+            solve.reported = Some(run);
+        }
+    }
+    solve.error_bound = error.iter().copied().fold(0.0, f64::max);
+    solve.confidences = c;
+    Ok(solve)
 }
 
 /// Edges along which confidence is inherited: the target depends on the source.
@@ -583,21 +862,32 @@ fn is_pinned(node: &LodNode) -> bool {
     node.status == EpistemicStatus::Axiomatic || node.refuted
 }
 
-/// Row-normalise the positive-weight confidence edges into each unpinned node.
-fn dependency_rows(
+/// Row-normalise, into each unpinned node, the positive-weight support edges and,
+/// when `with_falsifiers`, the positive-weight `Falsifies` edges, each kind over
+/// its own total.
+fn signed_rows(
     nodes: &[LodNode],
     snapshot: &CsrGraph,
     pending: &[BufferedEdge],
-) -> DependencyRows {
+    with_falsifiers: bool,
+) -> SignedRows {
     let n = nodes.len();
-    let inherits = |&(_, target, edge_type, weight): &(u32, u32, EdgeType, f32)| {
-        carries_confidence(edge_type) && weight > 0.0 && !is_pinned(&nodes[target as usize])
+    let enters = |&(_, target, edge_type, weight): &(u32, u32, EdgeType, f32)| {
+        (carries_confidence(edge_type) || (with_falsifiers && edge_type == EdgeType::Falsifies))
+            && weight > 0.0
+            && !is_pinned(&nodes[target as usize])
     };
     let mut offsets = vec![0usize; n + 1];
-    let mut totals = vec![0.0_f64; n];
-    for (_, target, _, weight) in all_edges(snapshot, pending).filter(inherits) {
+    // Per node: total support weight, total falsifier weight.
+    let mut totals = vec![(0.0_f64, 0.0_f64); n];
+    for (_, target, edge_type, weight) in all_edges(snapshot, pending).filter(enters) {
         offsets[target as usize + 1] += 1;
-        totals[target as usize] += f64::from(weight);
+        let total = &mut totals[target as usize];
+        if edge_type == EdgeType::Falsifies {
+            total.1 += f64::from(weight);
+        } else {
+            total.0 += f64::from(weight);
+        }
     }
     for i in 0..n {
         offsets[i + 1] += offsets[i];
@@ -605,16 +895,22 @@ fn dependency_rows(
     let mut cursor = offsets[..n].to_vec();
     let mut sources = vec![0u32; offsets[n]];
     let mut probabilities = vec![0.0_f64; offsets[n]];
-    for (source, target, _, weight) in all_edges(snapshot, pending).filter(inherits) {
+    let mut falsifies = vec![false; offsets[n]];
+    for (source, target, edge_type, weight) in all_edges(snapshot, pending).filter(enters) {
+        let (support, against) = totals[target as usize];
+        let is_falsifier = edge_type == EdgeType::Falsifies;
         let at = &mut cursor[target as usize];
         sources[*at] = source;
-        probabilities[*at] = f64::from(weight) / totals[target as usize];
+        probabilities[*at] = f64::from(weight) / if is_falsifier { against } else { support };
+        falsifies[*at] = is_falsifier;
         *at += 1;
     }
-    DependencyRows {
+    SignedRows {
         offsets,
         sources,
         probabilities,
+        falsifies,
+        supported: totals.iter().map(|&(support, _)| support > 0.0).collect(),
     }
 }
 
@@ -1479,36 +1775,9 @@ impl LodGraph {
         Ok(())
     }
 
-    /// Evolve every node's confidence to the fixed point of
-    ///
-    /// `c^{k+1} = (1 - beta) pi + beta P c^k`, `0 < beta < 1`,
-    ///
-    /// and move statuses by hysteresis on the result.
-    ///
-    /// - `P[v][u]` is the weight of the `DependsOn` / `CausalTransition` /
-    ///   `CoarseGrain` edges
-    ///   `u -> v` (`v` depends on `u`) divided by the total such weight into `v`,
-    ///   over the CSR snapshot and the pending buffer. A node with no positive
-    ///   weight coming in, an axiom and a refuted node get the identity row, so
-    ///   `P` is row-stochastic and the map contracts the max norm by `beta`:
-    ///   cycles converge to the one fixed point.
-    /// - `pi` is 1 for an axiom, 0 for a refuted node (both held exactly) and the
-    ///   node's prior otherwise. The iteration starts at `pi`, so the result
-    ///   depends only on priors, evidence, edges and the four arguments: undoing
-    ///   a change of evidence and evolving again reproduces the earlier
-    ///   confidences bit for bit.
-    /// - The stop `||c^{k+1} - c^k||_inf < tolerance` is reached by
-    ///   `k_max = ceil(ln(tolerance (1 - beta) / ||c^1 - c^0||_inf) / ln beta)`.
-    ///   If it is not, or `k_max` exceeds [`MAX_FIXED_POINT_STEPS`] and the run
-    ///   uses them all, the result is [`LodError::FixedPointDiverged`] and the
-    ///   graph is unchanged.
-    /// - Hysteresis: confidence below `theta_lo` makes a node `Falsified` and
-    ///   revokes its entity; above `theta_hi` makes it `Validated` and lifts that
-    ///   revocation (never one made by [`Self::revoke_entity`]); in between the
-    ///   status is kept. Validated dependencies are rebuilt from the new statuses.
-    ///
-    /// Arguments outside `0 < beta < 1`, `tolerance > 0`,
-    /// `0 < theta_lo < theta_hi < 1` are `InvalidQuery`.
+    /// [`Self::evolve_signed_epistemic_fixed_point_within`] with the default
+    /// falsification gain [`DEFAULT_FALSIFICATION_GAIN`] and the step budget
+    /// [`MAX_FIXED_POINT_STEPS`].
     pub fn evolve_epistemic_fixed_point(
         &self,
         beta: f32,
@@ -1516,8 +1785,9 @@ impl LodGraph {
         theta_lo: f32,
         theta_hi: f32,
     ) -> Result<FixedPointReport, LodError> {
-        self.evolve_epistemic_fixed_point_within(
+        self.evolve_signed_epistemic_fixed_point_within(
             beta,
+            DEFAULT_FALSIFICATION_GAIN,
             tolerance,
             theta_lo,
             theta_hi,
@@ -1525,11 +1795,48 @@ impl LodGraph {
         )
     }
 
-    /// [`Self::evolve_epistemic_fixed_point`] with a caller step budget: the run
-    /// may take `min(k_max, max_steps, MAX_FIXED_POINT_STEPS)` steps.
-    pub fn evolve_epistemic_fixed_point_within(
+    /// Evolve every node's confidence to the fixed point of
+    ///
+    /// `c_v = (1 - beta) pi_v + beta max(0, P+_v c - gamma P-_v c)`, clamped to
+    /// [0, 1], `0 < beta < 1`, `gamma >= 0`,
+    ///
+    /// and move statuses by hysteresis on the result.
+    ///
+    /// - `P+[v][u]` is the weight of the `DependsOn` / `CausalTransition` /
+    ///   `CoarseGrain` edges `u -> v` (`v` depends on `u`) divided by the total
+    ///   such weight into `v`; `P-[v][u]` the same over the `Falsifies` edges
+    ///   (`u` is evidence against `v`). Both read the CSR snapshot and the
+    ///   pending buffer. A node with no support edge coming in is supported by
+    ///   its own prior: `P+_v c` is `pi_v`. An axiom and a refuted node take no
+    ///   edge and hold their prior. With `gamma = 0` the `Falsifies` edges are
+    ///   left out entirely and the map is the unsigned `(1 - beta) pi + beta P+ c`.
+    /// - `pi` is 1 for an axiom, 0 for a refuted node and the node's prior
+    ///   otherwise.
+    /// - The dependency graph is split into strongly connected components
+    ///   (Tarjan) and solved in topological order, sources first. A component
+    ///   of one node without a self-loop takes one evaluation. A cyclic
+    ///   component is iterated alone from `pi`, its inputs held, until
+    ///   `||x^{k+1} - x^k||_inf < tolerance`, which its Lipschitz bound `q < 1`
+    ///   reaches by `k_max = ceil(ln(tolerance (1 - q) / ||x^1 - x^0||_inf) / ln q)`.
+    ///   `q` is `beta` times the largest row sum of `P+ + gamma P-` inside the
+    ///   component; `q >= 1` is [`LodError::FixedPointNotContractive`]. A block
+    ///   that has not stopped at `min(k_max, max_steps, MAX_FIXED_POINT_STEPS)`
+    ///   steps, or any non-finite value, is [`LodError::FixedPointDiverged`].
+    ///   On either error the graph is unchanged.
+    /// - The result depends only on priors, evidence, edges and the arguments:
+    ///   undoing a change of evidence and evolving again reproduces the earlier
+    ///   confidences bit for bit.
+    /// - Hysteresis: confidence below `theta_lo` makes a node `Falsified` and
+    ///   revokes its entity; above `theta_hi` makes it `Validated` and lifts that
+    ///   revocation (never one made by [`Self::revoke_entity`]); in between the
+    ///   status is kept. Validated dependencies are rebuilt from the new statuses.
+    ///
+    /// Arguments outside `0 < beta < 1`, finite `gamma >= 0`, `tolerance > 0`,
+    /// `0 < theta_lo < theta_hi < 1` are `InvalidQuery`.
+    pub fn evolve_signed_epistemic_fixed_point_within(
         &self,
         beta: f32,
+        gamma: f32,
         tolerance: f32,
         theta_lo: f32,
         theta_hi: f32,
@@ -1538,6 +1845,9 @@ impl LodGraph {
         let bad = |detail: String| Err(LodError::InvalidQuery(detail));
         if !(beta.is_finite() && beta > 0.0 && beta < 1.0) {
             return bad(format!("beta must satisfy 0 < beta < 1, got {beta}"));
+        }
+        if !(gamma.is_finite() && gamma >= 0.0) {
+            return bad(format!("gamma must be finite and nonnegative, got {gamma}"));
         }
         if !(tolerance.is_finite() && tolerance > 0.0) {
             return bad(format!(
@@ -1560,7 +1870,7 @@ impl LodGraph {
         let snapshot = self.csr_snapshot.load_full();
         let st = &mut *guard;
 
-        let rows = dependency_rows(&st.nodes, &snapshot, &st.edge_buffer);
+        let rows = signed_rows(&st.nodes, &snapshot, &st.edge_buffer, gamma > 0.0);
         let prior: Vec<f64> = st
             .nodes
             .iter()
@@ -1570,11 +1880,11 @@ impl LodGraph {
                 _ => f64::from(n.prior),
             })
             .collect();
-        let run = iterate_to_fixed_point(
+        let run = solve_by_blocks(
             &rows,
             &prior,
-            &prior,
             f64::from(beta),
+            f64::from(gamma),
             f64::from(tolerance),
             max_steps.min(MAX_FIXED_POINT_STEPS),
         )?;
@@ -1623,20 +1933,34 @@ impl LodGraph {
         let added_dependencies = dependencies.difference(&st.validated_deps).count();
         st.validated_deps = dependencies;
 
-        let beta64 = f64::from(beta);
+        let falsification_edges = rows.falsifies.iter().filter(|&&f| f).count();
+        let block = run.reported.unwrap_or(BlockRun {
+            iterations: 0,
+            k_max: 0,
+            initial_delta: 0.0,
+            residual: 0.0,
+        });
         Ok(FixedPointReport {
             beta,
+            gamma,
             tolerance,
             theta_lo,
             theta_hi,
             nodes: st.nodes.len(),
             pinned,
-            dependency_edges: rows.sources.len(),
-            iterations: run.iterations,
-            k_max: run.k_max,
-            initial_delta: run.initial_delta,
-            residual: run.residual,
-            error_bound: beta64 / (1.0 - beta64) * run.residual,
+            dependency_edges: rows.sources.len() - falsification_edges,
+            falsification_edges,
+            scc_count: run.scc_count,
+            trivial_scc_count: run.trivial_scc_count,
+            cyclic_scc_count: run.cyclic_scc_count,
+            max_scc_size: run.max_scc_size,
+            contraction: run.contraction,
+            node_updates: run.node_updates,
+            iterations: block.iterations,
+            k_max: block.k_max,
+            initial_delta: block.initial_delta,
+            residual: block.residual,
+            error_bound: run.error_bound,
             transitions,
             revoked_entities,
             reinstated_entities,
@@ -2147,13 +2471,28 @@ mod tests {
             .add_edge(b, c, EdgeType::CausalTransition, 2.0)
             .unwrap();
         graph.add_edge(c, a, EdgeType::DependsOn, 1.0).unwrap();
-        // Edges of other types carry no confidence.
+        // Edges of other types carry no confidence. (`Falsifies` does, with a
+        // negative sign: see the signed tests below.)
         graph.add_edge(b, a, EdgeType::Semantic, 50.0).unwrap();
-        graph.add_edge(c, b, EdgeType::Falsifies, 50.0).unwrap();
+        graph.add_edge(c, b, EdgeType::Validates, 50.0).unwrap();
 
         let report = evolve(&graph, 0.2, 0.8);
         assert_eq!((report.nodes, report.pinned), (4, 1));
         assert_eq!(report.dependency_edges, 4);
+        assert_eq!(report.falsification_edges, 0);
+        // The axiom alone, then the loop {a, b, c}. Inside the loop the largest
+        // row sum is 1 (b from a, c from b), so q = beta.
+        assert_eq!(
+            (
+                report.scc_count,
+                report.trivial_scc_count,
+                report.cyclic_scc_count,
+                report.max_scc_size
+            ),
+            (2, 1, 1, 3)
+        );
+        assert_eq!(report.contraction, f64::from(BETA));
+        assert_eq!(report.node_updates, 1 + 3 * (report.iterations + 1));
 
         // a = k pa + beta (3/4 + c/4), b = k pb + beta a, c = k pc + beta b, k = 1 - beta.
         let beta = f64::from(BETA);
@@ -2209,27 +2548,39 @@ mod tests {
         }
         let (beta, tol) = (0.9_f64, 1e-9_f64);
         let prior: Vec<f64> = priors.iter().map(|&p| f64::from(p)).collect();
-        let runs: Vec<FixedPointRun> = {
+        let runs: Vec<(BlockRun, Vec<f64>)> = {
             let st = graph.state.read();
-            let rows = dependency_rows(&st.nodes, &graph.csr_snapshot(), &st.edge_buffer);
+            let rows = signed_rows(&st.nodes, &graph.csr_snapshot(), &st.edge_buffer, true);
+            let members: Vec<u32> = ids.clone();
             [
                 prior.clone(),
                 vec![0.0; 3],
                 vec![1.0; 3],
                 vec![1.0, 0.0, 0.37],
             ]
-            .iter()
-            .map(|start| {
-                iterate_to_fixed_point(&rows, &prior, start, beta, tol, usize::MAX).unwrap()
+            .into_iter()
+            .map(|mut c| {
+                let run = iterate_block(
+                    &rows,
+                    &prior,
+                    &members,
+                    beta,
+                    beta,
+                    1.0,
+                    tol,
+                    usize::MAX,
+                    &mut c,
+                )
+                .unwrap();
+                (run, c)
             })
             .collect()
         };
         let bound = 2.0 * tol * beta / (1.0 - beta);
-        for run in &runs {
+        for (run, c) in &runs {
             assert!(run.iterations <= run.k_max);
-            let c = &run.confidences;
             for i in 0..3 {
-                assert!((c[i] - runs[0].confidences[i]).abs() <= bound);
+                assert!((c[i] - runs[0].1[i]).abs() <= bound);
                 // Node i depends on node i - 1.
                 let rhs = (1.0 - beta) * prior[i] + beta * c[(i + 2) % 3];
                 assert!((c[i] - rhs).abs() < tol);
@@ -2255,7 +2606,7 @@ mod tests {
         let before = (confidences(&graph), sorted_deps(&graph));
 
         let err = graph
-            .evolve_epistemic_fixed_point_within(BETA, TOL, 0.3, 0.6, 3)
+            .evolve_signed_epistemic_fixed_point_within(BETA, 1.0, TOL, 0.3, 0.6, 3)
             .unwrap_err();
         match err {
             LodError::FixedPointDiverged {
@@ -2315,6 +2666,22 @@ mod tests {
             (BETA, TOL, 0.2, 1.0),
             (BETA, TOL, f32::NAN, 0.8),
         ];
+        for gamma in [
+            f32::NAN,
+            f32::INFINITY,
+            f32::NEG_INFINITY,
+            -0.5,
+            -f32::MIN_POSITIVE,
+        ] {
+            assert!(
+                matches!(
+                    graph
+                        .evolve_signed_epistemic_fixed_point_within(BETA, gamma, TOL, 0.2, 0.8, 10),
+                    Err(LodError::InvalidQuery(_))
+                ),
+                "gamma {gamma} was accepted"
+            );
+        }
         for (beta, tol, lo, hi) in bad {
             assert!(
                 matches!(
@@ -3294,5 +3661,379 @@ mod tests {
             .iter()
             .all(|h| h.payload.as_deref() != Some(LOG)));
         assert_eq!(graph.node_for_entity(2), None);
+    }
+
+    // ---------------------------------------------------------------- SCC blocks
+
+    fn evolve_signed(
+        graph: &LodGraph,
+        beta: f32,
+        gamma: f32,
+    ) -> Result<FixedPointReport, LodError> {
+        graph.evolve_signed_epistemic_fixed_point_within(
+            beta,
+            gamma,
+            TOL,
+            0.2,
+            0.8,
+            MAX_FIXED_POINT_STEPS,
+        )
+    }
+
+    /// Tarjan on a hand-drawn graph: components exact, every component listed
+    /// after every component its arcs reach.
+    #[test]
+    fn tarjan_lists_components_after_everything_they_reach() {
+        // Arcs: 0 -> 1, 1 -> 2, 2 -> 1, 2 -> 3, 3 -> 3, 4 -> 0, 4 -> 5, 5 -> 4.
+        let arcs: [&[u32]; 6] = [&[1], &[2], &[1, 3], &[3], &[0, 5], &[4]];
+        let mut offsets = vec![0];
+        let mut targets = Vec::new();
+        for row in arcs {
+            targets.extend_from_slice(row);
+            offsets.push(targets.len());
+        }
+        let condensation = tarjan_scc(&offsets, &targets);
+        let components: Vec<Vec<u32>> = (0..condensation.component_count())
+            .map(|k| {
+                let mut c = condensation.component(k).to_vec();
+                c.sort_unstable();
+                c
+            })
+            .collect();
+        assert_eq!(components, vec![vec![3], vec![1, 2], vec![0], vec![4, 5]]);
+
+        // A chain of 200 000 arcs: iterative, so no stack overflow.
+        let n = 200_000;
+        let offsets: Vec<usize> = (0..=n).map(|i| i.min(n - 1)).collect();
+        let targets: Vec<u32> = (1..n as u32).collect();
+        let condensation = tarjan_scc(&offsets, &targets);
+        assert_eq!(condensation.component_count(), n);
+        assert_eq!(condensation.component(0), &[n as u32 - 1]);
+        assert_eq!(condensation.component(n - 1), &[0]);
+    }
+
+    /// A DAG (an axiom feeding a chain and a diamond): every component is
+    /// trivial, each node takes exactly one evaluation, there is no iteration,
+    /// and each value is the exact fixed point.
+    #[test]
+    fn dag_blocks_are_trivial_and_take_one_evaluation_each() {
+        let graph = LodGraph::new();
+        let x = graph
+            .add_node(node("x", 1).with_status(EpistemicStatus::Axiomatic))
+            .unwrap();
+        let a = graph.add_node(node("a", 2).with_prior(0.4)).unwrap();
+        let b = graph.add_node(node("b", 3).with_prior(0.6)).unwrap();
+        let c = graph.add_node(node("c", 4).with_prior(0.2)).unwrap();
+        let d = graph.add_node(node("d", 5).with_prior(0.9)).unwrap();
+        graph.add_edge(x, a, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(a, b, EdgeType::DependsOn, 1.0).unwrap();
+        graph
+            .add_edge(a, c, EdgeType::CausalTransition, 1.0)
+            .unwrap();
+        graph.add_edge(b, d, EdgeType::DependsOn, 3.0).unwrap();
+        graph.add_edge(c, d, EdgeType::DependsOn, 1.0).unwrap();
+
+        let report = evolve(&graph, 0.2, 0.8);
+        assert_eq!(
+            (
+                report.scc_count,
+                report.trivial_scc_count,
+                report.cyclic_scc_count,
+                report.max_scc_size
+            ),
+            (5, 5, 0, 1)
+        );
+        assert_eq!(report.node_updates, 5);
+        assert_eq!((report.iterations, report.k_max), (0, 0));
+        assert_eq!((report.contraction, report.error_bound), (0.0, 0.0));
+
+        let beta = f64::from(BETA);
+        let k = 1.0 - beta;
+        let ea = k * 0.4_f32 as f64 + beta;
+        let eb = k * 0.6_f32 as f64 + beta * ea;
+        let ec = k * 0.2_f32 as f64 + beta * ea;
+        let ed = k * 0.9_f32 as f64 + beta * (0.75 * eb + 0.25 * ec);
+        let got = confidences(&graph);
+        for (id, exact) in [(a, ea), (b, eb), (c, ec), (d, ed)] {
+            assert_eq!(got[id as usize], exact as f32, "node {id}");
+        }
+    }
+
+    /// Only the cycle iterates: an axiom feeds the loop {a, b}, whose output
+    /// feeds d. d is evaluated once, from the converged loop, and every node
+    /// satisfies the global equation within the reported bound.
+    #[test]
+    fn cyclic_block_iterates_alone_and_feeds_its_dependents_once() {
+        let graph = LodGraph::new();
+        let x = graph
+            .add_node(node("x", 1).with_status(EpistemicStatus::Axiomatic))
+            .unwrap();
+        let a = graph.add_node(node("a", 2).with_prior(0.3)).unwrap();
+        let b = graph.add_node(node("b", 3).with_prior(0.7)).unwrap();
+        let d = graph.add_node(node("d", 4).with_prior(0.5)).unwrap();
+        let s = graph.add_node(node("s", 5).with_prior(0.5)).unwrap();
+        graph.add_edge(x, a, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(a, b, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(b, a, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(b, d, EdgeType::DependsOn, 1.0).unwrap();
+        // A self-loop is a cycle of one node.
+        graph.add_edge(s, s, EdgeType::DependsOn, 1.0).unwrap();
+
+        let report = evolve(&graph, 0.2, 0.8);
+        assert_eq!(
+            (
+                report.scc_count,
+                report.trivial_scc_count,
+                report.cyclic_scc_count,
+                report.max_scc_size
+            ),
+            (4, 2, 2, 2)
+        );
+        assert!(report.iterations >= 1 && report.iterations <= report.k_max);
+        assert!(report.residual < f64::from(TOL));
+        // The loop {a, b}: row a is half internal, row b wholly: q = beta.
+        assert_eq!(report.contraction, f64::from(BETA));
+
+        let beta = f64::from(BETA);
+        let k = 1.0 - beta;
+        let c: Vec<f64> = confidences(&graph).iter().map(|&v| f64::from(v)).collect();
+        let t = [
+            1.0,
+            k * 0.3_f32 as f64 + beta * 0.5 * (c[x as usize] + c[b as usize]),
+            k * 0.7_f32 as f64 + beta * c[a as usize],
+            k * 0.5 + beta * c[b as usize],
+            k * 0.5 + beta * c[s as usize],
+        ];
+        for v in 0..5 {
+            // f32 storage adds its rounding to the iteration's own bound.
+            assert!(
+                (c[v] - t[v]).abs() <= report.error_bound + 1e-6,
+                "node {v}: {} vs T = {}",
+                c[v],
+                t[v]
+            );
+        }
+        // The self-loop's fixed point is its prior.
+        assert!((c[s as usize] - 0.5).abs() <= report.error_bound + 1e-6);
+    }
+
+    /// Axiom s supports t (prior 0.9); axiom f falsifies t; u depends on t.
+    fn falsified_world() -> (LodGraph, [u32; 3]) {
+        let graph = LodGraph::new();
+        let s = graph
+            .add_node(node("s", 1).with_status(EpistemicStatus::Axiomatic))
+            .unwrap();
+        let f = graph
+            .add_node(node("f", 2).with_status(EpistemicStatus::Axiomatic))
+            .unwrap();
+        let t = graph.add_node(node("t", 3).with_prior(0.9)).unwrap();
+        let u = graph.add_node(node("u", 4).with_prior(0.9)).unwrap();
+        graph.add_edge(s, t, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(f, t, EdgeType::Falsifies, 2.0).unwrap();
+        graph.add_edge(t, u, EdgeType::DependsOn, 1.0).unwrap();
+        (graph, [t, u, f])
+    }
+
+    /// `t = (1 - beta) 0.9 + beta max(0, 1 - gamma)`: validated without the
+    /// falsifier, falsified and revoked at gamma 1, held by hysteresis at gamma
+    /// 0.5, validated and reinstated again at gamma 0.
+    #[test]
+    fn falsifies_edge_presses_its_target_to_falsified_and_revokes_it() {
+        let (graph, [t, u, _]) = falsified_world();
+        let beta = f64::from(BETA);
+        let k = 1.0 - beta;
+        let expect_t = |gamma: f64| k * 0.9_f32 as f64 + beta * (1.0 - gamma).max(0.0);
+
+        let off = evolve_signed(&graph, BETA, 0.0).unwrap();
+        assert_eq!((off.dependency_edges, off.falsification_edges), (2, 0));
+        assert_eq!(status(&graph, t), EpistemicStatus::Validated);
+        assert_eq!(graph.get_node(t).unwrap().confidence, expect_t(0.0) as f32);
+
+        let on = evolve_signed(&graph, BETA, 1.0).unwrap();
+        assert_eq!((on.dependency_edges, on.falsification_edges), (2, 1));
+        assert_eq!(on.gamma, 1.0);
+        let ct = graph.get_node(t).unwrap().confidence;
+        assert_eq!(ct, expect_t(1.0) as f32);
+        assert!(ct < 0.2, "{ct}");
+        assert_eq!(status(&graph, t), EpistemicStatus::Falsified);
+        assert!(graph.is_revoked(3));
+        assert!(on.revoked_entities.contains(&3));
+        assert!(on.transitions.iter().any(|tr| tr.node == t
+            && tr.from == EpistemicStatus::Validated
+            && tr.to == EpistemicStatus::Falsified));
+        // The dependent sinks with it, into the band where hysteresis holds its
+        // status: it is damped, not cascaded.
+        let cu = graph.get_node(u).unwrap().confidence;
+        assert_eq!(cu, (k * 0.9_f32 as f64 + beta * f64::from(ct)) as f32);
+        assert!((0.2..0.8).contains(&cu), "{cu}");
+        assert_eq!(status(&graph, u), EpistemicStatus::Validated);
+
+        // Between the thresholds the falsified status is kept.
+        evolve_signed(&graph, BETA, 0.5).unwrap();
+        let ct = graph.get_node(t).unwrap().confidence;
+        assert!((0.2..=0.8).contains(&ct), "{ct}");
+        assert_eq!(status(&graph, t), EpistemicStatus::Falsified);
+        assert!(graph.is_revoked(3));
+
+        let back = evolve_signed(&graph, BETA, 0.0).unwrap();
+        assert_eq!(status(&graph, t), EpistemicStatus::Validated);
+        assert!(!graph.is_revoked(3));
+        assert!(back.reinstated_entities.contains(&3));
+    }
+
+    /// A doubtful falsifier presses less: the penalty is its confidence.
+    #[test]
+    fn falsifier_penalty_scales_with_the_falsifier_confidence() {
+        let graph = LodGraph::new();
+        let f = graph.add_node(node("f", 1).with_prior(0.25)).unwrap();
+        let t = graph.add_node(node("t", 2).with_prior(0.8)).unwrap();
+        graph.add_edge(f, t, EdgeType::Falsifies, 1.0).unwrap();
+        evolve(&graph, 0.2, 0.9);
+        // t has no support edge, so its own prior supports it:
+        // (1 - beta) 0.8 + beta max(0, 0.8 - 0.25).
+        let beta = f64::from(BETA);
+        let exact = (1.0 - beta) * 0.8_f32 as f64 + beta * (0.8_f32 as f64 - 0.25);
+        assert!((f64::from(graph.get_node(t).unwrap().confidence) - exact).abs() < 1e-6);
+        assert_eq!(graph.get_node(f).unwrap().confidence, 0.25);
+    }
+
+    /// gamma = 0 leaves `Falsifies` edges out of the graph: the result is the
+    /// same bits as the same graph without them, block structure included.
+    #[test]
+    fn zero_gamma_is_the_unsigned_evolution_bit_for_bit() {
+        let build = |with_falsifiers: bool| {
+            let graph = LodGraph::new();
+            let x = graph
+                .add_node(node("x", 1).with_status(EpistemicStatus::Axiomatic))
+                .unwrap();
+            let ids: Vec<u32> = [0.3_f32, 0.6, 0.45, 0.8]
+                .iter()
+                .enumerate()
+                .map(|(i, &p)| {
+                    graph
+                        .add_node(node("n", 10 + i as u64).with_prior(p))
+                        .unwrap()
+                })
+                .collect();
+            graph.add_edge(x, ids[0], EdgeType::DependsOn, 1.0).unwrap();
+            graph
+                .add_edge(ids[0], ids[1], EdgeType::DependsOn, 2.0)
+                .unwrap();
+            graph
+                .add_edge(ids[1], ids[0], EdgeType::CausalTransition, 1.0)
+                .unwrap();
+            graph
+                .add_edge(ids[1], ids[2], EdgeType::DependsOn, 1.0)
+                .unwrap();
+            if with_falsifiers {
+                // One would join ids[3] to the loop, one close a new cycle.
+                graph
+                    .add_edge(ids[3], ids[0], EdgeType::Falsifies, 5.0)
+                    .unwrap();
+                graph
+                    .add_edge(ids[2], ids[3], EdgeType::Falsifies, 1.0)
+                    .unwrap();
+            }
+            graph
+        };
+        let (plain, signed) = (build(false), build(true));
+        let r_plain = evolve_signed(&plain, BETA, 1.0).unwrap();
+        let r_zero = evolve_signed(&signed, BETA, 0.0).unwrap();
+        assert_eq!(confidences(&plain), confidences(&signed));
+        let shape = |r: &FixedPointReport| {
+            (
+                r.scc_count,
+                r.trivial_scc_count,
+                r.cyclic_scc_count,
+                r.max_scc_size,
+                r.falsification_edges,
+                r.iterations,
+                r.node_updates,
+            )
+        };
+        assert_eq!(shape(&r_plain), shape(&r_zero));
+        assert_eq!(r_plain.error_bound, r_zero.error_bound);
+        // With gamma on, the falsifiers enter and close the cycle
+        // n0 -> n1 -> n2 -| n3 -| n0. Row n0 then weighs 1/2 + gamma inside it:
+        // q = 1.5 beta, refused at beta 0.85, solved at beta 0.5.
+        match evolve_signed(&build(true), BETA, 1.0).unwrap_err() {
+            LodError::FixedPointNotContractive { block_size, .. } => assert_eq!(block_size, 4),
+            other => panic!("expected FixedPointNotContractive, got {other}"),
+        }
+        let r_on = evolve_signed(&build(true), 0.5, 1.0).unwrap();
+        assert_eq!(r_on.falsification_edges, 2);
+        assert_eq!((r_plain.max_scc_size, r_on.max_scc_size), (2, 4));
+        assert_eq!(r_on.contraction, 0.75);
+    }
+
+    /// A falsifier inside a cycle: row a is `P+ = b` and `P- = b`, Lipschitz
+    /// `beta (1 + gamma)`. At beta 0.85, gamma 1 that is 1.7: refused, nothing
+    /// committed. At beta 0.45 it is 0.9: solved.
+    #[test]
+    fn non_contractive_signed_cycle_is_refused_and_commits_nothing() {
+        let graph = LodGraph::new();
+        let a = graph.add_node(node("a", 1).with_prior(0.7)).unwrap();
+        let b = graph.add_node(node("b", 2).with_prior(0.4)).unwrap();
+        graph.add_edge(b, a, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(a, b, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(b, a, EdgeType::Falsifies, 1.0).unwrap();
+        let before = (confidences(&graph), status(&graph, a), status(&graph, b));
+
+        match evolve_signed(&graph, BETA, 1.0).unwrap_err() {
+            LodError::FixedPointNotContractive {
+                block_size,
+                contraction,
+                ..
+            } => {
+                assert_eq!(block_size, 2);
+                assert!((contraction - 2.0 * f64::from(BETA)).abs() < 1e-12);
+            }
+            other => panic!("expected FixedPointNotContractive, got {other}"),
+        }
+        assert_eq!(
+            (confidences(&graph), status(&graph, a), status(&graph, b)),
+            before
+        );
+        assert!(!graph.is_revoked(1) && !graph.is_revoked(2));
+
+        let report = evolve_signed(&graph, 0.45, 1.0).unwrap();
+        assert!((report.contraction - 0.9 * f64::from(0.45_f32) / 0.45).abs() < 1e-6);
+        // Exact: a = k 0.7 + beta max(0, b - b) = k 0.7, b = k 0.4 + beta a.
+        let beta = f64::from(0.45_f32);
+        let k = 1.0 - beta;
+        let got = confidences(&graph);
+        assert!(
+            (f64::from(got[a as usize]) - k * 0.7_f32 as f64).abs() <= report.error_bound + 1e-6
+        );
+        let eb = k * 0.4_f32 as f64 + beta * k * 0.7_f32 as f64;
+        assert!((f64::from(got[b as usize]) - eb).abs() <= report.error_bound + 1e-6);
+    }
+
+    /// A non-finite value in either kind of block is a refusal, never a value.
+    #[test]
+    fn non_finite_values_fail_closed_in_both_block_kinds() {
+        // Node 0 alone, nodes 1 and 2 a loop reading node 0.
+        let rows = SignedRows {
+            offsets: vec![0, 0, 2, 3],
+            sources: vec![0, 2, 1],
+            probabilities: vec![0.5, 0.5, 1.0],
+            falsifies: vec![false; 3],
+            supported: vec![false, true, true],
+        };
+        for prior in [
+            vec![f64::NAN, 0.5, 0.5],
+            vec![0.5, f64::INFINITY, 0.5],
+            vec![0.5, 0.5, f64::NAN],
+        ] {
+            assert!(
+                matches!(
+                    solve_by_blocks(&rows, &prior, 0.85, 1.0, 1e-6, 100),
+                    Err(LodError::FixedPointDiverged { .. })
+                ),
+                "{prior:?}"
+            );
+        }
+        let ok = solve_by_blocks(&rows, &[0.5, 0.5, 0.5], 0.85, 1.0, 1e-6, 100).unwrap();
+        assert_eq!((ok.trivial_scc_count, ok.cyclic_scc_count), (1, 1));
     }
 }

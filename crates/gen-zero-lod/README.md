@@ -19,22 +19,35 @@ text retrieval over payload-carrying nodes.
     domain of every node coordinate; `alpha_h`, `alpha_e`, `alpha_s` weigh the
     recall distance. Node coordinates (`MixedCurvatureCoord`) are validated as
     points of the graph's `ProductManifold` (`H^4 x R^8 x S^3`).
-  - Confidence: `evolve_epistemic_fixed_point(beta, tolerance, theta_lo,
-    theta_hi)` iterates `c = (1 - beta) prior + beta P c`, where `P` is the
-    row-normalized weight of the `DependsOn` / `CausalTransition` /
-    `CoarseGrain` edges into each node. Axioms are held at 1, nodes refuted by evidence
-    (`falsify_node`) at 0. The map contracts the max norm by `beta`, so graphs
-    with cycles converge to one fixed point within
-    `k_max = ceil(ln(tolerance (1 - beta) / ||c^1 - c^0||) / ln beta)` steps; a
-    run that does not is `LodError::FixedPointDiverged` and commits nothing.
+  - Confidence: `evolve_signed_epistemic_fixed_point_within(beta, gamma,
+    tolerance, theta_lo, theta_hi, max_steps)` solves
+    `c = (1 - beta) prior + beta max(0, P+ c - gamma P- c)`, clamped to [0, 1].
+    `P+` is the row-normalized weight of the `DependsOn` / `CausalTransition` /
+    `CoarseGrain` edges into each node (a node without them is supported by its
+    own prior), `P-` the same over its `Falsifies` edges; `gamma = 0` leaves
+    them out and gives the unsigned map. `evolve_epistemic_fixed_point` uses
+    `gamma = 1` and the full step budget. Axioms are held at 1, nodes refuted by
+    evidence (`falsify_node`) at 0.
+  - Blocks: the dependency graph is split into strongly connected components
+    (iterative Tarjan) and solved in topological order, sources first. A node
+    outside every cycle takes one evaluation. A cycle is iterated alone, inputs
+    held, and must contract: its Lipschitz bound `q = beta * max row sum of
+    (P+ + gamma P-)` inside it must be below 1, else
+    `LodError::FixedPointNotContractive` (`beta < 1 / (1 + gamma)` always
+    suffices). It stops within
+    `k_max = ceil(ln(tolerance (1 - q) / ||x^1 - x^0||) / ln q)` steps; a block
+    that does not is `LodError::FixedPointDiverged`. Either error commits
+    nothing. The report carries `scc_count`, `trivial_scc_count`,
+    `cyclic_scc_count`, `max_scc_size`, `node_updates` and an error bound
+    propagated from block to block.
     Hysteresis moves statuses: below `theta_lo` is `Falsified` (entity revoked),
     above `theta_hi` is `Validated`, in between the status is kept.
     `retract_falsification` withdraws evidence; the next evolution returns the
     earlier confidences exactly.
   - Limits: the effect of a refutation on a dependent shrinks with the
     dependent's prior, its other dependencies and its distance from the refuted
-    node. It is not a whole-subtree cascade. `beta` and the thresholds are
-    caller parameters and are not calibrated on any data.
+    node. It is not a whole-subtree cascade. `beta`, `gamma` and the thresholds
+    are caller parameters and are not calibrated on any data.
   - Coarse-graining: `coarse_grain_cluster(members, entity, coord, hdc)` inserts
     a summary node on the band its coordinate implies, which must be strictly
     coarser than every member, links each member to it with a `CoarseGrain`

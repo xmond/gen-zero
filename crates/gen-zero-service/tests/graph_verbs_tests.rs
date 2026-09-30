@@ -3,12 +3,17 @@
 //! a `graph_prune` must hard-stop the pruned actions in `pipeline decide`,
 //! `simulate` and `audit`, a `graph_evolve` that retracts the evidence must
 //! lift that stop, `pipeline decide` must carry the PPR context of the chosen
-//! action, and the engine's graph geometry must decide `graph_recall`.
+//! action, the engine's graph geometry must decide `graph_recall`, and the
+//! signed evolution's `gamma` must reach the gate over `POST /message`.
 
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
 use gen_zero_lod::GeometryParams;
 use gen_zero_service::zero::ZeroEngineConfig;
-use gen_zero_service::{PolymorphicZeroEngine, ZeroToolOutcome, ZeroVerb};
+use gen_zero_service::{McpServer, PolymorphicZeroEngine, ZeroToolOutcome, ZeroVerb};
 use serde_json::{json, Value};
+use std::sync::Arc;
+use tower::util::ServiceExt;
 
 const DIM: usize = 1024;
 /// `gen_zero_gate::REVOCATION_RULE_ID`.
@@ -517,13 +522,38 @@ async fn evolve_fails_closed_on_budget_and_bad_requests() {
         rejection.detail
     );
     assert_eq!(statuses(&engine).await, before);
-    // The same refusal inside a prune leaves the root unrevoked too.
+    // The same refusal inside a prune leaves the root unrevoked too. The root
+    // must sit outside the loop: pruning a loop node pins it and cuts the
+    // loop into a chain, which is solved in one evaluation per node.
+    let out = run(
+        &engine,
+        json!({"action": "graph_deposit", "graph": {"nodes": [
+            node(json!({"entity_id": 50}), "gauge", "hypothesized", 0),
+        ]}}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let before = statuses(&engine).await;
+    assert!(before.contains(&("gauge".into(), "hypothesized".into())));
     let prune = run(
         &engine,
-        json!({"action": "graph_prune", "graph": {"action": "vent", "max_steps": 1}}),
+        json!({"action": "graph_prune", "graph": {"entity_id": 50, "max_steps": 1}}),
     )
     .await;
     assert_eq!(code(&prune), "FixedPointDiverged");
+    assert_eq!(statuses(&engine).await, before);
+    let cut = run(
+        &engine,
+        json!({"action": "graph_prune", "graph": {"action": "vent", "max_steps": 1, "dry_run": true}}),
+    )
+    .await;
+    assert!(!cut.is_error, "{:?}", cut.meta);
+    let fp = &cut.meta["graph_op"]["fixed_point"];
+    assert_eq!(
+        (&fp["cyclic_scc_count"], &fp["iterations"]),
+        (&json!(0), &json!(0))
+    );
+    assert_eq!(fp["node_updates"], fp["nodes"]);
     assert_eq!(statuses(&engine).await, before);
     let sim = run(&engine, simulate_vent()).await;
     assert_eq!(sim.meta["simulation"]["trajectory"][0]["tier"], "Proceed");
@@ -1058,4 +1088,188 @@ async fn graph_rag_and_text_deposits_fail_closed() {
     )
     .await;
     assert_eq!(out.meta["graph_op"]["graph"]["nodes"], 4, "{:?}", out.meta);
+}
+
+/// `zero` over HTTP: `POST /message` with the verb's request as the body.
+async fn http_zero(engine: &Arc<PolymorphicZeroEngine>, req: Value) -> (StatusCode, Value) {
+    let resp = McpServer::build_router(Arc::clone(engine), None)
+        .oneshot(
+            Request::post("/message")
+                .header("content-type", "application/json")
+                .body(Body::from(req.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = resp.status();
+    let bytes = axum::body::to_bytes(resp.into_body(), 1 << 22)
+        .await
+        .unwrap();
+    let body: Value = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
+    eprintln!("/message -> {status}: {body}");
+    (status, body)
+}
+
+/// The cycle world plus a fully confident "leak report" (entity 40) that
+/// falsifies "vent". Components: {11}, {40}, {vent, 30, 31}.
+async fn engine_with_falsifier() -> (Arc<PolymorphicZeroEngine>, tempfile::TempDir) {
+    let (engine, dir) = engine_with_cycle().await;
+    let mut leak = node(json!({"entity_id": 40}), "leak report", "validated", 0);
+    leak["confidence"] = json!(1.0);
+    let out = run(
+        &engine,
+        json!({"action": "graph_deposit", "graph": {
+            "nodes": [leak],
+            "edges": [{"source": {"entity_id": 40}, "target": {"action": "vent"},
+                       "type": "falsifies", "weight": 1.0}],
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    (Arc::new(engine), dir)
+}
+
+/// `graph_evolve` with `gamma` through `POST /message`: the falsifier drives the
+/// loop below `theta_lo` and hard-stops "vent" at the gate; `gamma: 0` restores
+/// it; the SCC block counts and `gamma` come back in the report; a bad or
+/// non-contractive `gamma` is refused and commits nothing.
+#[tokio::test]
+async fn http_evolve_takes_gamma_and_reports_scc_blocks() {
+    let (engine, _dir) = engine_with_falsifier().await;
+    let fixed_point = |body: &Value| body["result"]["meta"]["graph_op"]["fixed_point"].clone();
+    let blocks = |fp: &Value| {
+        [
+            "scc_count",
+            "trivial_scc_count",
+            "cyclic_scc_count",
+            "max_scc_size",
+        ]
+        .map(|k| {
+            fp[k]
+                .as_u64()
+                .unwrap_or_else(|| panic!("{k} missing: {fp}"))
+        })
+    };
+
+    // gamma 0: the falsifies edge is left out; the loop validates as before.
+    let (status, body) = http_zero(&engine, evolve_request(json!({"gamma": 0.0}))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["verb"], "graph_evolve");
+    let fp = fixed_point(&body);
+    assert_eq!(fp["gamma"], 0.0);
+    assert_eq!(
+        (&fp["dependency_edges"], &fp["falsification_edges"]),
+        (&json!(4), &json!(0))
+    );
+    assert_eq!(blocks(&fp), [3, 2, 1, 3]);
+    assert_eq!(fp["contraction"], f64::from(0.85_f32));
+    let iterations = fp["iterations"].as_u64().unwrap();
+    assert!(iterations >= 1 && iterations <= fp["k_max"].as_u64().unwrap());
+    assert_eq!(fp["node_updates"], 2 + 3 * (iterations + 1));
+    let validated = statuses(&engine).await;
+    assert!(validated
+        .iter()
+        .all(|(label, status)| label == "safety invariant" || status == "validated"));
+
+    // Default gamma (1), dry run: reported, rolled back.
+    let (status, body) = http_zero(&engine, evolve_request(json!({"dry_run": true}))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let fp = fixed_point(&body);
+    assert_eq!(fp["gamma"], 1.0);
+    assert_eq!(fp["falsification_edges"], 1);
+    assert_eq!(fp["transitions_total"], 3);
+    assert_eq!(statuses(&engine).await, validated);
+
+    // gamma 1 applied. vent = (1 - beta) 0.5 + beta max(0, (1 + c31) / 2 - 1)
+    // = (1 - beta) 0.5, since c31 <= 1: the loop falls and "vent" is revoked.
+    let (status, body) = http_zero(&engine, evolve_request(json!({"gamma": 1.0}))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let fp = fixed_point(&body);
+    assert_eq!(blocks(&fp), [3, 2, 1, 3]);
+    let vent = fp["transitions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|t| t["label"] == "vent")
+        .unwrap_or_else(|| panic!("no transition for vent: {fp}"));
+    assert_eq!(vent["to"], "falsified");
+    let k = 1.0 - f64::from(0.85_f32);
+    assert!((vent["confidence"].as_f64().unwrap() - 0.5 * k).abs() < 1e-6);
+    assert_eq!(fp["revoked_entities"].as_array().unwrap().len(), 3);
+    assert!(statuses(&engine).await.iter().all(|(label, status)| [
+        "safety invariant",
+        "leak report"
+    ]
+    .contains(&label.as_str())
+        || status == "falsified"));
+    let stopped = run(&engine, simulate_vent()).await;
+    assert_eq!(
+        stopped.meta["simulation"]["trajectory"][0]["tier"],
+        "HardStop"
+    );
+
+    // Refusals commit nothing: a negative, an overflowing and a non-contractive gamma.
+    let falsified = statuses(&engine).await;
+    for bad in [json!(-1.0), json!(1e39)] {
+        let (status, body) = http_zero(&engine, evolve_request(json!({"gamma": bad}))).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{bad}: {body}");
+    }
+    // 31 also falsifies vent: row vent weighs 1/2 (31 in P+) + gamma 1/2 (31 in
+    // P-) inside the loop, so gamma 2 gives q = 1.5 beta > 1.
+    let out = run(
+        &engine,
+        json!({"action": "graph_deposit", "graph": {"edges": [
+            {"source": {"entity_id": 31}, "target": {"action": "vent"}, "type": "falsifies", "weight": 1.0},
+        ]}}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let (status, body) = http_zero(&engine, evolve_request(json!({"gamma": 2.0}))).await;
+    assert_eq!(status.as_u16(), 422, "{body}");
+    assert!(
+        body.to_string().contains("FixedPointNotContractive"),
+        "{body}"
+    );
+    let direct = run(&engine, evolve_request(json!({"gamma": 2.0}))).await;
+    assert_eq!(code(&direct), "FixedPointNotContractive");
+    assert_eq!(statuses(&engine).await, falsified);
+
+    // gamma 0 lifts the falsifiers again and reopens the gate.
+    let (status, body) = http_zero(&engine, evolve_request(json!({"gamma": 0.0}))).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        fixed_point(&body)["reinstated_entities"]
+            .as_array()
+            .unwrap()
+            .len(),
+        3
+    );
+    assert_eq!(statuses(&engine).await, validated);
+    let reopened = run(&engine, simulate_vent()).await;
+    assert_eq!(
+        reopened.meta["simulation"]["trajectory"][0]["tier"],
+        "Proceed"
+    );
+}
+
+/// `graph_prune` runs the same signed evolution and takes the same `gamma`.
+#[tokio::test]
+async fn prune_takes_gamma_and_reports_it() {
+    let (engine, _dir) = engine_with_falsifier().await;
+    let out = run(
+        &engine,
+        json!({"action": "graph_prune", "graph": {"entity_id": 30, "gamma": 0.25, "dry_run": true}}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let fp = &out.meta["graph_op"]["fixed_point"];
+    assert_eq!(fp["gamma"], 0.25);
+    assert_eq!(fp["falsification_edges"], 1);
+    assert_eq!(fp["pinned"], 2);
+    let bad = run(
+        &engine,
+        json!({"action": "graph_prune", "graph": {"entity_id": 30, "gamma": -0.5}}),
+    )
+    .await;
+    assert_eq!(code(&bad), "InvalidParams");
 }

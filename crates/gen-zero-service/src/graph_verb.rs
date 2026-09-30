@@ -15,6 +15,12 @@
 //!   falsified and revoked. `dry_run` reports and rolls back.
 //! - `graph_evolve`: optionally retract such evidence, then evolve every
 //!   confidence to the fixed point. `dry_run` reports and rolls back.
+//!
+//!   Both evolutions take `gamma` (default 1), the gain of `falsifies` edges in
+//!   `c = (1 - beta) pi + beta max(0, P+ c - gamma P- c)`, and solve it by
+//!   strongly connected components in topological order. The response echoes
+//!   `gamma` and the block counts (`scc_count`, `trivial_scc_count`,
+//!   `cyclic_scc_count`, `max_scc_size`).
 //! - `graph_coarse_grain`: insert a summary node for a cluster of member nodes
 //!   on the band its coordinate implies (strictly coarser than every member),
 //!   link each member to it with a `CoarseGrain` edge and flush. `dry_run`
@@ -46,7 +52,7 @@ use crate::cognitive::Rejection;
 use crate::zero::action_id;
 use gen_zero_lod::{
     EdgeType, EpistemicStatus, FixedPointReport, HybridRagResult, LodBand, LodError, LodGraph,
-    LodNode, MixedCurvatureCoord, ZoomDirection, PROJECTOR_VERSION,
+    LodNode, MixedCurvatureCoord, ZoomDirection, DEFAULT_FALSIFICATION_GAIN, PROJECTOR_VERSION,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -78,6 +84,8 @@ pub const DEFAULT_PPR_TOLERANCE: f32 = 1e-6;
 /// Confidence evolution parameters used when a request names none. Echoed in
 /// every response. Uncalibrated presets.
 pub const DEFAULT_EVOLVE_BETA: f32 = 0.85;
+/// Falsification gain: how strongly a `falsifies` edge presses its target.
+pub const DEFAULT_EVOLVE_GAMMA: f32 = DEFAULT_FALSIFICATION_GAIN;
 pub const DEFAULT_EVOLVE_TOLERANCE: f32 = 1e-6;
 pub const DEFAULT_EVOLVE_THETA_LO: f32 = 0.2;
 pub const DEFAULT_EVOLVE_THETA_HI: f32 = 0.8;
@@ -215,6 +223,7 @@ struct PruneSpec {
     action: Option<String>,
     dry_run: Option<bool>,
     beta: Option<f32>,
+    gamma: Option<f32>,
     tolerance: Option<f32>,
     theta_lo: Option<f32>,
     theta_hi: Option<f32>,
@@ -228,6 +237,7 @@ struct EvolveSpec {
     retract: Vec<EntityRef>,
     dry_run: Option<bool>,
     beta: Option<f32>,
+    gamma: Option<f32>,
     tolerance: Option<f32>,
     theta_lo: Option<f32>,
     theta_hi: Option<f32>,
@@ -258,6 +268,7 @@ struct ZoomSpec {
 #[derive(Clone, Copy)]
 struct EvolveParams {
     beta: f32,
+    gamma: f32,
     tolerance: f32,
     theta_lo: f32,
     theta_hi: f32,
@@ -267,6 +278,7 @@ struct EvolveParams {
 impl EvolveParams {
     fn resolve(
         beta: Option<f32>,
+        gamma: Option<f32>,
         tolerance: Option<f32>,
         theta_lo: Option<f32>,
         theta_hi: Option<f32>,
@@ -278,6 +290,7 @@ impl EvolveParams {
         }
         Ok(Self {
             beta: beta.unwrap_or(DEFAULT_EVOLVE_BETA),
+            gamma: gamma.unwrap_or(DEFAULT_EVOLVE_GAMMA),
             tolerance: tolerance.unwrap_or(DEFAULT_EVOLVE_TOLERANCE),
             theta_lo: theta_lo.unwrap_or(DEFAULT_EVOLVE_THETA_LO),
             theta_hi: theta_hi.unwrap_or(DEFAULT_EVOLVE_THETA_HI),
@@ -286,8 +299,9 @@ impl EvolveParams {
     }
 
     fn run(self, graph: &LodGraph) -> Result<FixedPointReport, LodError> {
-        graph.evolve_epistemic_fixed_point_within(
+        graph.evolve_signed_epistemic_fixed_point_within(
             self.beta,
+            self.gamma,
             self.tolerance,
             self.theta_lo,
             self.theta_hi,
@@ -302,11 +316,13 @@ fn invalid(detail: impl Into<String>) -> Rejection {
 
 /// Input faults are 400 (blank text `EmptyInput`), an oversized payload 413, a
 /// duplicate entity 409, a missing entity 404, a
-/// confidence evolution that did not converge inside its step bound 422. A CSR
+/// confidence evolution that did not converge inside its step bound, or whose
+/// map is not a contraction on some cycle, 422. A CSR
 /// or checkpoint failure is an engine fault, 500.
 fn graph_rejection(e: LodError) -> Rejection {
     let (code, status) = match &e {
         LodError::FixedPointDiverged { .. } => ("FixedPointDiverged", 422),
+        LodError::FixedPointNotContractive { .. } => ("FixedPointNotContractive", 422),
         LodError::SpineBreatheOutOfBounds { .. } => ("BandOutOfRange", 409),
         LodError::DuplicateEntity(_) => ("DuplicateEntity", 409),
         LodError::EntityNotFound(_) | LodError::NodeNotFound(_) => ("EntityNotFound", 404),
@@ -847,6 +863,7 @@ fn fixed_point_json(graph: &LodGraph, params: EvolveParams, report: &FixedPointR
         .collect();
     json!({
         "beta": report.beta,
+        "gamma": report.gamma,
         "tolerance": report.tolerance,
         "theta_lo": report.theta_lo,
         "theta_hi": report.theta_hi,
@@ -854,6 +871,13 @@ fn fixed_point_json(graph: &LodGraph, params: EvolveParams, report: &FixedPointR
         "nodes": report.nodes,
         "pinned": report.pinned,
         "dependency_edges": report.dependency_edges,
+        "falsification_edges": report.falsification_edges,
+        "scc_count": report.scc_count,
+        "trivial_scc_count": report.trivial_scc_count,
+        "cyclic_scc_count": report.cyclic_scc_count,
+        "max_scc_size": report.max_scc_size,
+        "contraction": report.contraction,
+        "node_updates": report.node_updates,
         "iterations": report.iterations,
         "k_max": report.k_max,
         "initial_delta": report.initial_delta,
@@ -875,6 +899,7 @@ fn prune(graph: &LodGraph, spec: PruneSpec) -> Result<(String, Value), Rejection
     let dry_run = spec.dry_run.unwrap_or(false);
     let params = EvolveParams::resolve(
         spec.beta,
+        spec.gamma,
         spec.tolerance,
         spec.theta_lo,
         spec.theta_hi,
@@ -937,6 +962,7 @@ fn evolve(graph: &LodGraph, spec: EvolveSpec) -> Result<(String, Value), Rejecti
     let dry_run = spec.dry_run.unwrap_or(false);
     let params = EvolveParams::resolve(
         spec.beta,
+        spec.gamma,
         spec.tolerance,
         spec.theta_lo,
         spec.theta_hi,
