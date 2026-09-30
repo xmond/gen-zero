@@ -137,6 +137,7 @@ fn mcp_server() -> McpServer {
         engine: engine(),
         auth_token: None,
         bridge_required: false,
+        closed_loop: None,
     }
 }
 

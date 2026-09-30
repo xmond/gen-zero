@@ -10,9 +10,13 @@
 //!   `isError` outcomes map by their error code, engine errors are 400 / 500.
 
 use crate::bridge::BridgeHealth;
+use crate::closed_loop::{
+    spawn_feedback_syncer, spawn_patch_poller, ClosedLoopConfig, FeedbackBuffer, FeedbackRecord,
+};
 use crate::error::ServiceError;
 use crate::mount::{MountKey, MountRegistry};
 use crate::zero::{PolymorphicZeroEngine, ZeroToolOutcome};
+use arc_swap::ArcSwap;
 use axum::{
     extract::{Extension, Json, Path, Query, Request},
     http::{header, HeaderValue, StatusCode},
@@ -354,6 +358,10 @@ pub struct McpServer {
     pub auth_token: Option<String>,
     /// Refuse to start unless the semantic scorer is ready.
     pub bridge_required: bool,
+    /// Native Rust closed-loop wiring (feedback sync + tuning patch poll).
+    /// `None` disables both background tasks; `POST /v1/feedback` still
+    /// buffers records in that case, they are just never shipped anywhere.
+    pub closed_loop: Option<ClosedLoopConfig>,
 }
 
 impl Default for McpServer {
@@ -362,6 +370,7 @@ impl Default for McpServer {
             engine: Arc::new(PolymorphicZeroEngine::new()),
             auth_token: None,
             bridge_required: bridge_required_from_env(),
+            closed_loop: None,
         }
     }
 }
@@ -378,6 +387,11 @@ impl McpServer {
 
     pub fn with_auth_token(mut self, token: Option<String>) -> Self {
         self.auth_token = token;
+        self
+    }
+
+    pub fn with_closed_loop_config(mut self, config: Option<ClosedLoopConfig>) -> Self {
+        self.closed_loop = config;
         self
     }
 
@@ -868,13 +882,19 @@ impl McpServer {
 
     /// Build Axum Router for SSE & REST gateway.
     pub fn build_router(engine: Arc<PolymorphicZeroEngine>, auth_token: Option<String>) -> Router {
-        Self::router_with_sessions(engine, auth_token, SseSessionManager::default())
+        Self::router_with_sessions(
+            engine,
+            auth_token,
+            SseSessionManager::default(),
+            Arc::new(FeedbackBuffer::new()),
+        )
     }
 
     fn router_with_sessions(
         engine: Arc<PolymorphicZeroEngine>,
         auth_token: Option<String>,
         sessions: SseSessionManager,
+        feedback_buffer: Arc<FeedbackBuffer>,
     ) -> Router {
         let auth_config = AuthConfig {
             expected_token: auth_token.map(|t| Arc::from(t.trim())),
@@ -899,6 +919,7 @@ impl McpServer {
             .route("/v1/what_if", post(what_if_handler))
             .route("/v1/audit_action", post(audit_action_handler))
             .route("/v1/mounts", post(publish_mount_handler))
+            .route("/v1/feedback", post(feedback_handler))
             .route(
                 "/v1/decisions/stream",
                 get(sse_handler).post(legacy_decisions_handler),
@@ -910,26 +931,45 @@ impl McpServer {
             .layer(Extension(engine))
             .layer(Extension(sessions))
             .layer(Extension(auth_config))
+            .layer(Extension(feedback_buffer))
     }
 
-    /// Run Tokio + Axum SSE/REST server on specified SocketAddr.
+    /// Run Tokio + Axum SSE/REST server on specified SocketAddr. When
+    /// `closed_loop` names a tuning endpoint, this also spawns the feedback
+    /// syncer and patch poller background tasks for the lifetime of the
+    /// server, and aborts them once the listener stops draining.
     pub async fn run_sse(&self, addr: SocketAddr) -> Result<(), ServiceError> {
         self.check_bridge(Some(addr.port())).await?;
         let sessions = SseSessionManager::default();
+        let feedback_buffer = Arc::new(FeedbackBuffer::new());
+        let closed_loop_tasks = self.closed_loop.clone().map(|config| {
+            let shutdown_rx = sessions.shutdown.subscribe();
+            let syncer =
+                spawn_feedback_syncer(config.clone(), feedback_buffer.clone(), shutdown_rx.clone());
+            let current_version = Arc::new(ArcSwap::from_pointee(String::new()));
+            let poller = spawn_patch_poller(config, current_version, shutdown_rx);
+            (syncer, poller)
+        });
         let app = Self::router_with_sessions(
             self.engine.clone(),
             self.auth_token.clone(),
             sessions.clone(),
+            feedback_buffer,
         );
         let listener = tokio::net::TcpListener::bind(&addr).await?;
-        serve_with_shutdown(
+        let result = serve_with_shutdown(
             listener,
             app,
             sessions,
             shutdown_signal(),
             Duration::from_secs(5),
         )
-        .await?;
+        .await;
+        if let Some((syncer, poller)) = closed_loop_tasks {
+            syncer.abort();
+            poller.abort();
+        }
+        result?;
         Ok(())
     }
 }
@@ -1380,6 +1420,7 @@ async fn dispatch_jsonrpc_payload(
         engine,
         auth_token: None,
         bridge_required: false,
+        closed_loop: None,
     };
     let response = server.handle_jsonrpc_frame(&mut frame).await;
     if response.is_empty() {
@@ -1993,6 +2034,35 @@ async fn publish_mount_handler(
     }
 }
 
+/// `POST /v1/feedback`: ingest a JSON array of [`FeedbackRecord`] into the
+/// in-process [`FeedbackBuffer`], for later delivery to the tuning server by
+/// [`spawn_feedback_syncer`]. Always available (even without a configured
+/// tuning endpoint), so MCP/REST clients never need to know whether the
+/// closed loop is wired up.
+async fn feedback_handler(
+    Extension(buffer): Extension<Arc<FeedbackBuffer>>,
+    RestJson(payload): RestJson,
+) -> Response {
+    let records: Vec<FeedbackRecord> = match serde_json::from_value(payload) {
+        Ok(records) => records,
+        Err(error) => {
+            return rest_error(
+                StatusCode::BAD_REQUEST,
+                format!("body must be a JSON array of FeedbackRecord: {error}"),
+            )
+        }
+    };
+    let ingested = records.len();
+    for record in records {
+        buffer.record(record);
+    }
+    (
+        StatusCode::OK,
+        Json(json!({"ingested": ingested, "buffered": buffer.len()})),
+    )
+        .into_response()
+}
+
 #[cfg(test)]
 mod gate_status_tests {
     use super::*;
@@ -2340,6 +2410,7 @@ mod tests {
             engine: engine.clone(),
             auth_token: None,
             bridge_required: false,
+            closed_loop: None,
         };
         server
             .check_bridge(Some(DEFAULT_MCP_SSE_PORT))
@@ -2382,6 +2453,7 @@ mod tests {
             engine,
             auth_token: None,
             bridge_required: false,
+            closed_loop: None,
         };
         assert!(
             lenient.check_bridge(None).await.is_ok(),
@@ -2393,6 +2465,7 @@ mod tests {
             engine: Arc::new(PolymorphicZeroEngine::new().with_bridge(None)),
             auth_token: None,
             bridge_required: true,
+            closed_loop: None,
         };
         assert!(disabled.check_bridge(None).await.is_err());
     }

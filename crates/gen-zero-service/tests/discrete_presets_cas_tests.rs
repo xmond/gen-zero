@@ -345,6 +345,7 @@ async fn mcp_tools_call_follows_the_mounted_preset() {
             engine: Arc::clone(&engine),
             auth_token: None,
             bridge_required: false,
+            closed_loop: None,
         };
         let call = |args: Value| {
             let mut buf = json!({

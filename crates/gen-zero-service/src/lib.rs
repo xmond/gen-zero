@@ -9,6 +9,7 @@
 #![allow(clippy::result_large_err)]
 
 pub mod bridge;
+pub mod closed_loop;
 pub mod cognitive;
 pub mod error;
 pub mod imagine;
@@ -23,6 +24,9 @@ pub mod worldsim;
 pub mod zero;
 
 pub use bridge::{BridgeConfig, BridgeError, SemanticBridgeClient};
+pub use closed_loop::{
+    spawn_feedback_syncer, spawn_patch_poller, ClosedLoopConfig, FeedbackBuffer, FeedbackRecord,
+};
 pub use cognitive::{CognitiveRuntime, Rejection};
 pub use error::ServiceError;
 pub use mount::{

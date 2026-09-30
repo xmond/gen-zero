@@ -632,6 +632,7 @@ async fn mcp_frames_reach_the_fiber_path() {
         engine: Arc::clone(&engine),
         auth_token: None,
         bridge_required: false,
+        closed_loop: None,
     };
     let p = point(0.3, 0.0);
     let args = fiber_req(
