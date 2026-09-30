@@ -23559,7 +23559,7 @@
     {
       "file": "crates/gen-zero-lod/src/graph.rs",
       "declared_modules": [],
-      "public_symbols": 38
+      "public_symbols": 43
     },
     {
       "file": "crates/gen-zero-lod/src/lib.rs",
@@ -23577,12 +23577,12 @@
     {
       "file": "crates/gen-zero-lod/src/manifold.rs",
       "declared_modules": [],
-      "public_symbols": 63
+      "public_symbols": 61
     },
     {
       "file": "crates/gen-zero-lod/src/node.rs",
       "declared_modules": [],
-      "public_symbols": 11
+      "public_symbols": 12
     },
     {
       "file": "crates/gen-zero-lod/src/ppr.rs",
@@ -23844,7 +23844,7 @@
     {
       "file": "crates/gen-zero-service/src/zero.rs",
       "declared_modules": [],
-      "public_symbols": 33
+      "public_symbols": 35
     },
     {
       "file": "crates/gen-zero-storage/src/error.rs",

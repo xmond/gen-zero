@@ -53,10 +53,12 @@ impl LodBand {
 
 /// Epistemic Lifecycle State Machine.
 ///
-/// Follows Pearl's causality ladder:
-/// Hypothesized --[Validated]--> Validated
-/// Hypothesized --[Falsified]--> Falsified
-/// Axiomatic (Frozen system invariants)
+/// `Axiomatic` is frozen. The other three are moved by
+/// `LodGraph::evolve_epistemic_fixed_point` with hysteresis on the node's
+/// fixed-point confidence `c`: `c < theta_lo` gives `Falsified`, `c > theta_hi`
+/// gives `Validated`, and in between the status is kept. A node refuted by
+/// direct evidence (`LodNode::refuted`) is `Falsified` until that evidence is
+/// retracted.
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -66,7 +68,7 @@ pub enum EpistemicStatus {
     Hypothesized = 0,
     /// Empirically verified through environment intervention or formal proof.
     Validated = 1,
-    /// Falsified by counterexample or contradiction; targeted for cascading prune.
+    /// Falsified by direct evidence, or because its confidence fell below `theta_lo`.
     Falsified = 2,
     /// Axiomatically frozen truth; immutable root premises.
     #[serde(alias = "frozen")]
@@ -104,7 +106,7 @@ pub struct LodNode {
     pub band: LodBand,
     /// Current epistemic lifecycle status.
     pub status: EpistemicStatus,
-    /// 16-coordinate mixed-curvature coordinate (H^4 x S^3 x R^8).
+    /// 16-coordinate chart (H^4 x R^8 x S^3) under the owning graph's geometry.
     pub coord: MixedCurvatureCoord,
     /// 256-bit HDC fingerprint for Stage-1 sub-microsecond filtering.
     pub hdc_fingerprint: [u64; 4],
@@ -112,8 +114,16 @@ pub struct LodNode {
     pub label: String,
     /// Datalog/Formal entity identifier (used in GraphFactProvider).
     pub entity_id: u64,
-    /// Epistemic confidence level [0.0, 1.0].
+    /// Evidence prior `pi` in [0.0, 1.0]: the confidence this node has on its own
+    /// evidence, before its dependencies are counted. Fixed at insert.
+    pub prior: f32,
+    /// Posterior confidence in [0.0, 1.0]: the prior until the first
+    /// `LodGraph::evolve_epistemic_fixed_point`, then the fixed-point value.
     pub confidence: f32,
+    /// Refuted by direct evidence: pinned to confidence 0 and `Falsified` until
+    /// `LodGraph::retract_falsification`. The graph sets it; an inserted
+    /// `Falsified` node is refuted.
+    pub refuted: bool,
     /// Optional parent node in the hierarchy.
     pub parent_id: Option<u32>,
 }
@@ -134,9 +144,18 @@ impl LodNode {
             hdc_fingerprint: [0; 4],
             label: label.into(),
             entity_id,
+            prior: 0.5,
             confidence: 0.5,
+            refuted: false,
             parent_id: None,
         }
+    }
+
+    /// Set the evidence prior. The posterior starts equal to it.
+    pub fn with_prior(mut self, prior: f32) -> Self {
+        self.prior = prior;
+        self.confidence = prior;
+        self
     }
 
     /// Set HDC fingerprint.

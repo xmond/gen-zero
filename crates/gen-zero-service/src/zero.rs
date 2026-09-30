@@ -62,8 +62,8 @@ use gen_zero_core::{
 };
 use gen_zero_gate::{PolicyGate, PolicyTier, SemanticRisk};
 use gen_zero_lod::{
-    AxiomWeights, FoldOutcome, Gender, LodGraph, LogProbSemiring, RelId, RelationKey,
-    RelationSemiring, ResultSet, TropicalSemiring, WeightedFoldOutcome,
+    AxiomWeights, FoldOutcome, Gender, GeometryParams, LodGraph, LogProbSemiring, RelId,
+    RelationKey, RelationSemiring, ResultSet, TropicalSemiring, WeightedFoldOutcome,
 };
 use gen_zero_model::{
     contains_raw_control_marker, ActionETFChoiceHead, MetricKind, DEFAULT_UNCALIBRATED_TEMPERATURE,
@@ -120,8 +120,11 @@ pub enum ZeroVerb {
     GraphRecall,
     /// Personalized PageRank diffusion over the live LodGraph.
     GraphPpr,
-    /// Causal cascade prune (or dry run) on the live LodGraph.
+    /// Evidence against one entity, then confidence evolution (or dry run), on
+    /// the live LodGraph.
     GraphPrune,
+    /// Banach fixed-point confidence evolution (or dry run) on the live LodGraph.
+    GraphEvolve,
 }
 
 impl ZeroVerb {
@@ -137,6 +140,7 @@ impl ZeroVerb {
             Self::GraphRecall => Some(GraphOp::Recall),
             Self::GraphPpr => Some(GraphOp::Ppr),
             Self::GraphPrune => Some(GraphOp::Prune),
+            Self::GraphEvolve => Some(GraphOp::Evolve),
             _ => None,
         }
     }
@@ -166,6 +170,7 @@ impl ZeroVerb {
                 "graph_recall" => return Ok(Self::GraphRecall),
                 "graph_ppr" => return Ok(Self::GraphPpr),
                 "graph_prune" => return Ok(Self::GraphPrune),
+                "graph_evolve" => return Ok(Self::GraphEvolve),
                 _ => {}
             }
         }
@@ -759,6 +764,11 @@ pub struct ZeroEngineConfig {
     /// Optional graph seed file (`graph_deposit` JSON shape, `axiomatic` allowed).
     /// Loaded into the live LodGraph at startup; a bad file fails startup.
     pub graph_seed_path: Option<PathBuf>,
+    /// Geometry of the live LodGraph: curvature, sphere radius and the three
+    /// metric weights its node coordinates and recall distances use. `None` is
+    /// the unit geometry. Fixed for the life of the engine: changing the
+    /// curvature would move stored nodes out of their domain.
+    pub graph_geometry: Option<GeometryParams>,
 }
 
 impl ZeroEngineConfig {
@@ -769,10 +779,39 @@ impl ZeroEngineConfig {
                 .filter(|value| !value.to_string_lossy().trim().is_empty())
                 .map(PathBuf::from)
         };
+        let graph_geometry = match std::env::var("GENZERO_GRAPH_GEOMETRY") {
+            Ok(text) if !text.trim().is_empty() => Some(Self::parse_graph_geometry(&text)?),
+            Ok(_) | Err(std::env::VarError::NotPresent) => None,
+            Err(e) => {
+                return Err(ServiceError::Core(format!(
+                    "GENZERO_GRAPH_GEOMETRY is unreadable: {e}"
+                )))
+            }
+        };
         Ok(Self {
             mmr_persist_path: var("GENZERO_MMR_PERSIST_PATH"),
             graph_seed_path: var("GENZERO_GRAPH_SEED"),
+            graph_geometry,
         })
+    }
+
+    /// The value of `GENZERO_GRAPH_GEOMETRY`: a JSON object with exactly
+    /// `curvature`, `radius`, `alpha_h`, `alpha_e`, `alpha_s`, each finite and > 0.
+    pub fn parse_graph_geometry(text: &str) -> Result<GeometryParams, ServiceError> {
+        let bad = |detail: String| {
+            ServiceError::Core(format!(
+                "GENZERO_GRAPH_GEOMETRY must be JSON {{curvature, radius, alpha_h, alpha_e, \
+                 alpha_s}}, each finite and > 0: {detail}"
+            ))
+        };
+        let params: GeometryParams = serde_json::from_str(text).map_err(|e| bad(e.to_string()))?;
+        params.validate().map_err(|e| bad(e.to_string()))?;
+        Ok(params)
+    }
+
+    pub fn with_graph_geometry(mut self, geometry: GeometryParams) -> Self {
+        self.graph_geometry = Some(geometry);
+        self
     }
 
     pub fn with_graph_seed_path(mut self, path: impl Into<PathBuf>) -> Self {
@@ -915,7 +954,24 @@ impl PolymorphicZeroEngine {
             gen_zero_nanocore::DEFAULT_RAM_BUDGET_BYTES,
         ));
         load_configured_nanocores(&nano_fleet);
-        let graph = Arc::new(LodGraph::new());
+        let graph_geometry = match config.graph_geometry {
+            Some(params) => {
+                tracing::info!("live graph geometry from configuration: {params:?}");
+                params
+            }
+            None => {
+                tracing::info!(
+                    "live graph geometry: unit (GENZERO_GRAPH_GEOMETRY unset): {:?}",
+                    GeometryParams::UNIT
+                );
+                GeometryParams::UNIT
+            }
+        };
+        let graph = Arc::new(LodGraph::with_geometry(graph_geometry).map_err(|e| {
+            ServiceError::Core(format!(
+                "live graph geometry {graph_geometry:?} refused: {e}"
+            ))
+        })?);
         let graph_asset = match &config.graph_seed_path {
             Some(path) => {
                 let report = load_seed(&graph, path).map_err(ServiceError::Core)?;
@@ -1568,8 +1624,8 @@ impl PolymorphicZeroEngine {
             let rej = Rejection::invalid(
                 "request",
                 format!(
-                    "`graph` is only accepted by graph_deposit, graph_recall, graph_ppr and \
-                     graph_prune (name one in `action`), not {verb:?}"
+                    "`graph` is only accepted by graph_deposit, graph_recall, graph_ppr, \
+                     graph_prune and graph_evolve (name one in `action`), not {verb:?}"
                 ),
             );
             let meta = json!({"mount": mount_meta(binding.snapshot())});
@@ -1685,7 +1741,8 @@ impl PolymorphicZeroEngine {
             ZeroVerb::GraphDeposit
             | ZeroVerb::GraphRecall
             | ZeroVerb::GraphPpr
-            | ZeroVerb::GraphPrune => {
+            | ZeroVerb::GraphPrune
+            | ZeroVerb::GraphEvolve => {
                 let op = verb.graph_op().expect("matched a graph verb");
                 let args = arguments.clone();
                 let graph = Arc::clone(&self.graph);
@@ -3575,8 +3632,8 @@ impl PolymorphicZeroEngine {
     /// relation survives at the root and refuses when two or more do; it
     /// never picks among survivors. `meta.causal_fold.conflict_keys` counts
     /// the conflict keys in the table so a caller can see one was present.
-    /// Graph verbs: `graph_deposit`, `graph_recall`, `graph_ppr`, `graph_prune`
-    /// on this engine's live graph. See [`crate::graph_verb`].
+    /// Graph verbs: `graph_deposit`, `graph_recall`, `graph_ppr`, `graph_prune`,
+    /// `graph_evolve` on this engine's live graph. See [`crate::graph_verb`].
     fn handle_graph(
         verb: ZeroVerb,
         op: GraphOp,

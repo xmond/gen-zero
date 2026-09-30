@@ -1,25 +1,33 @@
-//! gen-zero-lod dynamic graph topology, epistemic lifecycle and causal cascade pruning.
+//! gen-zero-lod dynamic graph topology, graph geometry and epistemic lifecycle.
 //!
 //! Readers traverse an immutable CSR snapshot (`ArcSwap<CsrGraph>`) without locks.
 //! Writers append ticketed edges to a pending buffer. `flush_edges_to_csr` merges
 //! only the pending edges into a new snapshot and drains them from the buffer, so
 //! the buffer never holds committed history.
 //!
+//! Every distance the graph evaluates uses the [`GeometryParams`] the graph was
+//! built with (`LodGraph::with_geometry`): curvature, sphere radius and the three
+//! metric weights. There is no other metric in this module.
+//!
+//! Confidence is the fixed point of `c = (1 - beta) pi + beta P c` over the
+//! `DependsOn` / `CausalTransition` edges (`evolve_epistemic_fixed_point`), a
+//! `beta`-contraction in the max norm, so cycles converge to one answer. Evidence
+//! enters through `falsify_node` and leaves through `retract_falsification`; the
+//! next evolution moves every dependent accordingly, in either direction.
+//!
 //! `create_checkpoint` / `rollback_checkpoint` restore the whole mutable graph state
-//! atomically. `cascade_prune_and_rollback` falsifies a premise and its dependents,
-//! retracts their validated dependencies, and returns the pre-prune checkpoint so
-//! the prune itself can be undone. Nothing here touches a search tree: the planner's
-//! MCTS is sequential and has no virtual loss (see `gen-zero-planner/src/config.rs`).
+//! atomically. Nothing here touches a search tree: the planner's MCTS is sequential
+//! and has no virtual loss (see `gen-zero-planner/src/config.rs`).
 
 use crate::error::LodError;
-use crate::manifold::MixedCurvatureCoord;
+use crate::manifold::{Epochs, GeometryParams, MixedCurvatureCoord, ProductManifold, Version};
 use crate::node::{hdc_hamming_distance_256, EpistemicStatus, LodNode};
 use crate::ppr::compute_ppr_csr;
 use arc_swap::ArcSwap;
 use gen_zero_core::GraphFactProvider;
 use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
@@ -288,6 +296,9 @@ struct GraphState {
     /// Edges not yet merged into the CSR snapshot, in ticket order.
     edge_buffer: Vec<BufferedEdge>,
     revocations: HashSet<u64>,
+    /// Entities revoked through [`LodGraph::revoke_entity`]. A subset of
+    /// `revocations` that no confidence evolution ever lifts.
+    manual_revocations: HashSet<u64>,
     privileges: HashMap<u64, Vec<u32>>,
     validated_deps: HashSet<(u64, u64)>,
     /// Bumped by every CSR store and every rollback. A flush built against an
@@ -298,9 +309,10 @@ struct GraphState {
     discarded: Vec<(u64, u64)>,
 }
 
-/// Everything a rollback restores: the node count, each node's status and
-/// confidence (the only node fields any method mutates), the CSR snapshot
-/// reference, pending edges, revocations, privileges and validated dependencies.
+/// Everything a rollback restores: the node count, each node's status,
+/// confidence and refutation mark (the only node fields any method mutates), the
+/// CSR snapshot reference, pending edges, revocations, privileges and validated
+/// dependencies.
 /// The edge ticket counter is never rewound, so tickets stay unique.
 ///
 /// Memory is O(nodes + pending edges + revocations + dependencies) per checkpoint.
@@ -308,10 +320,11 @@ struct GraphState {
 pub struct GraphCheckpoint {
     graph_id: u64,
     seq: u64,
-    node_states: Vec<(EpistemicStatus, f32)>,
+    node_states: Vec<(EpistemicStatus, f32, bool)>,
     csr: Arc<CsrGraph>,
     edge_buffer: Vec<BufferedEdge>,
     revocations: HashSet<u64>,
+    manual_revocations: HashSet<u64>,
     privileges: HashMap<u64, Vec<u32>>,
     validated_deps: HashSet<(u64, u64)>,
 }
@@ -336,18 +349,245 @@ pub struct FlushReport {
     pub pending_edges: usize,
 }
 
-/// Result of one [`LodGraph::cascade_prune_and_rollback`].
+/// Most steps one confidence evolution may take. A request whose bound
+/// `k_max` is larger fails with [`LodError::FixedPointDiverged`] once it has used
+/// this many.
+pub const MAX_FIXED_POINT_STEPS: usize = 100_000;
+
+/// One status change made by a confidence evolution.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StatusTransition {
+    pub node: u32,
+    pub entity_id: u64,
+    pub from: EpistemicStatus,
+    pub to: EpistemicStatus,
+    /// The node's confidence at the fixed point.
+    pub confidence: f32,
+}
+
+/// Result of one [`LodGraph::evolve_epistemic_fixed_point`].
 #[derive(Clone, Debug)]
-pub struct PruneOutcome {
-    /// The falsified root, then every dependent falsified with it, in BFS order.
-    pub pruned: Vec<u32>,
-    /// Entity ids revoked by this prune, parallel to `pruned`.
+pub struct FixedPointReport {
+    pub beta: f32,
+    pub tolerance: f32,
+    pub theta_lo: f32,
+    pub theta_hi: f32,
+    /// Nodes in the iteration.
+    pub nodes: usize,
+    /// Nodes held at their prior by evidence: axioms at 1, refuted nodes at 0.
+    pub pinned: usize,
+    /// Dependency edges (`DependsOn` / `CausalTransition`, positive weight, into
+    /// an unpinned node) the transition matrix was built from.
+    pub dependency_edges: usize,
+    /// The `k` of the first iterate with `||c^{k+1} - c^k||_inf < tolerance`.
+    /// Never above `k_max`.
+    pub iterations: usize,
+    /// `ceil(ln(tolerance (1 - beta) / ||c^1 - c^0||_inf) / ln beta)`, or 0 when
+    /// the first step is already below the tolerance.
+    pub k_max: usize,
+    /// `||c^1 - c^0||_inf`.
+    pub initial_delta: f64,
+    /// `||c^{k+1} - c^k||_inf` at the stop.
+    pub residual: f64,
+    /// A-posteriori bound on the distance from the committed confidences to the
+    /// exact fixed point: `beta / (1 - beta) * residual`.
+    pub error_bound: f64,
+    /// Status changes, in node order.
+    pub transitions: Vec<StatusTransition>,
+    /// Entities revoked because their node became `Falsified`.
     pub revoked_entities: Vec<u64>,
-    /// Validated dependencies retracted because one end was pruned.
+    /// Entities no longer revoked because their node left `Falsified`.
+    pub reinstated_entities: Vec<u64>,
+    /// Validated dependencies dropped and gained by the status changes.
     pub retracted_dependencies: usize,
-    /// State just before the prune, taken under the same lock. Pass it to
-    /// [`LodGraph::rollback_checkpoint`] to undo the prune.
+    pub added_dependencies: usize,
+    /// State just before the evolution, taken under the same lock. Pass it to
+    /// [`LodGraph::rollback_checkpoint`] to undo the evolution.
     pub checkpoint: GraphCheckpoint,
+}
+
+/// `P` of the confidence iteration, stored by dependent (row). A row with no
+/// entries is the identity row: the node keeps its prior.
+struct DependencyRows {
+    offsets: Vec<usize>,
+    sources: Vec<u32>,
+    probabilities: Vec<f64>,
+}
+
+/// Outcome of [`iterate_to_fixed_point`].
+struct FixedPointRun {
+    confidences: Vec<f64>,
+    iterations: usize,
+    k_max: usize,
+    initial_delta: f64,
+    residual: f64,
+}
+
+/// One application of `T(c) = (1 - beta) prior + beta P c` into `next`. Returns
+/// `||next - current||_inf`, or `None` when a value is not finite.
+fn apply_step(
+    rows: &DependencyRows,
+    prior: &[f64],
+    beta: f64,
+    current: &[f64],
+    next: &mut [f64],
+) -> Option<f64> {
+    let mut delta = 0.0_f64;
+    for (i, out) in next.iter_mut().enumerate() {
+        let (start, end) = (rows.offsets[i], rows.offsets[i + 1]);
+        *out = if start == end {
+            // Identity row, written so that `current == prior` is reproduced exactly.
+            current[i] + (1.0 - beta) * (prior[i] - current[i])
+        } else {
+            let inherited: f64 = rows.sources[start..end]
+                .iter()
+                .zip(&rows.probabilities[start..end])
+                .map(|(&u, p)| p * current[u as usize])
+                .sum();
+            (1.0 - beta) * prior[i] + beta * inherited
+        };
+        let step = (*out - current[i]).abs();
+        if !(out.is_finite() && step.is_finite()) {
+            return None;
+        }
+        delta = delta.max(step);
+    }
+    Some(delta)
+}
+
+/// Iterate `c^{k+1} = (1 - beta) prior + beta P c^k` from `start` until
+/// `||c^{k+1} - c^k||_inf < tolerance`.
+///
+/// `P` is row-stochastic, so the map contracts the max norm by `beta` and
+/// `||c^{k+1} - c^k|| <= beta^k ||c^1 - c^0||`. The stop is therefore reached by
+/// `k_max = ceil(ln(tolerance (1 - beta) / ||c^1 - c^0||) / ln beta)`. A run that
+/// has not stopped at `min(k_max, max_steps)`, or meets a non-finite value, is
+/// [`LodError::FixedPointDiverged`]: no partial vector is returned.
+fn iterate_to_fixed_point(
+    rows: &DependencyRows,
+    prior: &[f64],
+    start: &[f64],
+    beta: f64,
+    tolerance: f64,
+    max_steps: usize,
+) -> Result<FixedPointRun, LodError> {
+    let mut current = start.to_vec();
+    let mut next = vec![0.0; current.len()];
+    let diverged = |iterations, k_max, residual| LodError::FixedPointDiverged {
+        iterations,
+        k_max,
+        residual,
+        tolerance,
+    };
+    let initial_delta = apply_step(rows, prior, beta, &current, &mut next)
+        .ok_or_else(|| diverged(0, 0, f64::NAN))?;
+    let k_max = if initial_delta < tolerance {
+        0
+    } else {
+        // Both logarithms are negative, so the ratio is positive. The cast
+        // saturates; a bound that large can only fail against `max_steps`.
+        ((tolerance * (1.0 - beta) / initial_delta).ln() / beta.ln()).ceil() as usize
+    };
+    let limit = k_max.min(max_steps);
+    let (mut iterations, mut residual) = (0, initial_delta);
+    while residual >= tolerance {
+        if iterations == limit {
+            return Err(diverged(iterations, k_max, residual));
+        }
+        std::mem::swap(&mut current, &mut next);
+        iterations += 1;
+        residual = apply_step(rows, prior, beta, &current, &mut next)
+            .ok_or_else(|| diverged(iterations, k_max, f64::NAN))?;
+    }
+    Ok(FixedPointRun {
+        confidences: next,
+        iterations,
+        k_max,
+        initial_delta,
+        residual,
+    })
+}
+
+/// Edges along which confidence is inherited: the target depends on the source.
+fn carries_confidence(edge_type: EdgeType) -> bool {
+    matches!(edge_type, EdgeType::DependsOn | EdgeType::CausalTransition)
+}
+
+/// Edges that make a validated dependency when both ends are active truths.
+fn states_dependency(edge_type: EdgeType) -> bool {
+    matches!(edge_type, EdgeType::DependsOn | EdgeType::Validates)
+}
+
+/// Every edge of the graph: the committed snapshot, then the pending buffer.
+fn all_edges<'a>(
+    snapshot: &'a CsrGraph,
+    pending: &'a [BufferedEdge],
+) -> impl Iterator<Item = (u32, u32, EdgeType, f32)> + 'a {
+    let committed = (0..snapshot.num_nodes() as u32).flat_map(move |u| {
+        snapshot
+            .neighbors(u)
+            .map(move |(v, edge_type, weight)| (u, v, edge_type, weight))
+    });
+    let buffered = pending
+        .iter()
+        .map(|e| (e.source, e.target, e.edge_type, e.weight));
+    committed.chain(buffered)
+}
+
+/// Held at its prior by evidence: an axiom (1) or a refuted node (0).
+fn is_pinned(node: &LodNode) -> bool {
+    node.status == EpistemicStatus::Axiomatic || node.refuted
+}
+
+/// Row-normalise the positive-weight confidence edges into each unpinned node.
+fn dependency_rows(
+    nodes: &[LodNode],
+    snapshot: &CsrGraph,
+    pending: &[BufferedEdge],
+) -> DependencyRows {
+    let n = nodes.len();
+    let inherits = |&(_, target, edge_type, weight): &(u32, u32, EdgeType, f32)| {
+        carries_confidence(edge_type) && weight > 0.0 && !is_pinned(&nodes[target as usize])
+    };
+    let mut offsets = vec![0usize; n + 1];
+    let mut totals = vec![0.0_f64; n];
+    for (_, target, _, weight) in all_edges(snapshot, pending).filter(inherits) {
+        offsets[target as usize + 1] += 1;
+        totals[target as usize] += f64::from(weight);
+    }
+    for i in 0..n {
+        offsets[i + 1] += offsets[i];
+    }
+    let mut cursor = offsets[..n].to_vec();
+    let mut sources = vec![0u32; offsets[n]];
+    let mut probabilities = vec![0.0_f64; offsets[n]];
+    for (source, target, _, weight) in all_edges(snapshot, pending).filter(inherits) {
+        let at = &mut cursor[target as usize];
+        sources[*at] = source;
+        probabilities[*at] = f64::from(weight) / totals[target as usize];
+        *at += 1;
+    }
+    DependencyRows {
+        offsets,
+        sources,
+        probabilities,
+    }
+}
+
+/// The validated dependencies the current statuses and edges imply.
+fn validated_dependencies(
+    nodes: &[LodNode],
+    snapshot: &CsrGraph,
+    pending: &[BufferedEdge],
+) -> HashSet<(u64, u64)> {
+    all_edges(snapshot, pending)
+        .filter(|(_, _, edge_type, _)| states_dependency(*edge_type))
+        .filter_map(|(u, v, _, _)| {
+            let (u, v) = (&nodes[u as usize], &nodes[v as usize]);
+            (u.status.is_active_truth() && v.status.is_active_truth())
+                .then_some((u.entity_id, v.entity_id))
+        })
+        .collect()
 }
 
 /// Ranked output of [`LodGraph::query_ppr`].
@@ -368,6 +608,12 @@ pub struct LodGraph {
     /// Identity checked by `rollback_checkpoint`, so a checkpoint cannot be
     /// restored into another graph.
     graph_id: u64,
+    /// `H^4 x R^8 x S^3` under this graph's parameters. Node and query
+    /// coordinates are validated as points of it.
+    manifold: ProductManifold,
+    /// The manifold's parameters in the f32 precision of the node chart:
+    /// `[alpha_h, alpha_e, alpha_s]`, curvature, radius.
+    metric: ([f32; 3], f32, f32),
     state: RwLock<GraphState>,
     csr_snapshot: ArcSwap<CsrGraph>,
     ticket_counter: AtomicU64,
@@ -385,30 +631,99 @@ impl Default for LodGraph {
 }
 
 impl LodGraph {
-    /// Initialize an empty LodGraph.
+    /// An empty graph with [`GeometryParams::UNIT`].
     pub fn new() -> Self {
-        Self {
+        Self::with_geometry(GeometryParams::UNIT).expect("the unit geometry is valid")
+    }
+
+    /// An empty graph whose distances use `params`: curvature and radius fix the
+    /// domain of every node coordinate, the weights fix the recall metric.
+    /// The parameters are rounded to f32, the precision of the node chart, and
+    /// must stay finite and positive after rounding.
+    pub fn with_geometry(params: GeometryParams) -> Result<Self, LodError> {
+        params.validate()?;
+        let alphas = [
+            params.alpha_h as f32,
+            params.alpha_e as f32,
+            params.alpha_s as f32,
+        ];
+        let (c, r) = (params.curvature as f32, params.radius as f32);
+        let rounded = GeometryParams {
+            curvature: f64::from(c),
+            radius: f64::from(r),
+            alpha_h: f64::from(alphas[0]),
+            alpha_e: f64::from(alphas[1]),
+            alpha_s: f64::from(alphas[2]),
+        };
+        let layout = MixedCurvatureCoord::LAYOUT;
+        // The frame is local to this graph: only the geometry digest is bound.
+        let epochs = Epochs {
+            version: Version(0),
+            model: [0; 32],
+            geometry: rounded.digest(layout),
+            atlas: [0; 32],
+            graph: [0; 32],
+            policy: [0; 32],
+        };
+        let manifold = ProductManifold::new(layout, rounded, epochs)?;
+        Ok(Self {
             graph_id: NEXT_GRAPH_ID.fetch_add(1, Ordering::Relaxed),
+            manifold,
+            metric: (alphas, c, r),
             state: RwLock::new(GraphState::default()),
             csr_snapshot: ArcSwap::from_pointee(CsrGraph::empty()),
             ticket_counter: AtomicU64::new(1),
             checkpoint_seq: AtomicU64::new(0),
             flush_lock: Mutex::new(()),
             txn_lock: Mutex::new(()),
-        }
+        })
     }
 
-    /// Insert a node and return its id. Refuses a coordinate the recall metric
-    /// would reject, a confidence outside [0, 1], an unknown parent, and an
-    /// entity id that already has a node: the gate addresses nodes by entity.
+    /// The geometry every distance of this graph uses.
+    pub fn geometry(&self) -> GeometryParams {
+        self.manifold.params()
+    }
+
+    /// Distance between two coordinates under this graph's geometry.
+    fn distance(&self, a: &MixedCurvatureCoord, b: &MixedCurvatureCoord) -> Result<f32, LodError> {
+        let (alphas, c, r) = self.metric;
+        a.product_distance_with_params(b, alphas, c, r)
+    }
+
+    /// Insert a node and return its id. Refuses a coordinate outside this
+    /// graph's geometry, a prior outside [0, 1], a posterior that differs from
+    /// the prior, a refutation mark on a node that is not `Falsified`, an unknown
+    /// parent, and an entity id that already has a node: the gate addresses
+    /// nodes by entity.
+    ///
+    /// An `Axiomatic` node gets confidence 1. A `Falsified` node is refuted by
+    /// evidence: confidence 0, entity revoked.
     pub fn add_node(&self, mut node: LodNode) -> Result<u32, LodError> {
-        node.coord
-            .product_distance(&MixedCurvatureCoord::origin())?;
-        if !(node.confidence.is_finite() && (0.0..=1.0).contains(&node.confidence)) {
+        node.coord.to_point(&self.manifold)?;
+        if !(node.prior.is_finite() && (0.0..=1.0).contains(&node.prior)) {
             return Err(LodError::InvalidNode(format!(
-                "confidence {} must lie in [0, 1]",
-                node.confidence
+                "prior {} must lie in [0, 1]",
+                node.prior
             )));
+        }
+        if node.confidence != node.prior {
+            return Err(LodError::InvalidNode(format!(
+                "confidence {} differs from prior {}; set both with `with_prior`",
+                node.confidence, node.prior
+            )));
+        }
+        if node.refuted && !node.status.is_falsified() {
+            return Err(LodError::InvalidNode(
+                "only a Falsified node can be inserted as refuted".into(),
+            ));
+        }
+        match node.status {
+            EpistemicStatus::Axiomatic => node.confidence = 1.0,
+            EpistemicStatus::Falsified => {
+                node.refuted = true;
+                node.confidence = 0.0;
+            }
+            EpistemicStatus::Hypothesized | EpistemicStatus::Validated => {}
         }
         let mut st = self.state.write();
         let id = u32::try_from(st.nodes.len())
@@ -478,7 +793,7 @@ impl LodGraph {
             weight,
             ticket,
         });
-        if matches!(edge_type, EdgeType::DependsOn | EdgeType::Validates) {
+        if states_dependency(edge_type) {
             let (u, v) = (&st.nodes[source as usize], &st.nodes[target as usize]);
             if u.status.is_active_truth() && v.status.is_active_truth() {
                 let dep = (u.entity_id, v.entity_id);
@@ -486,73 +801,6 @@ impl LodGraph {
             }
         }
         Ok(ticket)
-    }
-
-    /// Transition a node from Hypothesized to Validated upon environment proof or intervention.
-    /// Backfills validated dependencies on both outgoing and incoming
-    /// `DependsOn` / `Validates` edges, in the CSR snapshot and the pending buffer.
-    pub fn validate_node(&self, node_id: u32) -> Result<(), LodError> {
-        let mut guard = self.state.write();
-        let st = &mut *guard;
-        let idx = node_id as usize;
-        if idx >= st.nodes.len() {
-            return Err(LodError::NodeNotFound(node_id));
-        }
-        if st.nodes[idx].status == EpistemicStatus::Falsified {
-            return Err(LodError::InvalidStateTransition(
-                "Cannot validate an already falsified node".into(),
-            ));
-        }
-
-        st.nodes[idx].status = EpistemicStatus::Validated;
-        st.nodes[idx].confidence = 1.0;
-        let node_entity = st.nodes[idx].entity_id;
-        st.revocations.remove(&node_entity);
-
-        let dependency = |t: EdgeType| matches!(t, EdgeType::DependsOn | EdgeType::Validates);
-        let active = |id: u32| {
-            st.nodes
-                .get(id as usize)
-                .filter(|n| n.status.is_active_truth())
-                .map(|n| n.entity_id)
-        };
-        let snapshot = self.csr_snapshot.load();
-        let mut new_deps = Vec::new();
-        for (nbr, edge_type, _) in snapshot.neighbors(node_id) {
-            if dependency(edge_type) {
-                if let Some(target) = active(nbr) {
-                    new_deps.push((node_entity, target));
-                }
-            }
-        }
-        // Incoming CSR edges: the CSR indexes rows by source only, so this is an
-        // O(E) scan. After a flush the buffer is small and nearly every edge lives here.
-        for src in 0..snapshot.num_nodes() as u32 {
-            for (nbr, edge_type, _) in snapshot.neighbors(src) {
-                if nbr == node_id && dependency(edge_type) {
-                    if let Some(source) = active(src) {
-                        new_deps.push((source, node_entity));
-                    }
-                }
-            }
-        }
-        for edge in &st.edge_buffer {
-            if !dependency(edge.edge_type) {
-                continue;
-            }
-            if edge.source == node_id {
-                if let Some(target) = active(edge.target) {
-                    new_deps.push((node_entity, target));
-                }
-            }
-            if edge.target == node_id {
-                if let Some(source) = active(edge.source) {
-                    new_deps.push((source, node_entity));
-                }
-            }
-        }
-        st.validated_deps.extend(new_deps);
-        Ok(())
     }
 
     /// Merge the pending edges into a new CSR snapshot and drain them from the
@@ -659,12 +907,14 @@ impl LodGraph {
     /// Two-Stage Memory Recall:
     /// Stage 1: HDC Hamming distance over every live node (a linear POPCNT scan),
     /// keeping the `4 * top_k` closest.
-    /// Stage 2: Mixed-curvature product geodesic rerank of those candidates, with a
+    /// Stage 2: product geodesic rerank of those candidates under this graph's
+    /// geometry (curvature, radius and the three metric weights), with a
     /// Corrective RAG (CRAG) margin: when the top two are closer than
     /// `crag_margin`, the 1-hop CSR neighbors of the top one join the rerank.
     ///
     /// Excludes falsified and revoked nodes. `top_k` must be at least 1 and
-    /// `crag_margin` finite and nonnegative; an out-of-domain coordinate is an error.
+    /// `crag_margin` finite and nonnegative; a coordinate outside this graph's
+    /// geometry is an error.
     pub fn two_stage_recall(
         &self,
         query_coord: &MixedCurvatureCoord,
@@ -680,7 +930,7 @@ impl LodGraph {
                 "crag_margin must be finite and nonnegative, got {crag_margin}"
             )));
         }
-        query_coord.product_distance(&MixedCurvatureCoord::origin())?;
+        query_coord.to_point(&self.manifold)?;
         let st = self.state.read();
         let (nodes, revs) = (&st.nodes, &st.revocations);
 
@@ -709,7 +959,7 @@ impl LodGraph {
         // An out-of-domain coordinate aborts the recall instead of being skipped.
         let mut reranked: Vec<(u32, f32)> = Vec::with_capacity(candidates.len());
         for &(id, _) in &candidates {
-            reranked.push((id, nodes[id as usize].coord.product_distance(query_coord)?));
+            reranked.push((id, self.distance(&nodes[id as usize].coord, query_coord)?));
         }
         reranked.sort_by(|a, b| a.1.total_cmp(&b.1));
 
@@ -722,7 +972,7 @@ impl LodGraph {
                 }
                 let nbr_node = &nodes[nbr as usize];
                 if !nbr_node.status.is_falsified() && !revs.contains(&nbr_node.entity_id) {
-                    reranked.push((nbr, nbr_node.coord.product_distance(query_coord)?));
+                    reranked.push((nbr, self.distance(&nbr_node.coord, query_coord)?));
                 }
             }
             reranked.sort_by(|a, b| a.1.total_cmp(&b.1));
@@ -732,81 +982,224 @@ impl LodGraph {
         Ok(reranked)
     }
 
-    /// Pearl causal subtree pruning with belief rollback.
-    ///
-    /// When environment feedback or formal proof falsifies an assumption:
-    /// 1. Mark `falsified_node_id` as `Falsified`.
-    /// 2. Walk every downstream `DependsOn` / `CausalTransition` edge, in the CSR
-    ///    snapshot and the pending buffer, and falsify each non-axiomatic target.
-    /// 3. Revoke the entity of every pruned node.
-    /// 4. Retract every validated dependency that touches a pruned entity.
-    ///
-    /// The returned [`PruneOutcome::checkpoint`] is the state just before step 1,
-    /// captured under the same write lock, so the whole prune can be undone with
-    /// [`Self::rollback_checkpoint`]. An unknown node or an axiomatic root is an error.
-    pub fn cascade_prune_and_rollback(
-        &self,
-        falsified_node_id: u32,
-    ) -> Result<PruneOutcome, LodError> {
+    /// Record direct evidence against a node: it becomes `Falsified` and refuted,
+    /// its confidence is pinned to 0, its entity is revoked and every validated
+    /// dependency touching it is retracted. Dependents move at the next
+    /// [`Self::evolve_epistemic_fixed_point`]. Repeating the call changes nothing.
+    /// Returns the number of validated dependencies retracted. An unknown node or
+    /// an axiom is an error.
+    pub fn falsify_node(&self, node_id: u32) -> Result<usize, LodError> {
         let mut guard = self.state.write();
-        let root = falsified_node_id as usize;
-        if root >= guard.nodes.len() {
-            return Err(LodError::NodeNotFound(falsified_node_id));
-        }
-        if guard.nodes[root].status == EpistemicStatus::Axiomatic {
+        let st = &mut *guard;
+        let node = st
+            .nodes
+            .get_mut(node_id as usize)
+            .ok_or(LodError::NodeNotFound(node_id))?;
+        if node.status == EpistemicStatus::Axiomatic {
             return Err(LodError::InvalidStateTransition(format!(
-                "node {falsified_node_id} is axiomatic and cannot be pruned"
+                "node {node_id} is axiomatic and cannot be falsified"
             )));
         }
-        let checkpoint = self.capture(&guard);
-        let st = &mut *guard;
-
-        let mut pruned = vec![falsified_node_id];
-        let mut queue = VecDeque::from([falsified_node_id]);
-        st.nodes[root].status = EpistemicStatus::Falsified;
-
-        let snapshot = self.csr_snapshot.load();
-        let propagates =
-            |t: EdgeType| matches!(t, EdgeType::DependsOn | EdgeType::CausalTransition);
-        while let Some(curr) = queue.pop_front() {
-            let csr_targets = snapshot
-                .neighbors(curr)
-                .filter(|(_, t, _)| propagates(*t))
-                .map(|(v, _, _)| v);
-            let buffered_targets = st
-                .edge_buffer
-                .iter()
-                .filter(|e| e.source == curr && propagates(e.edge_type))
-                .map(|e| e.target);
-            let targets: Vec<u32> = csr_targets.chain(buffered_targets).collect();
-            for nbr in targets {
-                let node = &mut st.nodes[nbr as usize];
-                if !matches!(
-                    node.status,
-                    EpistemicStatus::Axiomatic | EpistemicStatus::Falsified
-                ) {
-                    node.status = EpistemicStatus::Falsified;
-                    pruned.push(nbr);
-                    queue.push_back(nbr);
-                }
-            }
-        }
-
-        let revoked_entities: Vec<u64> = pruned
-            .iter()
-            .map(|&id| st.nodes[id as usize].entity_id)
-            .collect();
-        st.revocations.extend(revoked_entities.iter().copied());
-        let pruned_entities: HashSet<u64> = revoked_entities.iter().copied().collect();
+        node.status = EpistemicStatus::Falsified;
+        node.refuted = true;
+        node.confidence = 0.0;
+        let entity = node.entity_id;
+        st.revocations.insert(entity);
         let before = st.validated_deps.len();
         st.validated_deps
-            .retain(|(u, v)| !pruned_entities.contains(u) && !pruned_entities.contains(v));
-        let retracted_dependencies = before - st.validated_deps.len();
+            .retain(|(u, v)| *u != entity && *v != entity);
+        Ok(before - st.validated_deps.len())
+    }
 
-        Ok(PruneOutcome {
-            pruned,
+    /// Withdraw the evidence [`Self::falsify_node`] recorded (or an inserted
+    /// `Falsified` status): the node returns to `Hypothesized` at its prior and
+    /// its entity is no longer revoked, unless [`Self::revoke_entity`] revoked it.
+    /// Dependents recover at the next [`Self::evolve_epistemic_fixed_point`].
+    /// A node that is not refuted is an error.
+    pub fn retract_falsification(&self, node_id: u32) -> Result<(), LodError> {
+        let mut guard = self.state.write();
+        let st = &mut *guard;
+        let node = st
+            .nodes
+            .get_mut(node_id as usize)
+            .ok_or(LodError::NodeNotFound(node_id))?;
+        if !node.refuted {
+            return Err(LodError::InvalidStateTransition(format!(
+                "node {node_id} is not refuted by evidence"
+            )));
+        }
+        node.refuted = false;
+        node.status = EpistemicStatus::Hypothesized;
+        node.confidence = node.prior;
+        let entity = node.entity_id;
+        if !st.manual_revocations.contains(&entity) {
+            st.revocations.remove(&entity);
+        }
+        Ok(())
+    }
+
+    /// Evolve every node's confidence to the fixed point of
+    ///
+    /// `c^{k+1} = (1 - beta) pi + beta P c^k`, `0 < beta < 1`,
+    ///
+    /// and move statuses by hysteresis on the result.
+    ///
+    /// - `P[v][u]` is the weight of the `DependsOn` / `CausalTransition` edges
+    ///   `u -> v` (`v` depends on `u`) divided by the total such weight into `v`,
+    ///   over the CSR snapshot and the pending buffer. A node with no positive
+    ///   weight coming in, an axiom and a refuted node get the identity row, so
+    ///   `P` is row-stochastic and the map contracts the max norm by `beta`:
+    ///   cycles converge to the one fixed point.
+    /// - `pi` is 1 for an axiom, 0 for a refuted node (both held exactly) and the
+    ///   node's prior otherwise. The iteration starts at `pi`, so the result
+    ///   depends only on priors, evidence, edges and the four arguments: undoing
+    ///   a change of evidence and evolving again reproduces the earlier
+    ///   confidences bit for bit.
+    /// - The stop `||c^{k+1} - c^k||_inf < tolerance` is reached by
+    ///   `k_max = ceil(ln(tolerance (1 - beta) / ||c^1 - c^0||_inf) / ln beta)`.
+    ///   If it is not, or `k_max` exceeds [`MAX_FIXED_POINT_STEPS`] and the run
+    ///   uses them all, the result is [`LodError::FixedPointDiverged`] and the
+    ///   graph is unchanged.
+    /// - Hysteresis: confidence below `theta_lo` makes a node `Falsified` and
+    ///   revokes its entity; above `theta_hi` makes it `Validated` and lifts that
+    ///   revocation (never one made by [`Self::revoke_entity`]); in between the
+    ///   status is kept. Validated dependencies are rebuilt from the new statuses.
+    ///
+    /// Arguments outside `0 < beta < 1`, `tolerance > 0`,
+    /// `0 < theta_lo < theta_hi < 1` are `InvalidQuery`.
+    pub fn evolve_epistemic_fixed_point(
+        &self,
+        beta: f32,
+        tolerance: f32,
+        theta_lo: f32,
+        theta_hi: f32,
+    ) -> Result<FixedPointReport, LodError> {
+        self.evolve_epistemic_fixed_point_within(
+            beta,
+            tolerance,
+            theta_lo,
+            theta_hi,
+            MAX_FIXED_POINT_STEPS,
+        )
+    }
+
+    /// [`Self::evolve_epistemic_fixed_point`] with a caller step budget: the run
+    /// may take `min(k_max, max_steps, MAX_FIXED_POINT_STEPS)` steps.
+    pub fn evolve_epistemic_fixed_point_within(
+        &self,
+        beta: f32,
+        tolerance: f32,
+        theta_lo: f32,
+        theta_hi: f32,
+        max_steps: usize,
+    ) -> Result<FixedPointReport, LodError> {
+        let bad = |detail: String| Err(LodError::InvalidQuery(detail));
+        if !(beta.is_finite() && beta > 0.0 && beta < 1.0) {
+            return bad(format!("beta must satisfy 0 < beta < 1, got {beta}"));
+        }
+        if !(tolerance.is_finite() && tolerance > 0.0) {
+            return bad(format!(
+                "tolerance must be finite and positive, got {tolerance}"
+            ));
+        }
+        if !(theta_lo.is_finite()
+            && theta_hi.is_finite()
+            && 0.0 < theta_lo
+            && theta_lo < theta_hi
+            && theta_hi < 1.0)
+        {
+            return bad(format!(
+                "thresholds must satisfy 0 < theta_lo < theta_hi < 1, got {theta_lo} and {theta_hi}"
+            ));
+        }
+
+        let mut guard = self.state.write();
+        let checkpoint = self.capture(&guard);
+        let snapshot = self.csr_snapshot.load_full();
+        let st = &mut *guard;
+
+        let rows = dependency_rows(&st.nodes, &snapshot, &st.edge_buffer);
+        let prior: Vec<f64> = st
+            .nodes
+            .iter()
+            .map(|n| match (n.status, n.refuted) {
+                (EpistemicStatus::Axiomatic, _) => 1.0,
+                (_, true) => 0.0,
+                _ => f64::from(n.prior),
+            })
+            .collect();
+        let run = iterate_to_fixed_point(
+            &rows,
+            &prior,
+            &prior,
+            f64::from(beta),
+            f64::from(tolerance),
+            max_steps.min(MAX_FIXED_POINT_STEPS),
+        )?;
+
+        // Converged: commit. Nothing above this line changed the graph.
+        let mut transitions = Vec::new();
+        let mut revoked_entities = Vec::new();
+        let mut reinstated_entities = Vec::new();
+        let mut pinned = 0;
+        for (node, &c) in st.nodes.iter_mut().zip(&run.confidences) {
+            let confidence = c.clamp(0.0, 1.0) as f32;
+            node.confidence = confidence;
+            if is_pinned(node) {
+                pinned += 1;
+                continue;
+            }
+            let from = node.status;
+            let to = if confidence < theta_lo {
+                EpistemicStatus::Falsified
+            } else if confidence > theta_hi {
+                EpistemicStatus::Validated
+            } else {
+                from
+            };
+            if to == from {
+                continue;
+            }
+            node.status = to;
+            transitions.push(StatusTransition {
+                node: node.id,
+                entity_id: node.entity_id,
+                from,
+                to,
+                confidence,
+            });
+            if to.is_falsified() {
+                st.revocations.insert(node.entity_id);
+                revoked_entities.push(node.entity_id);
+            } else if from.is_falsified() && !st.manual_revocations.contains(&node.entity_id) {
+                st.revocations.remove(&node.entity_id);
+                reinstated_entities.push(node.entity_id);
+            }
+        }
+        let dependencies = validated_dependencies(&st.nodes, &snapshot, &st.edge_buffer);
+        let retracted_dependencies = st.validated_deps.difference(&dependencies).count();
+        let added_dependencies = dependencies.difference(&st.validated_deps).count();
+        st.validated_deps = dependencies;
+
+        let beta64 = f64::from(beta);
+        Ok(FixedPointReport {
+            beta,
+            tolerance,
+            theta_lo,
+            theta_hi,
+            nodes: st.nodes.len(),
+            pinned,
+            dependency_edges: rows.sources.len(),
+            iterations: run.iterations,
+            k_max: run.k_max,
+            initial_delta: run.initial_delta,
+            residual: run.residual,
+            error_bound: beta64 / (1.0 - beta64) * run.residual,
+            transitions,
             revoked_entities,
+            reinstated_entities,
             retracted_dependencies,
+            added_dependencies,
             checkpoint,
         })
     }
@@ -821,18 +1214,23 @@ impl LodGraph {
         GraphCheckpoint {
             graph_id: self.graph_id,
             seq: self.checkpoint_seq.fetch_add(1, Ordering::Relaxed) + 1,
-            node_states: st.nodes.iter().map(|n| (n.status, n.confidence)).collect(),
+            node_states: st
+                .nodes
+                .iter()
+                .map(|n| (n.status, n.confidence, n.refuted))
+                .collect(),
             csr: self.csr_snapshot.load_full(),
             edge_buffer: st.edge_buffer.clone(),
             revocations: st.revocations.clone(),
+            manual_revocations: st.manual_revocations.clone(),
             privileges: st.privileges.clone(),
             validated_deps: st.validated_deps.clone(),
         }
     }
 
     /// Restore `checkpoint` atomically: nodes added after it are removed (their
-    /// ids become free again), statuses, CSR snapshot, pending edges,
-    /// revocations, privileges and validated dependencies return to its values.
+    /// ids become free again), statuses, confidences, refutation marks, CSR
+    /// snapshot, pending edges, revocations, privileges and validated dependencies return to its values.
     ///
     /// Every write since the checkpoint is discarded, including writes by other
     /// threads; use [`Self::transact`] to keep writers serialized. Refused: a
@@ -862,12 +1260,16 @@ impl LodGraph {
 
         st.nodes.truncate(keep);
         st.entity_index.retain(|_, id| (*id as usize) < keep);
-        for (node, &(status, confidence)) in st.nodes.iter_mut().zip(&checkpoint.node_states) {
+        for (node, &(status, confidence, refuted)) in
+            st.nodes.iter_mut().zip(&checkpoint.node_states)
+        {
             node.status = status;
             node.confidence = confidence;
+            node.refuted = refuted;
         }
         st.edge_buffer = checkpoint.edge_buffer.clone();
         st.revocations = checkpoint.revocations.clone();
+        st.manual_revocations = checkpoint.manual_revocations.clone();
         st.privileges = checkpoint.privileges.clone();
         st.validated_deps = checkpoint.validated_deps.clone();
         self.csr_snapshot.store(Arc::clone(&checkpoint.csr));
@@ -916,9 +1318,12 @@ impl LodGraph {
         }
     }
 
-    /// Explicitly revoke an entity ID in the cognitive graph.
+    /// Explicitly revoke an entity ID in the cognitive graph. No confidence
+    /// evolution and no evidence retraction lifts this revocation.
     pub fn revoke_entity(&self, entity_id: u64) {
-        self.state.write().revocations.insert(entity_id);
+        let mut st = self.state.write();
+        st.revocations.insert(entity_id);
+        st.manual_revocations.insert(entity_id);
     }
 }
 
@@ -958,12 +1363,37 @@ mod tests {
         )
     }
 
-    fn pruned(graph: &LodGraph, id: u32) -> Vec<u32> {
-        graph.cascade_prune_and_rollback(id).unwrap().pruned
+    fn node_with(label: &str, entity: u64, coord: MixedCurvatureCoord) -> LodNode {
+        LodNode::new(0, LodBand::Lod0Atomic, coord, label, entity)
+    }
+
+    const BETA: f32 = 0.85;
+    const TOL: f32 = 1e-6;
+
+    fn evolve(graph: &LodGraph, theta_lo: f32, theta_hi: f32) -> FixedPointReport {
+        graph
+            .evolve_epistemic_fixed_point(BETA, TOL, theta_lo, theta_hi)
+            .unwrap()
+    }
+
+    fn status(graph: &LodGraph, id: u32) -> EpistemicStatus {
+        graph.get_node(id).unwrap().status
+    }
+
+    fn confidences(graph: &LodGraph) -> Vec<f32> {
+        (0..graph.node_count() as u32)
+            .map(|id| graph.get_node(id).unwrap().confidence)
+            .collect()
+    }
+
+    fn sorted_deps(graph: &LodGraph) -> Vec<(u64, u64)> {
+        let mut deps: Vec<_> = graph.active_validated_dependencies().collect();
+        deps.sort_unstable();
+        deps
     }
 
     #[test]
-    fn axiom_survives_direct_and_cascading_prune() {
+    fn axiom_survives_direct_falsification_and_evolution() {
         let graph = LodGraph::new();
         let source = graph.add_node(node("source", 10)).unwrap();
         let axiom = graph
@@ -974,19 +1404,29 @@ mod tests {
             .unwrap();
         graph.flush_edges_to_csr().unwrap();
         assert!(matches!(
-            graph.cascade_prune_and_rollback(axiom),
+            graph.falsify_node(axiom),
             Err(LodError::InvalidStateTransition(_))
         ));
-        assert_eq!(pruned(&graph, source), vec![source]);
+        graph.falsify_node(source).unwrap();
+        let report = evolve(&graph, 0.2, 0.8);
+        assert!(report.transitions.is_empty());
+        assert_eq!(report.pinned, 2);
+        // The axiom's only dependency is refuted; it is pinned all the same.
+        assert_eq!(status(&graph, axiom), EpistemicStatus::Axiomatic);
+        assert_eq!(confidences(&graph), vec![0.0, 1.0]);
+        assert!(graph.is_revoked(10) && !graph.is_revoked(11));
         assert_eq!(
-            graph.get_node(axiom).unwrap().status,
-            EpistemicStatus::Axiomatic
-        );
-        assert!(!graph.is_revoked(11));
-        assert_eq!(
-            graph.cascade_prune_and_rollback(99).unwrap_err(),
+            graph.falsify_node(99).unwrap_err(),
             LodError::NodeNotFound(99)
         );
+        assert_eq!(
+            graph.retract_falsification(99).unwrap_err(),
+            LodError::NodeNotFound(99)
+        );
+        assert!(matches!(
+            graph.retract_falsification(axiom),
+            Err(LodError::InvalidStateTransition(_))
+        ));
     }
 
     #[test]
@@ -1063,10 +1503,25 @@ mod tests {
         assert!(!graph.is_revoked(1001));
         assert!(!graph.is_revoked(1002));
 
-        // Falsifying node 1 cascades to node 2.
-        let outcome = graph.cascade_prune_and_rollback(id1).unwrap();
-        assert_eq!(outcome.pruned, vec![id1, id2]);
-        assert_eq!(outcome.revoked_entities, vec![1002, 1003]);
+        // Refuting node 1 takes node 2, whose only dependency it is, below theta_lo:
+        // c_2 = (1 - beta) 0.5 + beta 0 = 0.075.
+        graph.falsify_node(id1).unwrap();
+        assert!(graph.is_revoked(1002) && !graph.is_revoked(1003));
+        let report = evolve(&graph, 0.2, 0.8);
+        let [moved] = report.transitions[..] else {
+            panic!("expected one transition, got {:?}", report.transitions);
+        };
+        assert_eq!((moved.node, moved.entity_id), (id2, 1003));
+        assert_eq!(
+            (moved.from, moved.to),
+            (EpistemicStatus::Hypothesized, EpistemicStatus::Falsified)
+        );
+        assert!((moved.confidence - 0.075).abs() < 1e-6);
+        assert_eq!(report.revoked_entities, vec![1003]);
+        // Node 0 has no dependency: it keeps its prior and, inside the band, its status.
+        let got = confidences(&graph);
+        assert_eq!((got[0], got[1], got[2]), (0.5, 0.0, moved.confidence));
+        assert_eq!(status(&graph, id0), EpistemicStatus::Validated);
 
         assert!(graph.is_revoked(1002));
         assert!(graph.is_revoked(1003));
@@ -1099,7 +1554,7 @@ mod tests {
         assert_eq!(recalled[0].0, id0);
 
         // A falsified node is never recalled again.
-        graph.cascade_prune_and_rollback(id0).unwrap();
+        graph.falsify_node(id0).unwrap();
         let recalled_after = graph.two_stage_recall(&coord0, &query_fp, 2, 0.1).unwrap();
         assert_eq!(recalled_after.len(), 1);
         assert_eq!(recalled_after[0].0, id1);
@@ -1165,38 +1620,65 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_node_and_prune_propagation() {
+    fn evolution_validates_supported_chain_and_refutation_falsifies_it() {
         let graph = LodGraph::new();
+        let axiom = graph
+            .add_node(node("axiom", 3000).with_status(EpistemicStatus::Axiomatic))
+            .unwrap();
         let id0 = graph.add_node(node("hypo_0", 3001)).unwrap();
         let id1 = graph.add_node(node("hypo_1", 3002)).unwrap();
         let id2 = graph.add_node(node("hypo_2", 3003)).unwrap();
-
+        graph
+            .add_edge(axiom, id0, EdgeType::DependsOn, 1.0)
+            .unwrap();
         graph.add_edge(id0, id1, EdgeType::DependsOn, 1.0).unwrap();
         graph.add_edge(id1, id2, EdgeType::DependsOn, 1.0).unwrap();
+        assert!(sorted_deps(&graph).is_empty());
 
-        graph.validate_node(id0).unwrap();
-        graph.validate_node(id1).unwrap();
+        // c = 0.075 + 0.85 * (dependency): 0.925, 0.86125, 0.8070625, all above 0.8.
+        let report = evolve(&graph, 0.2, 0.8);
+        assert_eq!(report.transitions.len(), 3);
+        assert_eq!(report.added_dependencies, 3);
+        for (id, want) in [(id0, 0.925), (id1, 0.86125), (id2, 0.807_062_5)] {
+            let n = graph.get_node(id).unwrap();
+            assert_eq!(n.status, EpistemicStatus::Validated);
+            assert!((n.confidence - want).abs() < 1e-5, "{id}: {}", n.confidence);
+            assert_eq!(n.prior, 0.5);
+        }
+        assert_eq!(
+            sorted_deps(&graph),
+            vec![(3000, 3001), (3001, 3002), (3002, 3003)]
+        );
 
-        let deps: Vec<_> = graph.active_validated_dependencies().collect();
-        assert!(deps.contains(&(3001, 3002)));
-
-        // Falsifying node 0 cascades through validated node 1 to hypothesized node 2.
-        let outcome = graph.cascade_prune_and_rollback(id0).unwrap();
-        assert_eq!(outcome.pruned, vec![id0, id1, id2]);
-        assert_eq!(outcome.retracted_dependencies, 1);
-        assert!(graph.is_revoked(3001));
-        assert!(graph.is_revoked(3002));
-        assert!(graph.is_revoked(3003));
-        assert!(graph.active_validated_dependencies().next().is_none());
+        // Refuting node 0: c_1 = 0.075, c_2 = 0.075 + 0.85 * 0.075 = 0.13875.
+        assert_eq!(graph.falsify_node(id0).unwrap(), 2);
+        assert_eq!(graph.falsify_node(id0).unwrap(), 0);
+        assert_eq!(sorted_deps(&graph), vec![(3002, 3003)]);
+        let report = evolve(&graph, 0.2, 0.8);
+        assert_eq!(
+            report
+                .transitions
+                .iter()
+                .map(|t| (t.node, t.to))
+                .collect::<Vec<_>>(),
+            vec![
+                (id1, EpistemicStatus::Falsified),
+                (id2, EpistemicStatus::Falsified)
+            ]
+        );
+        assert_eq!(report.revoked_entities, vec![3002, 3003]);
+        assert_eq!(report.retracted_dependencies, 1);
+        assert!(graph.is_revoked(3001) && graph.is_revoked(3002) && graph.is_revoked(3003));
+        assert!(!graph.is_revoked(3000));
+        assert!(sorted_deps(&graph).is_empty());
     }
 
-    /// Regression: the CSR pass used to read outgoing edges only, so a flushed
-    /// edge INTO the validated node never became a validated dependency.
+    /// The dependency rebuild reads flushed (CSR) edges as well as pending ones.
     #[test]
-    fn validate_node_backfills_incoming_csr_edges() {
+    fn evolution_rebuilds_dependencies_from_flushed_edges() {
         let graph = LodGraph::new();
         let src = graph
-            .add_node(node("src", 5001).with_status(EpistemicStatus::Validated))
+            .add_node(node("src", 5001).with_status(EpistemicStatus::Axiomatic))
             .unwrap();
         let dst = graph.add_node(node("dst", 5002)).unwrap();
         graph.add_edge(src, dst, EdgeType::DependsOn, 1.0).unwrap();
@@ -1204,9 +1686,483 @@ mod tests {
         assert_eq!(graph.pending_edge_count(), 0);
         assert!(graph.active_validated_dependencies().next().is_none());
 
-        graph.validate_node(dst).unwrap();
-        let deps: Vec<_> = graph.active_validated_dependencies().collect();
-        assert_eq!(deps, vec![(5001, 5002)]);
+        let report = evolve(&graph, 0.2, 0.8);
+        assert_eq!(report.dependency_edges, 1);
+        assert_eq!(status(&graph, dst), EpistemicStatus::Validated);
+        assert_eq!(sorted_deps(&graph), vec![(5001, 5002)]);
+    }
+
+    /// A weighted cycle `A -> B -> C -> A` fed by an axiom `X -> A`: the iteration
+    /// stops within the logarithmic bound at the solution of `(I - beta P) c =
+    /// (1 - beta) pi`, solved here by hand.
+    #[test]
+    fn cycle_converges_to_the_unique_fixed_point_within_k_max() {
+        let graph = LodGraph::new();
+        let x = graph
+            .add_node(node("x", 1).with_status(EpistemicStatus::Axiomatic))
+            .unwrap();
+        let a = graph.add_node(node("a", 2).with_prior(0.5)).unwrap();
+        let b = graph.add_node(node("b", 3).with_prior(0.25)).unwrap();
+        let c = graph.add_node(node("c", 4).with_prior(0.75)).unwrap();
+        graph.add_edge(x, a, EdgeType::DependsOn, 3.0).unwrap();
+        graph.add_edge(a, b, EdgeType::DependsOn, 1.0).unwrap();
+        graph.flush_edges_to_csr().unwrap();
+        // The rest stays pending: the iteration must read both stores.
+        graph
+            .add_edge(b, c, EdgeType::CausalTransition, 2.0)
+            .unwrap();
+        graph.add_edge(c, a, EdgeType::DependsOn, 1.0).unwrap();
+        // Edges of other types carry no confidence.
+        graph.add_edge(b, a, EdgeType::Semantic, 50.0).unwrap();
+        graph.add_edge(c, b, EdgeType::Falsifies, 50.0).unwrap();
+
+        let report = evolve(&graph, 0.2, 0.8);
+        assert_eq!((report.nodes, report.pinned), (4, 1));
+        assert_eq!(report.dependency_edges, 4);
+
+        // a = k pa + beta (3/4 + c/4), b = k pb + beta a, c = k pc + beta b, k = 1 - beta.
+        let beta = f64::from(BETA);
+        let k = 1.0 - beta;
+        let (pa, pb, pc) = (0.5, 0.25, 0.75);
+        let exact_a = (k * pa + 0.75 * beta + 0.25 * beta * (k * pc + beta * k * pb))
+            / (1.0 - 0.25 * beta.powi(3));
+        let exact_b = k * pb + beta * exact_a;
+        let exact_c = k * pc + beta * exact_b;
+        let got = confidences(&graph);
+        assert_eq!(got[x as usize], 1.0);
+        for (id, exact) in [(a, exact_a), (b, exact_b), (c, exact_c)] {
+            let err = (f64::from(got[id as usize]) - exact).abs();
+            assert!(
+                err <= report.error_bound + 1e-7,
+                "node {id}: {} vs {exact}, bound {}",
+                got[id as usize],
+                report.error_bound
+            );
+        }
+
+        // The explicit bound, recomputed from the report, and the stop inside it.
+        let tol = f64::from(TOL);
+        assert!(report.initial_delta > tol);
+        let k_max = ((tol * k / report.initial_delta).ln() / beta.ln()).ceil() as usize;
+        assert_eq!(report.k_max, k_max);
+        assert!(report.iterations >= 1 && report.iterations <= report.k_max);
+        assert!(report.residual < tol);
+        assert!(report.error_bound < tol * beta / k);
+
+        // An unchanged graph evolves to the same bits and changes no status.
+        let again = evolve(&graph, 0.2, 0.8);
+        assert_eq!(confidences(&graph), got);
+        assert!(again.transitions.is_empty());
+        assert_eq!(again.iterations, report.iterations);
+    }
+
+    /// Uniqueness: a cycle with no anchor at all, started from four different
+    /// vectors, reaches one fixed point, and that point satisfies the equation.
+    #[test]
+    fn every_start_reaches_the_same_fixed_point_on_a_pure_cycle() {
+        let graph = LodGraph::new();
+        let priors = [0.2_f32, 0.5, 0.9];
+        let ids: Vec<u32> = priors
+            .iter()
+            .enumerate()
+            .map(|(i, &p)| graph.add_node(node("n", i as u64).with_prior(p)).unwrap())
+            .collect();
+        for i in 0..3 {
+            graph
+                .add_edge(ids[i], ids[(i + 1) % 3], EdgeType::DependsOn, 1.0)
+                .unwrap();
+        }
+        let (beta, tol) = (0.9_f64, 1e-9_f64);
+        let prior: Vec<f64> = priors.iter().map(|&p| f64::from(p)).collect();
+        let runs: Vec<FixedPointRun> = {
+            let st = graph.state.read();
+            let rows = dependency_rows(&st.nodes, &graph.csr_snapshot(), &st.edge_buffer);
+            [
+                prior.clone(),
+                vec![0.0; 3],
+                vec![1.0; 3],
+                vec![1.0, 0.0, 0.37],
+            ]
+            .iter()
+            .map(|start| {
+                iterate_to_fixed_point(&rows, &prior, start, beta, tol, usize::MAX).unwrap()
+            })
+            .collect()
+        };
+        let bound = 2.0 * tol * beta / (1.0 - beta);
+        for run in &runs {
+            assert!(run.iterations <= run.k_max);
+            let c = &run.confidences;
+            for i in 0..3 {
+                assert!((c[i] - runs[0].confidences[i]).abs() <= bound);
+                // Node i depends on node i - 1.
+                let rhs = (1.0 - beta) * prior[i] + beta * c[(i + 2) % 3];
+                assert!((c[i] - rhs).abs() < tol);
+            }
+        }
+    }
+
+    /// A step budget below the bound is a refusal, and the graph is untouched.
+    #[test]
+    fn exhausted_step_budget_fails_closed_and_commits_nothing() {
+        let graph = LodGraph::new();
+        let priors = [0.2_f32, 0.5, 0.9];
+        let ids: Vec<u32> = priors
+            .iter()
+            .enumerate()
+            .map(|(i, &p)| graph.add_node(node("n", i as u64).with_prior(p)).unwrap())
+            .collect();
+        for i in 0..3 {
+            graph
+                .add_edge(ids[i], ids[(i + 1) % 3], EdgeType::DependsOn, 1.0)
+                .unwrap();
+        }
+        let before = (confidences(&graph), sorted_deps(&graph));
+
+        let err = graph
+            .evolve_epistemic_fixed_point_within(BETA, TOL, 0.3, 0.6, 3)
+            .unwrap_err();
+        match err {
+            LodError::FixedPointDiverged {
+                iterations,
+                k_max,
+                residual,
+                tolerance,
+            } => {
+                assert_eq!(iterations, 3);
+                assert!(k_max > 3, "k_max {k_max}");
+                assert!(residual >= tolerance);
+            }
+            other => panic!("expected FixedPointDiverged, got {other}"),
+        }
+
+        // beta = 0.9999 on a cycle needs about 134 000 steps for 1e-6: above the
+        // hard cap, so the public entry point refuses too.
+        let err = graph
+            .evolve_epistemic_fixed_point(0.9999, TOL, 0.3, 0.6)
+            .unwrap_err();
+        match err {
+            LodError::FixedPointDiverged {
+                iterations, k_max, ..
+            } => {
+                assert_eq!(iterations, MAX_FIXED_POINT_STEPS);
+                assert!(k_max > MAX_FIXED_POINT_STEPS);
+            }
+            other => panic!("expected FixedPointDiverged, got {other}"),
+        }
+
+        assert_eq!((confidences(&graph), sorted_deps(&graph)), before);
+        for (&id, &p) in ids.iter().zip(&priors) {
+            let n = graph.get_node(id).unwrap();
+            assert_eq!((n.status, n.confidence), (EpistemicStatus::Hypothesized, p));
+            assert!(!graph.is_revoked(n.entity_id));
+        }
+        // The same graph converges once the budget covers the bound.
+        let report = evolve(&graph, 0.3, 0.6);
+        assert!(report.iterations > 3);
+    }
+
+    #[test]
+    fn evolution_refuses_out_of_range_arguments() {
+        let graph = LodGraph::new();
+        graph.add_node(node("a", 1)).unwrap();
+        let bad = [
+            (0.0, TOL, 0.2, 0.8),
+            (1.0, TOL, 0.2, 0.8),
+            (-0.5, TOL, 0.2, 0.8),
+            (f32::NAN, TOL, 0.2, 0.8),
+            (BETA, 0.0, 0.2, 0.8),
+            (BETA, -1e-6, 0.2, 0.8),
+            (BETA, f32::INFINITY, 0.2, 0.8),
+            (BETA, TOL, 0.8, 0.2),
+            (BETA, TOL, 0.5, 0.5),
+            (BETA, TOL, 0.0, 0.8),
+            (BETA, TOL, 0.2, 1.0),
+            (BETA, TOL, f32::NAN, 0.8),
+        ];
+        for (beta, tol, lo, hi) in bad {
+            assert!(
+                matches!(
+                    graph.evolve_epistemic_fixed_point(beta, tol, lo, hi),
+                    Err(LodError::InvalidQuery(_))
+                ),
+                "({beta}, {tol}, {lo}, {hi}) was accepted"
+            );
+        }
+        // An empty graph is a fixed point already.
+        let empty = LodGraph::new();
+        let report = evolve(&empty, 0.2, 0.8);
+        assert_eq!((report.nodes, report.iterations, report.k_max), (0, 0, 0));
+    }
+
+    /// Refute, evolve, retract, evolve: confidences return bit for bit, statuses,
+    /// revocations and dependencies with them. A manual revocation stays.
+    #[test]
+    fn retracting_evidence_reverses_the_evolution_exactly() {
+        let graph = LodGraph::new();
+        let x = graph
+            .add_node(node("x", 1).with_status(EpistemicStatus::Axiomatic))
+            .unwrap();
+        let a = graph.add_node(node("a", 2)).unwrap();
+        let b = graph.add_node(node("b", 3)).unwrap();
+        let c = graph.add_node(node("c", 4)).unwrap();
+        let d = graph.add_node(node("d", 5)).unwrap();
+        graph.add_edge(x, a, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(a, b, EdgeType::DependsOn, 1.0).unwrap();
+        // Feedback loop b <-> c, and d hanging off c.
+        graph.add_edge(b, c, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(c, b, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(c, d, EdgeType::DependsOn, 1.0).unwrap();
+        graph.flush_edges_to_csr().unwrap();
+        // Refuted a gives b = 0.167, c = 0.217, d = 0.260: all below 0.3.
+        let (lo, hi) = (0.3, 0.6);
+
+        evolve(&graph, lo, hi);
+        let supported = (confidences(&graph), sorted_deps(&graph));
+        for id in [a, b, c, d] {
+            assert_eq!(status(&graph, id), EpistemicStatus::Validated, "node {id}");
+        }
+        assert_eq!(supported.1.len(), 5);
+
+        graph.falsify_node(a).unwrap();
+        graph.revoke_entity(5);
+        let down = evolve(&graph, lo, hi);
+        assert_eq!(down.transitions.len(), 3);
+        for id in [a, b, c, d] {
+            assert_eq!(status(&graph, id), EpistemicStatus::Falsified, "node {id}");
+            assert!(graph.is_revoked(u64::from(id) + 1));
+        }
+        assert!(confidences(&graph)[1..].iter().all(|&v| v < lo));
+        assert!(sorted_deps(&graph).is_empty());
+
+        graph.retract_falsification(a).unwrap();
+        assert_eq!(status(&graph, a), EpistemicStatus::Hypothesized);
+        let up = evolve(&graph, lo, hi);
+        assert_eq!(up.transitions.len(), 4);
+        assert_eq!(up.reinstated_entities, vec![3, 4]);
+        assert_eq!((confidences(&graph), sorted_deps(&graph)), supported);
+        for id in [a, b, c, d] {
+            assert_eq!(status(&graph, id), EpistemicStatus::Validated, "node {id}");
+        }
+        assert!(!graph.is_revoked(2) && !graph.is_revoked(3) && !graph.is_revoked(4));
+        // `revoke_entity` was not evidence about confidence; it is not lifted.
+        assert!(graph.is_revoked(5));
+    }
+
+    /// Between the thresholds a status is kept, in both directions.
+    #[test]
+    fn hysteresis_band_keeps_the_status() {
+        let graph = LodGraph::new();
+        let root = graph.add_node(node("root", 1).with_prior(0.9)).unwrap();
+        let leaf = graph.add_node(node("leaf", 2).with_prior(0.5)).unwrap();
+        graph
+            .add_edge(root, leaf, EdgeType::DependsOn, 1.0)
+            .unwrap();
+        // leaf = 0.075 + 0.85 * 0.9 = 0.84: validated. root = 0.9: validated.
+        evolve(&graph, 0.2, 0.8);
+        assert_eq!(status(&graph, leaf), EpistemicStatus::Validated);
+
+        graph.falsify_node(root).unwrap();
+        let report = evolve(&graph, 0.2, 0.8);
+        assert_eq!(report.revoked_entities, vec![2]);
+        assert_eq!(status(&graph, leaf), EpistemicStatus::Falsified);
+
+        // Root back at its prior: leaf returns to 0.84 and is validated again
+        // under theta_hi = 0.8, but stays falsified and revoked under 0.9.
+        graph.retract_falsification(root).unwrap();
+        let strict = evolve(&graph, 0.2, 0.9);
+        assert_eq!(strict.transitions.len(), 0);
+        assert_eq!(status(&graph, root), EpistemicStatus::Hypothesized);
+        assert_eq!(status(&graph, leaf), EpistemicStatus::Falsified);
+        assert!(graph.is_revoked(2));
+        assert!((graph.get_node(leaf).unwrap().confidence - 0.84).abs() < 1e-5);
+        let loose = evolve(&graph, 0.2, 0.8);
+        assert_eq!(loose.reinstated_entities, vec![2]);
+        assert_eq!(status(&graph, leaf), EpistemicStatus::Validated);
+        assert!(!graph.is_revoked(2));
+    }
+
+    /// Edge weights decide: losing the heavy dependency falsifies the node,
+    /// losing the light one does not. An unweighted traversal cannot tell them apart.
+    #[test]
+    fn edge_weights_decide_which_refutation_propagates() {
+        let build = || {
+            let graph = LodGraph::new();
+            let heavy = graph.add_node(node("heavy", 1).with_prior(0.9)).unwrap();
+            let light = graph.add_node(node("light", 2).with_prior(0.9)).unwrap();
+            let leaf = graph.add_node(node("leaf", 3)).unwrap();
+            graph
+                .add_edge(heavy, leaf, EdgeType::DependsOn, 9.0)
+                .unwrap();
+            graph
+                .add_edge(light, leaf, EdgeType::DependsOn, 1.0)
+                .unwrap();
+            evolve(&graph, 0.2, 0.8);
+            assert_eq!(status(&graph, leaf), EpistemicStatus::Validated);
+            (graph, heavy, light, leaf)
+        };
+        // leaf = 0.075 + 0.85 * (0.9 * 0 + 0.1 * 0.9) = 0.1515.
+        let (graph, heavy, _, leaf) = build();
+        graph.falsify_node(heavy).unwrap();
+        evolve(&graph, 0.2, 0.8);
+        assert_eq!(status(&graph, leaf), EpistemicStatus::Falsified);
+        assert!((graph.get_node(leaf).unwrap().confidence - 0.1515).abs() < 1e-5);
+        // leaf = 0.075 + 0.85 * (0.9 * 0.9 + 0.1 * 0) = 0.7635.
+        let (graph, _, light, leaf) = build();
+        graph.falsify_node(light).unwrap();
+        evolve(&graph, 0.2, 0.8);
+        assert_eq!(status(&graph, leaf), EpistemicStatus::Validated);
+        assert!((graph.get_node(leaf).unwrap().confidence - 0.7635).abs() < 1e-5);
+    }
+
+    fn geometry(curvature: f64, radius: f64, alphas: [f64; 3]) -> GeometryParams {
+        GeometryParams {
+            curvature,
+            radius,
+            alpha_h: alphas[0],
+            alpha_e: alphas[1],
+            alpha_s: alphas[2],
+        }
+    }
+
+    /// Three nodes, each one factor away from the query, with one fingerprint so
+    /// stage 1 cannot rank them. Returns the recall order by label and distance.
+    fn recall_order(params: GeometryParams) -> Vec<(String, f32)> {
+        let graph = LodGraph::with_geometry(params).unwrap();
+        assert_eq!(graph.geometry(), params);
+        let mut hyperbolic = MixedCurvatureCoord::origin();
+        hyperbolic.hyperbolic[0] = 0.4;
+        let mut euclidean = MixedCurvatureCoord::origin();
+        euclidean.euclidean[0] = 1.0;
+        let mut spherical = MixedCurvatureCoord::origin();
+        // 0.6 rad from the north pole.
+        spherical.spherical = [0.6_f32.cos(), 0.6_f32.sin(), 0.0, 0.0];
+        for (i, (label, coord)) in [("H", hyperbolic), ("E", euclidean), ("S", spherical)]
+            .into_iter()
+            .enumerate()
+        {
+            graph.add_node(node_with(label, i as u64, coord)).unwrap();
+        }
+        graph
+            .two_stage_recall(&MixedCurvatureCoord::origin(), &[0; 4], 3, 0.0)
+            .unwrap()
+            .into_iter()
+            .map(|(id, d)| (graph.get_node(id).unwrap().label, d))
+            .collect()
+    }
+
+    fn labels(order: &[(String, f32)]) -> String {
+        order.iter().map(|(l, _)| l.as_str()).collect()
+    }
+
+    /// The knobs are live: each of alpha_h, alpha_e, alpha_s, c and R reorders
+    /// the recall, and the distances are the ones the metric defines.
+    #[test]
+    fn geometry_parameters_reorder_two_stage_recall() {
+        // Unit geometry: d_S = 0.6, d_H = 2 artanh(0.4) = 0.8473, d_E = 1.
+        let unit = recall_order(GeometryParams::UNIT);
+        assert_eq!(labels(&unit), "SHE");
+        let d_h = 2.0 * 0.4_f32.atanh();
+        for ((_, got), want) in unit.iter().zip([0.6, d_h, 1.0]) {
+            assert!((got - want).abs() < 1e-5, "{got} vs {want}");
+        }
+
+        // Each weight alone moves its factor from first or second place to last.
+        let by_alpha_h = recall_order(geometry(1.0, 1.0, [16.0, 1.0, 1.0]));
+        assert_eq!(labels(&by_alpha_h), "SEH");
+        assert!((by_alpha_h[2].1 - 4.0 * d_h).abs() < 1e-5);
+        let by_alpha_s = recall_order(geometry(1.0, 1.0, [1.0, 1.0, 16.0]));
+        assert_eq!(labels(&by_alpha_s), "HES");
+        assert!((by_alpha_s[2].1 - 2.4).abs() < 1e-5);
+        // And alpha_e pulls the Euclidean node from last to first.
+        let by_alpha_e = recall_order(geometry(1.0, 1.0, [1.0, 0.0625, 1.0]));
+        assert_eq!(labels(&by_alpha_e), "ESH");
+        assert!((by_alpha_e[0].1 - 0.25).abs() < 1e-5);
+
+        // Radius: d_S = R * 0.6 = 1.8 sends the sphere node last.
+        let by_radius = recall_order(geometry(1.0, 3.0, [1.0, 1.0, 1.0]));
+        assert_eq!(labels(&by_radius), "HES");
+        assert!((by_radius[2].1 - 1.8).abs() < 1e-5);
+        // Curvature 4: d_H = artanh(0.8) = 1.0986 sends the hyperbolic node last.
+        let by_curvature = recall_order(geometry(4.0, 1.0, [1.0, 1.0, 1.0]));
+        assert_eq!(labels(&by_curvature), "SEH");
+        assert!((by_curvature[2].1 - 0.8_f32.atanh()).abs() < 1e-5);
+    }
+
+    /// Curvature fixes the domain: the same coordinate is a node of one graph
+    /// and refused by another, at insert and at query.
+    #[test]
+    fn graph_curvature_decides_which_coordinates_are_in_domain() {
+        let mut coord = MixedCurvatureCoord::origin();
+        coord.hyperbolic[0] = 0.8;
+        let origin = MixedCurvatureCoord::origin();
+        let unit = LodGraph::new();
+        unit.add_node(node_with("in", 1, coord)).unwrap();
+        assert!(unit.two_stage_recall(&coord, &[0; 4], 1, 0.0).is_ok());
+
+        // Curvature 4 is a ball of radius 0.5.
+        let tight = LodGraph::with_geometry(geometry(4.0, 1.0, [1.0; 3])).unwrap();
+        assert_eq!(
+            tight.add_node(node_with("out", 1, coord)).unwrap_err(),
+            LodError::Geometry(crate::manifold::Reject::DomainViolation)
+        );
+        tight.add_node(node_with("origin", 2, origin)).unwrap();
+        assert!(tight.two_stage_recall(&coord, &[0; 4], 1, 0.0).is_err());
+
+        // Curvature 0.25 is a ball of radius 2: a norm of 1.5 is a valid node.
+        coord.hyperbolic[0] = 1.5;
+        let wide = LodGraph::with_geometry(geometry(0.25, 1.0, [1.0; 3])).unwrap();
+        wide.add_node(node_with("far", 1, coord)).unwrap();
+        assert!(unit.add_node(node_with("far", 3, coord)).is_err());
+
+        for bad in [0.0, -1.0, f64::NAN, f64::INFINITY, 1e-60, 1e60] {
+            for params in [
+                geometry(bad, 1.0, [1.0; 3]),
+                geometry(1.0, bad, [1.0; 3]),
+                geometry(1.0, 1.0, [bad, 1.0, 1.0]),
+                geometry(1.0, 1.0, [1.0, bad, 1.0]),
+                geometry(1.0, 1.0, [1.0, 1.0, bad]),
+            ] {
+                assert!(
+                    LodGraph::with_geometry(params).is_err(),
+                    "{params:?} accepted"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn add_node_refuses_inconsistent_confidence_fields() {
+        let graph = LodGraph::new();
+        let mut split = node("split", 1);
+        split.confidence = 0.9;
+        assert!(matches!(
+            graph.add_node(split),
+            Err(LodError::InvalidNode(_))
+        ));
+        for prior in [-0.1, 1.1, f32::NAN] {
+            assert!(matches!(
+                graph.add_node(node("p", 2).with_prior(prior)),
+                Err(LodError::InvalidNode(_))
+            ));
+        }
+        let mut marked = node("marked", 3);
+        marked.refuted = true;
+        assert!(matches!(
+            graph.add_node(marked),
+            Err(LodError::InvalidNode(_))
+        ));
+        assert_eq!(graph.node_count(), 0);
+        // An inserted Falsified node is refuted evidence: pinned, revoked, retractable.
+        let f = graph
+            .add_node(node("f", 4).with_status(EpistemicStatus::Falsified))
+            .unwrap();
+        let n = graph.get_node(f).unwrap();
+        assert!(n.refuted && n.confidence == 0.0 && n.prior == 0.5);
+        assert!(graph.is_revoked(4));
+        graph.retract_falsification(f).unwrap();
+        assert!(!graph.is_revoked(4));
+        assert_eq!(graph.get_node(f).unwrap().confidence, 0.5);
     }
 
     #[test]
@@ -1334,7 +2290,8 @@ mod tests {
         let c = graph.add_node(node("c", 3)).unwrap();
         graph.add_edge(a, c, EdgeType::DependsOn, 1.0).unwrap();
         graph.flush_edges_to_csr().unwrap();
-        graph.cascade_prune_and_rollback(a).unwrap();
+        graph.falsify_node(a).unwrap();
+        evolve(&graph, 0.2, 0.8);
         graph.add_privilege(9, 1);
         assert!(graph.is_revoked(1) && graph.is_revoked(2) && graph.is_revoked(3));
 
@@ -1345,17 +2302,17 @@ mod tests {
         assert!(Arc::ptr_eq(&graph.csr_snapshot(), &csr_before));
         assert!(!graph.is_revoked(1) && !graph.is_revoked(2));
         assert!(!graph.has_privilege(9, 1));
-        assert_eq!(
-            graph.get_node(a).unwrap().status,
-            EpistemicStatus::Hypothesized
-        );
+        let restored = graph.get_node(a).unwrap();
+        assert_eq!(restored.status, EpistemicStatus::Hypothesized);
+        assert!(!restored.refuted && restored.confidence == 0.5);
+        assert_eq!(graph.get_node(b).unwrap().confidence, 0.5);
         // Entity 3 is free again, and the restored pending edge flushes once.
         graph.add_node(node("c2", 3)).unwrap();
         assert_eq!(graph.flush_edges_to_csr().unwrap().csr_edges, 2);
     }
 
     #[test]
-    fn prune_outcome_checkpoint_undoes_the_prune() {
+    fn report_checkpoint_undoes_the_evolution_and_an_earlier_one_the_evidence() {
         let graph = LodGraph::new();
         let a = graph
             .add_node(node("a", 1).with_status(EpistemicStatus::Validated))
@@ -1364,18 +2321,28 @@ mod tests {
             .add_node(node("b", 2).with_status(EpistemicStatus::Validated))
             .unwrap();
         graph.add_edge(a, b, EdgeType::DependsOn, 1.0).unwrap();
-        let outcome = graph.cascade_prune_and_rollback(a).unwrap();
-        assert_eq!(outcome.pruned, vec![a, b]);
-        assert!(graph.active_validated_dependencies().next().is_none());
+        assert_eq!(sorted_deps(&graph), vec![(1, 2)]);
+        let before = graph.create_checkpoint();
 
-        graph.rollback_checkpoint(&outcome.checkpoint).unwrap();
+        graph.falsify_node(a).unwrap();
+        let report = evolve(&graph, 0.2, 0.8);
+        assert_eq!(report.revoked_entities, vec![2]);
+        assert!(graph.is_revoked(1) && graph.is_revoked(2));
+        assert!(sorted_deps(&graph).is_empty());
+
+        // The report's checkpoint is the state the evolution started from.
+        graph.rollback_checkpoint(&report.checkpoint).unwrap();
+        assert!(graph.is_revoked(1) && !graph.is_revoked(2));
+        assert_eq!(status(&graph, b), EpistemicStatus::Validated);
+        assert_eq!(graph.get_node(b).unwrap().confidence, 0.5);
+        assert!(graph.get_node(a).unwrap().refuted);
+
+        graph.rollback_checkpoint(&before).unwrap();
         assert!(!graph.is_revoked(1) && !graph.is_revoked(2));
-        assert_eq!(
-            graph.get_node(b).unwrap().status,
-            EpistemicStatus::Validated
-        );
-        let deps: Vec<_> = graph.active_validated_dependencies().collect();
-        assert_eq!(deps, vec![(1, 2)]);
+        let restored = graph.get_node(a).unwrap();
+        assert_eq!(restored.status, EpistemicStatus::Validated);
+        assert!(!restored.refuted);
+        assert_eq!(sorted_deps(&graph), vec![(1, 2)]);
     }
 
     #[test]

@@ -20,9 +20,10 @@
 //! `Reject::NonFiniteState`; a sphere pair at (or numerically at) the antipode
 //! returns `Reject::CutLocus`. No operator substitutes a default value.
 //!
-//! The legacy 16-coordinate `MixedCurvatureCoord` (`H^4 x S^3 x R^8`, f32) is
-//! kept for the Lod graph and now evaluates its distances through the same
-//! kernel as `ProductGeometry`.
+//! The 16-coordinate `MixedCurvatureCoord` (`H^4 x R^8 x S^3`, f32) is the Lod
+//! graph's node chart. It has no parameters of its own: its distance takes the
+//! graph's `GeometryParams` and equals `ProductGeometry::distance` on the
+//! points `MixedCurvatureCoord::to_point` gives.
 
 use crate::error::LodError;
 use serde::{Deserialize, Serialize};
@@ -339,8 +340,8 @@ pub trait ProductGeometry: Send + Sync {
 }
 
 // ---------------------------------------------------------------------------
-// Factor kernels (slice based, f64). Shared by `ProductManifold` and the
-// legacy `MixedCurvatureCoord`.
+// Factor kernels (slice based, f64). Shared by `ProductManifold` and
+// `MixedCurvatureCoord`.
 // ---------------------------------------------------------------------------
 
 /// Points with `1 - c ||x||^2 <= BALL_MARGIN` count as on the ball boundary.
@@ -831,7 +832,8 @@ pub mod kernel {
 // ---------------------------------------------------------------------------
 
 /// Snapshot-fixed geometry parameters. All must be finite and > 0.
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct GeometryParams {
     pub curvature: f64,
     pub radius: f64,
@@ -841,6 +843,15 @@ pub struct GeometryParams {
 }
 
 impl GeometryParams {
+    /// `c = 1`, `R = 1`, unit weights.
+    pub const UNIT: Self = Self {
+        curvature: 1.0,
+        radius: 1.0,
+        alpha_h: 1.0,
+        alpha_e: 1.0,
+        alpha_s: 1.0,
+    };
+
     pub fn validate(&self) -> Result<()> {
         let all = [
             self.curvature,
@@ -1247,6 +1258,16 @@ pub struct ContainmentScore {
     pub deeper: bool,
     pub sphere_absorbed: bool,
     pub topic_aligned: bool,
+    /// Gaussian violation energy: the `alpha_h/e/s`-weighted mean of the squared
+    /// normalised distances by which each factor test is missed. `H` adds its
+    /// cone excess `(angle - aperture) / aperture` and its depth deficit
+    /// `sqrt(c) * max(0, -depth_gain)`; `S` and `R` use the excess over their
+    /// threshold, divided by the threshold. 0 when no test is missed by a
+    /// positive distance. Evidence only: `is_entailed` is the gate.
+    pub violation_energy: f64,
+    /// `exp(-violation_energy / 2)` in `[0, 1]`: 1 at zero violation, falling
+    /// continuously with it. Uncalibrated; it never turns a refusal into a pass.
+    pub soft_confidence: f64,
 }
 
 /// Busemann function of the Poincare ball of curvature `-c` at the ideal
@@ -1414,6 +1435,27 @@ impl ProductManifold {
         if !confidence.is_finite() {
             return Err(Reject::NonFiniteState.into());
         }
+        let violation_energy = {
+            let excess = |value: f64, limit: f64| (value - limit).max(0.0) / limit;
+            let v_cone = excess(cone_angle, aperture);
+            let v_depth = (-depth_gain).max(0.0) * sc;
+            let v_e = excess(topic_shift, criteria.topic_shift_tol);
+            let v_s = excess(sphere_angle, criteria.sphere_absorb_angle);
+            let p = &self.params;
+            let max_alpha = p.alpha_h.max(p.alpha_e).max(p.alpha_s);
+            let (ah, ae, as_) = (
+                p.alpha_h / max_alpha,
+                p.alpha_e / max_alpha,
+                p.alpha_s / max_alpha,
+            );
+            (ah * (v_cone * v_cone + v_depth * v_depth) + ae * v_e * v_e + as_ * v_s * v_s)
+                / (ah + ae + as_)
+        };
+        // An overflowed energy is refused, not reported as "certainly not entailed".
+        if !(violation_energy.is_finite() && violation_energy >= 0.0) {
+            return Err(Reject::NonFiniteState.into());
+        }
+        let soft_confidence = (-0.5 * violation_energy).exp();
         Ok(ContainmentScore {
             is_entailed,
             confidence,
@@ -1427,28 +1469,37 @@ impl ProductManifold {
             deeper,
             sphere_absorbed,
             topic_aligned,
+            violation_energy,
+            soft_confidence,
         })
     }
 }
 
 // ---------------------------------------------------------------------------
-// Legacy 16-coordinate Lod coordinate
+// 16-coordinate Lod graph coordinate
 // ---------------------------------------------------------------------------
 
 /// Norm tolerance for f32 sphere coordinates (f32 rounding of a unit vector).
-const LEGACY_SPHERE_TOL: f64 = 4e-6;
-const LEGACY_CURVATURE: f64 = 1.0;
-const LEGACY_RADIUS: f64 = 1.0;
+const COORD_SPHERE_TOL: f64 = 4e-6;
+/// Smallest `1 - c ||x_H||^2` a constructor accepts.
+const COORD_BOUNDARY_FLOOR: f32 = 1e-4;
 
-/// 16-coordinate mixed-curvature coordinate `H^4 x S^3 x R^8` (c = 1, R = 1,
-/// unit weights). `S^3` is stored as 4 embedding coordinates.
+/// 16-coordinate chart of `H_{-c}^4 x R^8 x S_R^3` for Lod graph nodes.
+///
+/// The coordinate carries no geometry parameters of its own. Curvature `c`,
+/// sphere radius `R` and the metric weights come from the [`GeometryParams`] of
+/// the graph that holds the node:
+/// - `hyperbolic` is a Poincare ball point and must satisfy `c ||x||^2 < 1`;
+/// - `spherical` is a unit direction; the point on `S_R^3` is `R * spherical`;
+/// - `euclidean` is flat.
+///
 /// Guaranteed to occupy exactly 64 bytes (1 CPU cache line).
 #[repr(C, align(64))]
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MixedCurvatureCoord {
-    /// Poincare ball coordinates (H^4, c = 1).
+    /// Poincare ball coordinates (H^4).
     pub hyperbolic: [f32; 4],
-    /// Unit sphere embedding coordinates (S^3 in R^4).
+    /// Unit direction of the sphere point (S^3 in R^4).
     pub spherical: [f32; 4],
     /// Flat Euclidean coordinates (R^8).
     pub euclidean: [f32; 8],
@@ -1486,17 +1537,30 @@ impl MixedCurvatureCoord {
         }
     }
 
-    /// Construct with a boundary floor on the hyperbolic block
-    /// (`1 - ||x_H||^2 >= 1e-4`). A non-zero spherical block is normalized onto
-    /// the unit sphere; a zero or non-finite block is rejected.
+    /// [`Self::with_curvature`] on the unit ball (`c = 1`).
     pub fn new(
         hyperbolic: [f32; 4],
         spherical: [f32; 4],
         euclidean: [f32; 8],
     ) -> std::result::Result<Self, LodError> {
+        Self::with_curvature(hyperbolic, spherical, euclidean, 1.0)
+    }
+
+    /// Construct for a ball of curvature `-curvature`, with a boundary floor on
+    /// the hyperbolic block (`1 - c ||x_H||^2 >= 1e-4`). A non-zero spherical
+    /// block is normalized to a unit direction; a zero or non-finite block is
+    /// rejected.
+    pub fn with_curvature(
+        hyperbolic: [f32; 4],
+        spherical: [f32; 4],
+        euclidean: [f32; 8],
+        curvature: f32,
+    ) -> std::result::Result<Self, LodError> {
+        if !(curvature.is_finite() && curvature > 0.0) {
+            return Err(Reject::DomainViolation.into());
+        }
         let h_norm_sq = gen_zero_core::dot_product_f32(&hyperbolic, &hyperbolic);
-        let c_h = 1.0_f32;
-        if !h_norm_sq.is_finite() || (1.0 - c_h * h_norm_sq < 1e-4) {
+        if !h_norm_sq.is_finite() || (1.0 - curvature * h_norm_sq < COORD_BOUNDARY_FLOOR) {
             return Err(LodError::HyperbolicBoundaryViolation { norm_sq: h_norm_sq });
         }
         if !spherical
@@ -1518,62 +1582,69 @@ impl MixedCurvatureCoord {
         })
     }
 
-    /// Stored coordinates in Spec 25 order `[H | E | S]`.
-    pub fn to_store_coords(&self) -> [f64; 16] {
-        let mut out = [0.0; 16];
-        out[0..4].copy_from_slice(&widen(&self.hyperbolic));
-        out[4..12].copy_from_slice(&widen(&self.euclidean));
-        out[12..16].copy_from_slice(&widen(&self.spherical));
-        out
+    /// The validated [`Point`] of `manifold` this coordinate names: stored as
+    /// `[H | E | S]` with the unit direction scaled onto the sphere of radius
+    /// `R`. Refused when the manifold is not `H^4 x R^8 x S^3`, when the
+    /// hyperbolic block is outside the ball of the manifold's curvature, or when
+    /// the spherical block is not a unit direction within f32 rounding.
+    pub fn to_point(&self, manifold: &ProductManifold) -> std::result::Result<Point, LodError> {
+        if *manifold.layout() != Self::LAYOUT {
+            return Err(Reject::DomainViolation.into());
+        }
+        let direction = widen(&self.spherical);
+        kernel::sphere_check(1.0, &direction, COORD_SPHERE_TOL)?;
+        // Remove the f32 rounding of the direction, then scale to radius R.
+        let scale = manifold.params().radius / norm(&direction);
+        let mut coords = [0.0; 16];
+        coords[0..4].copy_from_slice(&widen(&self.hyperbolic));
+        coords[4..12].copy_from_slice(&widen(&self.euclidean));
+        for (out, d) in coords[12..16].iter_mut().zip(&direction) {
+            *out = d * scale;
+        }
+        Ok(manifold.point(&coords)?)
     }
 
-    /// Poincare ball geodesic distance (c = 1). Fails if either point is on or
-    /// outside the boundary.
-    pub fn hyperbolic_distance(&self, other: &Self) -> std::result::Result<f32, LodError> {
-        let d = kernel::hyperbolic_distance(
-            LEGACY_CURVATURE,
+    /// Product geodesic distance under explicit geometry parameters:
+    /// `sqrt(alpha_h d_H^2 + alpha_e d_E^2 + alpha_s d_S^2)` with `d_H` on the
+    /// ball of curvature `-c`, `d_S = r * angle` on the sphere of radius `r`, and
+    /// `alphas = [alpha_h, alpha_e, alpha_s]`. The same value as
+    /// [`ProductGeometry::distance`] on the points [`Self::to_point`] gives.
+    ///
+    /// Fails closed: a parameter that is not finite and positive, a hyperbolic
+    /// block outside the ball of curvature `-c`, a spherical block that is not a
+    /// unit direction, or a non-finite result is an error.
+    pub fn product_distance_with_params(
+        &self,
+        other: &Self,
+        alphas: [f32; 3],
+        c: f32,
+        r: f32,
+    ) -> std::result::Result<f32, LodError> {
+        let [alpha_h, alpha_e, alpha_s] = alphas.map(f64::from);
+        let params = GeometryParams {
+            curvature: f64::from(c),
+            radius: f64::from(r),
+            alpha_h,
+            alpha_e,
+            alpha_s,
+        };
+        params.validate()?;
+        let dh = kernel::hyperbolic_distance(
+            params.curvature,
             &widen(&self.hyperbolic),
             &widen(&other.hyperbolic),
         )?;
-        let d = d as f32;
-        if d.is_finite() {
-            Ok(d)
-        } else {
-            Err(Reject::NonFiniteState.into())
-        }
-    }
-
-    /// Great-circle distance on the unit S^3. Fails if either block is off the
-    /// unit sphere beyond f32 rounding.
-    pub fn spherical_distance(&self, other: &Self) -> std::result::Result<f32, LodError> {
-        let d = kernel::spherical_distance(
-            LEGACY_RADIUS,
+        let angle = kernel::sphere_angle(
+            1.0,
             &widen(&self.spherical),
             &widen(&other.spherical),
-            LEGACY_SPHERE_TOL,
+            COORD_SPHERE_TOL,
         )?;
-        let d = d as f32;
-        if d.is_finite() {
-            Ok(d)
-        } else {
-            Err(Reject::NonFiniteState.into())
-        }
-    }
-
-    /// Euclidean distance on R^8.
-    pub fn euclidean_distance(&self, other: &Self) -> f32 {
-        norm_diff(&widen(&self.euclidean), &widen(&other.euclidean)) as f32
-    }
-
-    /// Product distance with unit weights: `sqrt(d_H^2 + d_S^2 + d_E^2)`.
-    pub fn product_distance(&self, other: &Self) -> std::result::Result<f32, LodError> {
-        let dh = self.hyperbolic_distance(other)?;
-        let ds = self.spherical_distance(other)?;
-        let de = self.euclidean_distance(other);
-        if !de.is_finite() {
-            return Err(Reject::NonFiniteState.into());
-        }
-        let distance = dh.hypot(ds).hypot(de);
+        let ds = params.radius * angle;
+        let de = norm_diff(&widen(&self.euclidean), &widen(&other.euclidean));
+        let distance = (alpha_h.sqrt() * dh)
+            .hypot(alpha_e.sqrt() * de)
+            .hypot(alpha_s.sqrt() * ds) as f32;
         if distance.is_finite() {
             Ok(distance)
         } else {
@@ -2519,78 +2590,179 @@ mod tests {
         }
     }
 
+    const UNIT_ALPHAS: [f32; 3] = [1.0; 3];
+
+    fn coord_manifold(p: GeometryParams) -> ProductManifold {
+        let layout = MixedCurvatureCoord::LAYOUT;
+        ProductManifold::new(layout, p, epochs_for(layout, p)).unwrap()
+    }
+
     #[test]
-    fn test_manifold_distances() {
+    fn coord_distance_is_zero_at_identity_and_grows() {
         let p1 = MixedCurvatureCoord::origin();
         let p2 = MixedCurvatureCoord::origin();
-        assert_eq!(p1.product_distance(&p2).unwrap(), 0.0);
+        let d = |a: &MixedCurvatureCoord, b| {
+            a.product_distance_with_params(b, UNIT_ALPHAS, 1.0, 1.0)
+                .unwrap()
+        };
+        assert_eq!(d(&p1, &p2), 0.0);
 
         let mut p3 = MixedCurvatureCoord::origin();
         p3.hyperbolic[0] = 0.5;
         p3.euclidean[0] = 1.0;
-
-        let dist = p1.product_distance(&p3).unwrap();
-        assert!(dist > 1.0);
+        assert!(d(&p1, &p3) > 1.0);
     }
 
+    /// One geometry, two entry points: the coordinate distance under explicit
+    /// parameters equals `ProductManifold::distance` on the converted points,
+    /// for non-unit curvature, radius and weights.
     #[test]
-    fn legacy_coord_agrees_with_product_manifold() {
-        let layout = MixedCurvatureCoord::LAYOUT;
-        let p = GeometryParams {
-            curvature: 1.0,
-            radius: 1.0,
-            alpha_h: 1.0,
-            alpha_e: 1.0,
-            alpha_s: 1.0,
+    fn coord_distance_equals_product_manifold_distance() {
+        // All exactly representable in f32, so both sides see the same numbers.
+        let cases = [
+            GeometryParams::UNIT,
+            GeometryParams {
+                curvature: 0.5,
+                radius: 2.5,
+                alpha_h: 0.25,
+                alpha_e: 2.0,
+                alpha_s: 4.0,
+            },
+            GeometryParams {
+                curvature: 2.0,
+                radius: 0.125,
+                alpha_h: 8.0,
+                alpha_e: 0.5,
+                alpha_s: 0.0625,
+            },
+        ];
+        let mut rng = Rng(0x5EED_C0DE);
+        for p in cases {
+            let m = coord_manifold(p);
+            let c = p.curvature as f32;
+            for _ in 0..50 {
+                let mut gen = || {
+                    let dir = rng.direction(4);
+                    let reach = 0.6 * rng.uniform() / p.curvature.sqrt();
+                    let h: [f32; 4] = std::array::from_fn(|i| (dir[i] * reach) as f32);
+                    let s: [f32; 4] = std::array::from_fn(|_| rng.normal() as f32);
+                    let e: [f32; 8] = std::array::from_fn(|_| rng.normal() as f32);
+                    MixedCurvatureCoord::with_curvature(h, s, e, c).unwrap()
+                };
+                let (a, b) = (gen(), gen());
+                let alphas = [p.alpha_h as f32, p.alpha_e as f32, p.alpha_s as f32];
+                let got = a
+                    .product_distance_with_params(&b, alphas, c, p.radius as f32)
+                    .unwrap();
+                let want = m
+                    .distance(&a.to_point(&m).unwrap(), &b.to_point(&m).unwrap())
+                    .unwrap();
+                assert!(
+                    (f64::from(got) - want).abs() <= 1e-5 * want.max(1.0),
+                    "{p:?}: coord {got} vs manifold {want}"
+                );
+            }
+        }
+    }
+
+    /// Each parameter moves the distance the way the metric says it must.
+    #[test]
+    fn coord_distance_responds_to_every_parameter() {
+        let a = MixedCurvatureCoord::origin();
+        let only = |h: f32, s: [f32; 4], e: f32| {
+            let mut c = MixedCurvatureCoord::origin();
+            c.hyperbolic[0] = h;
+            c.spherical = s;
+            c.euclidean[0] = e;
+            c
         };
-        let m = ProductManifold::new(layout, p, epochs_for(layout, p)).unwrap();
-        let a = MixedCurvatureCoord::new([0.1, -0.2, 0.3, 0.0], [1.0, 2.0, -0.5, 0.3], [1.0; 8])
-            .unwrap();
-        let b = MixedCurvatureCoord::new([-0.4, 0.1, 0.0, 0.5], [-0.3, 0.2, 1.0, 0.1], [0.5; 8])
-            .unwrap();
-        // f32-rounded sphere coordinates are outside the f64 tolerance, so compare
-        // against the kernel with the legacy tolerance directly.
-        let ca = a.to_store_coords();
-        let cb = b.to_store_coords();
-        let dh = kernel::hyperbolic_distance(1.0, &ca[0..4], &cb[0..4]).unwrap();
-        let ds =
-            kernel::spherical_distance(1.0, &ca[12..16], &cb[12..16], LEGACY_SPHERE_TOL).unwrap();
-        let de: f64 = ca[4..12]
-            .iter()
-            .zip(&cb[4..12])
-            .map(|(x, y)| (x - y) * (x - y))
-            .sum();
-        let expected = (dh * dh + ds * ds + de).sqrt();
-        assert!((a.product_distance(&b).unwrap() as f64 - expected).abs() < 1e-5);
-        // And with exactly representable sphere points the full manifold agrees.
-        let mut ea = ca;
-        let mut eb = cb;
-        ea[12..16].copy_from_slice(&[1.0, 0.0, 0.0, 0.0]);
-        eb[12..16].copy_from_slice(&[0.0, 1.0, 0.0, 0.0]);
-        let d = m
-            .distance(&m.point(&ea).unwrap(), &m.point(&eb).unwrap())
-            .unwrap();
-        let expected = (dh * dh + (PI / 2.0).powi(2) + de).sqrt();
-        assert!((d - expected).abs() < 1e-12);
+        let north = [1.0, 0.0, 0.0, 0.0];
+        let (bh, be, bs) = (
+            only(0.3, north, 0.0),
+            only(0.0, north, 2.0),
+            only(0.0, [0.0, 1.0, 0.0, 0.0], 0.0),
+        );
+        let d = |b: &MixedCurvatureCoord, alphas, c, r| {
+            f64::from(a.product_distance_with_params(b, alphas, c, r).unwrap())
+        };
+        let base = d(&bh, UNIT_ALPHAS, 1.0, 1.0);
+        // alpha_h = 4 doubles a purely hyperbolic distance and leaves the others alone.
+        assert!((d(&bh, [4.0, 1.0, 1.0], 1.0, 1.0) - 2.0 * base).abs() < 1e-6);
+        assert!((d(&be, [4.0, 1.0, 1.0], 1.0, 1.0) - 2.0).abs() < 1e-6);
+        assert!((d(&be, [1.0, 9.0, 1.0], 1.0, 1.0) - 6.0).abs() < 1e-6);
+        assert!((d(&bs, [1.0, 1.0, 4.0], 1.0, 1.0) - PI).abs() < 1e-6);
+        // Radius scales the sphere distance: a quarter turn on S_R is R pi / 2.
+        assert!((d(&bs, UNIT_ALPHAS, 1.0, 3.0) - 1.5 * PI).abs() < 1e-6);
+        // Curvature: d_H(0, x) = (2 / sqrt(c)) artanh(sqrt(c) |x|).
+        let c = 4.0_f64;
+        let want = 2.0 / c.sqrt() * (c.sqrt() * f64::from(0.3_f32)).atanh();
+        assert!((d(&bh, UNIT_ALPHAS, 4.0, 1.0) - want).abs() < 1e-6);
+        assert!((want - base).abs() > 0.05);
     }
 
     #[test]
-    fn legacy_coord_rejects_invalid_state() {
+    fn coord_rejects_invalid_state_and_parameters() {
         assert!(MixedCurvatureCoord::new([0.0; 4], [0.0; 4], [0.0; 8]).is_err());
         assert!(MixedCurvatureCoord::new([0.0; 4], [1.0, 0.0, 0.0, 0.0], [f32::NAN; 8]).is_err());
         assert!(MixedCurvatureCoord::new([0.0; 4], [1e30, 1e30, 0.0, 0.0], [0.0; 8]).is_err());
-        // Public fields can bypass `new`; distance still fails closed.
+        let origin = MixedCurvatureCoord::origin();
+        let north = [1.0, 0.0, 0.0, 0.0];
+        // The boundary floor follows the curvature: |x| = 0.8 is inside the unit
+        // ball and outside the ball of curvature 4 (radius 0.5); |x| = 1.2 is the
+        // other way round for curvature 0.25 (radius 2).
+        let inner = [0.8, 0.0, 0.0, 0.0];
+        let outer = [1.2, 0.0, 0.0, 0.0];
+        assert!(MixedCurvatureCoord::with_curvature(inner, north, [0.0; 8], 1.0).is_ok());
+        assert!(matches!(
+            MixedCurvatureCoord::with_curvature(inner, north, [0.0; 8], 4.0),
+            Err(LodError::HyperbolicBoundaryViolation { .. })
+        ));
+        assert!(MixedCurvatureCoord::new(outer, north, [0.0; 8]).is_err());
+        let wide = MixedCurvatureCoord::with_curvature(outer, north, [0.0; 8], 0.25).unwrap();
+        assert!(wide
+            .product_distance_with_params(&origin, UNIT_ALPHAS, 0.25, 1.0)
+            .is_ok());
+        for bad in [0.0, -1.0, f32::NAN, f32::INFINITY] {
+            assert!(MixedCurvatureCoord::with_curvature(inner, north, [0.0; 8], bad).is_err());
+            for (alphas, c, r) in [
+                ([bad, 1.0, 1.0], 1.0, 1.0),
+                ([1.0, bad, 1.0], 1.0, 1.0),
+                ([1.0, 1.0, bad], 1.0, 1.0),
+                (UNIT_ALPHAS, bad, 1.0),
+                (UNIT_ALPHAS, 1.0, bad),
+            ] {
+                assert_eq!(
+                    origin.product_distance_with_params(&origin, alphas, c, r),
+                    Err(LodError::Geometry(Reject::DomainViolation))
+                );
+            }
+        }
+        // Public fields can bypass the constructors; distance and conversion
+        // still fail closed, against the curvature in force.
         let mut bad = MixedCurvatureCoord::origin();
         bad.hyperbolic = [1.0, 0.0, 0.0, 0.0];
         assert_eq!(
-            bad.hyperbolic_distance(&MixedCurvatureCoord::origin()),
+            bad.product_distance_with_params(&origin, UNIT_ALPHAS, 1.0, 1.0),
             Err(LodError::Geometry(Reject::DomainViolation))
         );
+        assert_eq!(
+            wide.product_distance_with_params(&origin, UNIT_ALPHAS, 1.0, 1.0),
+            Err(LodError::Geometry(Reject::DomainViolation))
+        );
+        assert!(wide
+            .to_point(&coord_manifold(GeometryParams::UNIT))
+            .is_err());
         let mut off = MixedCurvatureCoord::origin();
         off.spherical = [2.0, 0.0, 0.0, 0.0];
         assert_eq!(
-            off.spherical_distance(&MixedCurvatureCoord::origin()),
+            off.product_distance_with_params(&origin, UNIT_ALPHAS, 1.0, 1.0),
             Err(LodError::Geometry(Reject::DomainViolation))
         );
+        assert!(off.to_point(&coord_manifold(GeometryParams::UNIT)).is_err());
+        // Only the 16-coordinate layout converts.
+        let p = GeometryParams::UNIT;
+        let layout = TopologyPreset::Compact64d.layout();
+        let other = ProductManifold::new(layout, p, epochs_for(layout, p)).unwrap();
+        assert!(origin.to_point(&other).is_err());
     }
 }

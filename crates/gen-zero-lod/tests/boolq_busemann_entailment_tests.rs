@@ -620,3 +620,89 @@ fn extreme_radius_sphere_separation_correctly_blocks_entailment() {
         "a 1.2 rad sphere separation must not be absorbed by a 1.0 rad threshold: {result:?}"
     );
 }
+
+// ---------------------------------------------------------------- violation energy
+
+/// The violation energy is the alpha-weighted mean of the squared normalised
+/// misses, in closed form per factor. It is zero when every test passes, grows
+/// continuously with the miss, and never stands in for the gate: a miss of
+/// 1e-9 leaves `soft_confidence` at 1 to twelve digits and is still refused.
+#[test]
+fn violation_energy_is_continuous_evidence_and_never_the_gate() {
+    let m = manifold(1.0);
+    let hp = radial(1.0, 0.3, &axis0());
+    let hq = radial(1.0, 0.8, &axis0());
+    let p = point(&hp, 0.0, 0.0);
+    let score = |q: &[f64]| m.busemann_containment(&p, q, CAP).unwrap();
+
+    let pass = score(&point(&hq, 0.5, 0.4));
+    assert!(pass.is_entailed);
+    assert_eq!((pass.violation_energy, pass.soft_confidence), (0.0, 1.0));
+
+    // Topic shift 3 against tolerance 1: v_e = 2, unit weights, E = 4 / 3.
+    let topic = score(&point(&hq, 3.0, 0.0));
+    assert!(!topic.is_entailed);
+    assert!((topic.violation_energy - 4.0 / 3.0).abs() < 1e-12);
+    assert!((topic.soft_confidence - (-2.0_f64 / 3.0).exp()).abs() < 1e-12);
+    // Sphere angle 1.5 against 1: v_s = 0.5, E = 0.25 / 3. Misses add.
+    let sphere = score(&point(&hq, 0.0, 1.5));
+    assert!((sphere.violation_energy - 0.25 / 3.0).abs() < 1e-12);
+    let both = score(&point(&hq, 3.0, 1.5));
+    assert!((both.violation_energy - 4.25 / 3.0).abs() < 1e-12);
+
+    // Depth: a shallower collinear question misses by d(0, p) - d(0, q), in cone.
+    let shallow = m
+        .busemann_containment(&point(&hq, 0.0, 0.0), &point(&hp, 0.0, 0.0), CAP)
+        .unwrap();
+    let deficit = 2.0 * (0.8_f64.atanh() - 0.3_f64.atanh());
+    assert!(shallow.in_cone && !shallow.deeper && !shallow.is_entailed);
+    assert!((shallow.violation_energy - deficit * deficit / 3.0).abs() < 1e-9);
+    // Cone: 0.32 rad off axis against the aperture asin(0.1 * 0.91 / 0.3) = 0.308
+    // at p, still deeper.
+    let off_axis = score(&point(&radial(1.0, 0.6, &dir_at(0.32)), 0.0, 0.0));
+    assert!(!off_axis.in_cone && off_axis.deeper);
+    let v_cone = (off_axis.cone_angle - off_axis.aperture) / off_axis.aperture;
+    assert!((off_axis.violation_energy - v_cone * v_cone / 3.0).abs() < 1e-12);
+
+    // Continuous at the threshold and nondecreasing beyond it.
+    let edge = score(&point(&hq, 1.0 + 1e-9, 0.0));
+    assert!(!edge.is_entailed && !edge.topic_aligned);
+    assert!(edge.violation_energy > 0.0 && edge.violation_energy < 1e-17);
+    assert!(edge.soft_confidence > 1.0 - 1e-12);
+    let mut last = 0.0;
+    for step in 0..=40 {
+        let s = score(&point(&hq, 1.0 + 0.1 * f64::from(step), 0.0));
+        assert!(s.violation_energy >= last && s.soft_confidence <= 1.0);
+        assert!((s.soft_confidence - (-0.5 * s.violation_energy).exp()).abs() < 1e-15);
+        last = s.violation_energy;
+    }
+    assert!(last > 5.0);
+
+    // The metric weights weigh the factors: alpha_e = 4 gives 4 * 4 / 6.
+    let weighted = ProductManifold::from_preset_with(
+        TopologyPreset::Boolq128d,
+        GeometryParams {
+            curvature: 1.0,
+            radius: 1.0,
+            alpha_h: 1.0,
+            alpha_e: 4.0,
+            alpha_s: 1.0,
+        },
+        m.epochs().clone(),
+    )
+    .unwrap();
+    let heavy = weighted
+        .busemann_containment(&p, &point(&hq, 3.0, 0.0), CAP)
+        .unwrap();
+    assert!((heavy.violation_energy - 16.0 / 6.0).abs() < 1e-12);
+
+    // An energy that overflows is refused, not reported as zero confidence.
+    let tiny_tol = ContainmentCriteria {
+        topic_shift_tol: 1e-200,
+        ..ContainmentCriteria::from_cone_half_angle(CAP)
+    };
+    assert_eq!(
+        m.busemann_containment_with(&p, &point(&hq, 3.0, 0.0), &tiny_tol),
+        Err(LodError::Geometry(Reject::NonFiniteState))
+    );
+}

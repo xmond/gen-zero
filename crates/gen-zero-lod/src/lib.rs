@@ -2,8 +2,9 @@
 //!
 //! Multi-scale Level of Detail (Lod) Graph Fusion, Epistemic Lifecycle State Machine,
 //! Spec 25 mixed-curvature product geometry (H^{d_h} x R^{d_e} x S_R^{d_s}, 128/256 stored
-//! coordinates) plus the legacy 16-coordinate Lod coordinate (H^4 x S^3 x R^8),
-//! Pearl causal cascade pruning, and atomic graph checkpoints with rollback.
+//! coordinates) and its 16-coordinate Lod graph chart (H^4 x R^8 x S^3) under the
+//! graph's `GeometryParams`, Banach fixed-point confidence evolution over the
+//! dependency edges, and atomic graph checkpoints with rollback.
 
 #![allow(clippy::manual_is_multiple_of)]
 
@@ -17,8 +18,8 @@ pub mod weighted;
 
 pub use error::LodError;
 pub use graph::{
-    BufferedEdge, CsrGraph, EdgeType, FlushReport, GraphCheckpoint, LodGraph, PprRanking,
-    PruneOutcome,
+    BufferedEdge, CsrGraph, EdgeType, FixedPointReport, FlushReport, GraphCheckpoint, LodGraph,
+    PprRanking, StatusTransition, MAX_FIXED_POINT_STEPS,
 };
 pub use manifold::{
     ContainmentCriteria, ContainmentScore, Digest, Epochs, FiberId, GeometryParams, Layout,

@@ -1117,6 +1117,10 @@ impl EntailmentVerdict {
             "confidence": s.confidence,
             "confidence_kind": "alpha_weighted_margin_not_a_probability",
             "calibrated": false,
+            // Continuous evidence for a refusal; `is_entailed` alone is the gate.
+            "violation_energy": s.violation_energy,
+            "soft_confidence": s.soft_confidence,
+            "soft_confidence_kind": "exp_minus_half_violation_energy_not_a_probability",
             "hyperbolic_distance": s.hyperbolic_distance,
             "cone_angle": s.cone_angle,
             "aperture": s.aperture,

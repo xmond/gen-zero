@@ -34,6 +34,16 @@ pub enum LodError {
     FlushConflict,
     #[error("Checkpoint rejected: {0}")]
     CheckpointRejected(String),
+    #[error(
+        "Confidence fixed point not reached: residual {residual:e} >= tolerance {tolerance:e} \
+         after {iterations} step(s), bound {k_max}; nothing was committed"
+    )]
+    FixedPointDiverged {
+        iterations: usize,
+        k_max: usize,
+        residual: f64,
+        tolerance: f64,
+    },
     #[error("Core error: {0}")]
     Core(#[from] gen_zero_core::CoreError),
 }
