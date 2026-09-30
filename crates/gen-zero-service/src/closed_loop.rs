@@ -130,21 +130,29 @@ impl FeedbackBuffer {
 }
 
 /// Tuning-server-side latest-patch metadata (`GET /api/v1/patch/latest`).
-/// Every field beyond the checksum is informational; `target_sha256` (falling
-/// back to `sha256`) is the only value the poller acts on.
 #[derive(Debug, Deserialize)]
 struct PatchMetadata {
     #[serde(default)]
     sha256: Option<String>,
     #[serde(default)]
     target_sha256: Option<String>,
+    #[serde(default)]
+    version: Option<String>,
 }
 
 impl PatchMetadata {
-    fn effective_sha256(&self) -> Option<&str> {
+    fn version_id(&self) -> Option<&str> {
         self.target_sha256
             .as_deref()
+            .or(self.version.as_deref())
             .or(self.sha256.as_deref())
+            .filter(|s| !s.is_empty())
+    }
+
+    fn file_sha256(&self) -> Option<&str> {
+        self.sha256
+            .as_deref()
+            .or(self.target_sha256.as_deref())
             .filter(|s| !s.is_empty())
     }
 }
@@ -220,7 +228,16 @@ pub fn spawn_feedback_syncer(
                     }
                     match req.send().await {
                         Ok(resp) if resp.status().is_success() => {
-                            tracing::debug!(count, "synced feedback records to tuning server");
+                            tracing::info!(count, "synced feedback records to tuning server");
+                        }
+                        Ok(resp) if resp.status() == reqwest::StatusCode::UNPROCESSABLE_ENTITY
+                            || resp.status() == reqwest::StatusCode::BAD_REQUEST => {
+                            let status = resp.status();
+                            let body = resp.text().await.unwrap_or_default();
+                            tracing::error!(
+                                %status, count, body = %body.chars().take(512).collect::<String>(),
+                                "feedback sync rejected by tuning server due to invalid record schema; dropping malformed records"
+                            );
                         }
                         Ok(resp) => {
                             let status = resp.status();
@@ -310,14 +327,14 @@ async fn poll_and_apply_patch(
         .json()
         .await
         .map_err(|e| ClosedLoopError::InvalidResponse(e.to_string()))?;
-    let Some(target_sha256) = meta.effective_sha256().map(str::to_owned) else {
+    let Some(version_id) = meta.version_id().map(str::to_owned) else {
         return Err(ClosedLoopError::InvalidResponse(
-            "patch metadata is missing both target_sha256 and sha256".into(),
+            "patch metadata is missing target_sha256, version, and sha256".into(),
         ));
     };
 
-    if current_version.load().as_str() == target_sha256 {
-        tracing::debug!(version = %target_sha256, "tuning patch already current");
+    if current_version.load().as_str() == version_id {
+        tracing::debug!(version = %version_id, "tuning patch already current");
         return Ok(());
     }
 
@@ -347,9 +364,10 @@ async fn poll_and_apply_patch(
     hasher.update(&downloaded);
     let actual_sha256 = hex_encode(&hasher.finalize());
 
-    if !actual_sha256.eq_ignore_ascii_case(&target_sha256) {
+    let expected_file_sha = meta.file_sha256().unwrap_or(&version_id);
+    if !actual_sha256.eq_ignore_ascii_case(expected_file_sha) {
         return Err(ClosedLoopError::ChecksumMismatch {
-            expected: target_sha256,
+            expected: expected_file_sha.to_string(),
             actual: actual_sha256,
         });
     }
@@ -363,11 +381,12 @@ async fn poll_and_apply_patch(
     }
 
     tokio::fs::create_dir_all(&config.models_dir).await?;
-    let out_path = config.models_dir.join(format!("{target_sha256}.npz"));
+    let out_path = config.models_dir.join(format!("{version_id}.npz"));
     tokio::fs::write(&out_path, &downloaded).await?;
-    current_version.store(Arc::new(target_sha256.clone()));
+    current_version.store(Arc::new(version_id.clone()));
     tracing::info!(
-        version = %target_sha256,
+        version = %version_id,
+        file_sha256 = %actual_sha256,
         size = downloaded.len(),
         "successfully applied new tuning patch"
     );
