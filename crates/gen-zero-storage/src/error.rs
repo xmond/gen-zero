@@ -30,4 +30,32 @@ pub enum StorageError {
 
     #[error("IO error: {0}")]
     Io(#[from] std::io::Error),
+
+    #[error("Sqlite error: {0}")]
+    Sqlite(#[from] rusqlite::Error),
+
+    #[error("Reflex feedback store schema drift: expected columns {expected:?}, got {actual:?}")]
+    SchemaMismatch {
+        expected: Vec<String>,
+        actual: Vec<String>,
+    },
+
+    #[error("Failed to set PRAGMA {pragma}: expected {expected:?}, got {actual:?}")]
+    PragmaFailed {
+        pragma: &'static str,
+        expected: String,
+        actual: String,
+    },
+
+    #[error("Reflex trace input dimension mismatch: expected {expected}, got {actual}")]
+    InputDimMismatch { expected: usize, actual: usize },
+
+    #[error("Reflex trace not found: {0}")]
+    TraceNotFound(String),
+
+    #[error("Reflex trace {0} already has recorded feedback; feedback is write-once")]
+    FeedbackAlreadyRecorded(String),
+
+    #[error("Reflex trace blob corrupt: {0}")]
+    CorruptBlob(String),
 }

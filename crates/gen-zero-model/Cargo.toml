@@ -10,5 +10,9 @@ description = "Set-attention masks, shared position IDs, choice head, and prompt
 readme = "README.md"
 
 [dependencies]
+bytemuck = { workspace = true }
 gen-zero-core = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+sha2 = { workspace = true }
 thiserror = { workspace = true }

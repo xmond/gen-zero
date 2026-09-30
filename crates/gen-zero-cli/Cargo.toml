@@ -14,7 +14,10 @@ name = "gen-zero"
 path = "src/main.rs"
 
 [dependencies]
+gen-zero-model = { workspace = true }
 gen-zero-service = { workspace = true }
+gen-zero-storage = { workspace = true }
+tempfile = "3"
 clap = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }
@@ -28,3 +31,4 @@ axum = { workspace = true }
 gen-zero-core = { workspace = true }
 gen-zero-nanocore = { workspace = true, features = ["test-fixtures"] }
 gen-zero-worldmodel = { workspace = true }
+tempfile = "3.27"

@@ -15,3 +15,8 @@ zstd = { workspace = true }
 blake3 = { workspace = true }
 rand = { workspace = true }
 thiserror = { workspace = true }
+rusqlite = { workspace = true }
+half = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.27.0"

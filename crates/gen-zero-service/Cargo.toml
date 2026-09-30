@@ -42,3 +42,4 @@ rand = { workspace = true }
 [dev-dependencies]
 gen-zero-nanocore = { workspace = true, features = ["test-fixtures"] }
 tower = { workspace = true, features = ["util"] }
+tempfile = "3.27"

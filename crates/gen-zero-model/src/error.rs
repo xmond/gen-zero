@@ -16,4 +16,14 @@ pub enum ModelError {
     CandidateMismatch { expected: usize, actual: usize },
     #[error("Core error: {0}")]
     Core(#[from] gen_zero_core::CoreError),
+    #[error("Reflex plugin config invalid: {0}")]
+    ReflexConfig(String),
+    #[error("Reflex plugin archive malformed: {0}")]
+    ReflexArtifact(String),
+    #[error("Reflex plugin input invalid: {0}")]
+    ReflexInput(String),
+    #[error("Reflex plugin has no head named {0:?}")]
+    ReflexUnknownHead(String),
+    #[error("Reflex patch invalid: {0}")]
+    ReflexPatch(String),
 }

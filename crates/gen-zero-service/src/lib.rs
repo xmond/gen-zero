@@ -14,6 +14,8 @@ pub mod error;
 pub mod imagine;
 pub mod mount;
 pub mod pipeline_verb;
+pub mod reflex_adapter;
+pub mod reflex_registry;
 pub mod server;
 pub mod snapshot;
 pub mod tangent_ssm;
@@ -27,6 +29,8 @@ pub use mount::{
     AtomicMountRegistry, Budget, MountKey, MountRegistry, MountSnapshot, Proposal, Reject,
     RequestBinding, Snapshot, Version,
 };
+pub use reflex_adapter::{AdaptationReport, ReflexOnlineAdapter};
+pub use reflex_registry::{ReflexError, ReflexRegistry};
 pub use server::McpServer;
 pub use zero::{PolymorphicZeroEngine, ZeroContentBlock, ZeroToolOutcome, ZeroVerb};
 

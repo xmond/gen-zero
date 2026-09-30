@@ -9,11 +9,15 @@
 
 pub mod error;
 pub mod fenwick;
+pub mod reflex_store;
 pub mod replay;
 pub mod snapshot;
 
 pub use error::StorageError;
 pub use fenwick::FenwickTree;
+pub use reflex_store::{
+    ReflexFeedbackBatchItem, ReflexFeedbackStatus, ReflexTraceRecord, SqliteFeedbackStore,
+};
 pub use replay::{CausalSampleBatch, ColumnarCausalReplayBuffer, TrajectoryStep};
 pub use snapshot::{GoldenSnapshot, GoldenSnapshotManager};
 

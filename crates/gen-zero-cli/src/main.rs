@@ -1,11 +1,13 @@
+mod reflex_cmd;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use gen_zero_service::zero::{DEFAULT_TENANT, DEFAULT_WORKSPACE};
 use gen_zero_service::{McpServer, MountKey, MountRegistry};
 use std::net::{IpAddr, SocketAddr};
+use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
-#[command(name = "gen-zero", author, version, about = "Gen-Zero Rust Cognitive Decision Engine", long_about = None)]
+#[command(name = "gen-zero", author, version, about = "Gen-Zero SOTA Rust Cognitive Decision Engine", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -268,6 +270,118 @@ pub enum Commands {
         /// Strategy: weighted_tropical, weighted_logprob, "chart" (S3), "tiered" (default with weights), "left" (S1)
         #[arg(long)]
         strategy: Option<String>,
+    },
+    /// SQLite reflex feedback trace counts: unlabeled, unconsumed, trained
+    #[command(name = "reflex-feedback-status")]
+    ReflexFeedbackStatus {
+        #[arg(long)]
+        db: PathBuf,
+        /// Must match the reflex operator's input width the traces were recorded with.
+        #[arg(long)]
+        input_dim: usize,
+        /// Restrict counts to one task (default: every task in the database).
+        #[arg(long)]
+        task: Option<String>,
+    },
+    /// Attach a ground-truth label to a previously recorded reflex feedback trace
+    #[command(name = "reflex-feedback-record")]
+    ReflexFeedbackRecord {
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        input_dim: usize,
+        #[arg(long)]
+        trace_id: String,
+        /// Must be one of the head's candidate labels for a later adaptation
+        /// cycle to accept it; recording does not itself check membership.
+        #[arg(long)]
+        label: String,
+        #[arg(long, default_value = "human_review")]
+        feedback_type: String,
+        /// Unix epoch milliseconds (default: now).
+        #[arg(long)]
+        joined_at_unix_ms: Option<i64>,
+    },
+    /// Prune old reflex feedback traces
+    #[command(name = "reflex-feedback-prune")]
+    ReflexFeedbackPrune {
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        input_dim: usize,
+        /// Delete traces created before this Unix epoch millisecond cutoff.
+        #[arg(long)]
+        before_unix_ms: i64,
+        /// Also delete labeled traces not yet consumed by training (default:
+        /// keep them, since deleting would silently destroy untrained feedback).
+        #[arg(long)]
+        force: bool,
+    },
+    /// Compute a differential patch between two reflex plugin checkpoints
+    #[command(name = "reflex-patch-create")]
+    ReflexPatchCreate {
+        #[arg(long)]
+        base: PathBuf,
+        #[arg(long)]
+        target: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        metadata: Option<String>,
+    },
+    /// Apply a differential patch to a base checkpoint, producing a target checkpoint
+    #[command(name = "reflex-patch-apply")]
+    ReflexPatchApply {
+        #[arg(long)]
+        base: PathBuf,
+        #[arg(long)]
+        patch: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+    },
+    /// Inspect a reflex patch's metadata, hashes, and delta statistics
+    #[command(name = "reflex-patch-inspect")]
+    ReflexPatchInspect {
+        #[arg(long)]
+        patch: PathBuf,
+    },
+    /// Run one online-adaptation cycle: fetch unconsumed SQLite feedback for
+    /// a task/head, take a gradient step, verify the safety gate, hot-swap
+    /// into a fresh in-process registry, and write the patched checkpoint
+    #[command(name = "reflex-adapt")]
+    ReflexAdapt {
+        /// Base plugin checkpoint (written by a training run or a prior
+        /// reflex-adapt / reflex-patch-apply).
+        #[arg(long)]
+        plugin: PathBuf,
+        /// Where to write the patched checkpoint (only written if a cycle ran).
+        #[arg(long)]
+        out: PathBuf,
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        task: String,
+        #[arg(long)]
+        head: String,
+        #[arg(long, default_value_t = 256)]
+        limit: usize,
+        #[arg(long, default_value_t = gen_zero_service::reflex_adapter::DEFAULT_LEARNING_RATE)]
+        learning_rate: f32,
+    },
+    /// Micro-benchmark reflex registry predict latency, and live patch
+    /// hot-swap latency under concurrent reader load, if --patch is given
+    #[command(name = "reflex-bench")]
+    ReflexBench {
+        #[arg(long)]
+        plugin: PathBuf,
+        #[arg(long, default_value_t = 4)]
+        threads: usize,
+        #[arg(long, default_value_t = 10_000)]
+        iterations: usize,
+        /// A patch to hot-swap in mid-benchmark, to measure swap latency
+        /// under concurrent reader load (omit to measure predict latency only).
+        #[arg(long)]
+        patch: Option<PathBuf>,
     },
 }
 
@@ -798,6 +912,71 @@ async fn main() -> anyhow::Result<()> {
                 eprintln!("gen-zero fold: refused ({code}): {detail}");
                 std::process::exit(1);
             }
+        }
+        Commands::ReflexFeedbackStatus {
+            db,
+            input_dim,
+            task,
+        } => {
+            reflex_cmd::feedback_status(&db, input_dim, task.as_deref())?;
+        }
+        Commands::ReflexFeedbackRecord {
+            db,
+            input_dim,
+            trace_id,
+            label,
+            feedback_type,
+            joined_at_unix_ms,
+        } => {
+            reflex_cmd::feedback_record(
+                &db,
+                input_dim,
+                &trace_id,
+                &label,
+                &feedback_type,
+                joined_at_unix_ms,
+            )?;
+        }
+        Commands::ReflexFeedbackPrune {
+            db,
+            input_dim,
+            before_unix_ms,
+            force,
+        } => {
+            reflex_cmd::feedback_prune(&db, input_dim, before_unix_ms, force)?;
+        }
+        Commands::ReflexPatchCreate {
+            base,
+            target,
+            out,
+            metadata,
+        } => {
+            reflex_cmd::patch_create(&base, &target, &out, metadata)?;
+        }
+        Commands::ReflexPatchApply { base, patch, out } => {
+            reflex_cmd::patch_apply(&base, &patch, &out)?;
+        }
+        Commands::ReflexPatchInspect { patch } => {
+            reflex_cmd::patch_inspect(&patch)?;
+        }
+        Commands::ReflexAdapt {
+            plugin,
+            out,
+            db,
+            task,
+            head,
+            limit,
+            learning_rate,
+        } => {
+            reflex_cmd::adapt(&plugin, &out, &db, &task, &head, limit, learning_rate)?;
+        }
+        Commands::ReflexBench {
+            plugin,
+            threads,
+            iterations,
+            patch,
+        } => {
+            reflex_cmd::bench(&plugin, threads, iterations, patch.as_deref())?;
         }
     }
     Ok(())
