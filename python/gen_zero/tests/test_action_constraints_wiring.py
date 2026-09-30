@@ -273,14 +273,24 @@ class TestOrchestrator(unittest.TestCase):
         self.assertIn(top, res.constraint_projection["disabled"])
 
     def test_mutex_drops_lower_scoring_member(self):
-        # Each orchestrator has its own random-init dynamics, so read the scores from the SAME
-        # run that applied the constraint. (Not the solver's pick: real OR-Tools under the 2 ms
-        # budget may return a non-optimal FEASIBLE action.)
-        res = self._run([{"type": "mutually_exclusive", "actions": ["reboot", "format"]}])
-        score = {t.action: t.predicted_value for t in res.imagined_trajectory}
-        loser = min(("reboot", "format"), key=lambda c: score[c])
-        self.assertEqual(res.constraint_projection["mutex_dropped"], [loser])
-        self.assertNotEqual(res.selected_action, loser)
+        orch = WorldModelNanoCoreOrchestrator()
+        orig_step = orch.transition_model.step
+
+        def step_mock(z, act, preserve_entropy=False):
+            nz, r, info = orig_step(z, act, preserve_entropy=preserve_entropy)
+            bonus = 1.0 if act == "format" else 0.0
+            return nz, r + bonus, info
+
+        with patch.object(orch.transition_model, "step", side_effect=step_mock):
+            res = orch.imagine_and_orchestrate(
+                "s", CANDS, safety_evaluator=self.SAFE,
+                constraints=[{"type": "mutually_exclusive", "actions": ["reboot", "format"]}],
+            )
+            score = {t.action: t.predicted_value for t in res.imagined_trajectory}
+            loser = min(("reboot", "format"), key=lambda c: score[c])
+            self.assertEqual(loser, "reboot")
+            self.assertEqual(res.constraint_projection["mutex_dropped"], ["reboot"])
+            self.assertNotEqual(res.selected_action, "reboot")
 
     def test_bounds_and_malformed_rejected_before_state_changes(self):
         orch = WorldModelNanoCoreOrchestrator()
