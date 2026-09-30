@@ -1,205 +1,109 @@
-# Gen-Zero: 通用自进化决策引擎 (Experimental Decision Engine)
+# Gen-Zero Python client
 
-[![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
-[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](../../LICENSE)
-![Status](https://img.shields.io/badge/status-experimental-yellow.svg)
-![Hardware](https://img.shields.io/badge/hardware-NVIDIA%20A100%20%2F%20CPU-orange.svg)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/)
+[![Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](../../LICENSE)
 
-> **Gen-Zero** 是一个集成了 **Set-Attention 置换等变性网络**、**PUCT 双头树搜索 (MCTS)**、**不确定性 A\* 规划器**、**文字/动力学世界模型** 的通用下一代决策引擎。支持在业务工单审批、连续/离散图搜索、零和对抗博弈以及局部受限物理控制等多任务中实现**结构化候选评分、多样性探索与约束决策**。
+`gen_zero` is the lightweight Python client and runtime interface for the Gen-Zero decision engine. It exposes candidate scoring, experimental planning, world-model simulation, and runtime gates. Installation does not supply trained weights, calibrated confidence, universal optimality, or a general safety guarantee.
 
----
+## Architecture and scope
 
-## 一、核心技术特性与五层架构
+| Component | Runtime role | Boundary |
+| --- | --- | --- |
+| Set-Attention dual head | Scores candidate sets through policy and value heads, with an optional abstain slot. | The model starts with random weights unless a trained checkpoint is loaded. Set equivariance alone does not prove end-to-end decision invariance. |
+| Planning mixture of experts (MoE) | Routes among reflex scoring, PUCT MCTS, uncertainty-weighted A*, bidirectional search, text world model, MPC/CEM, GFlowNet, CFR, and constraint filtering. | Routing uses declared hints and structural preconditions. Planners require suitable states, transitions, dependencies, or artifacts. |
+| Runtime safety gates | Applies available alignment, action-constraint, perturbation, and policy checks at their respective entry points. | Coverage depends on the invoked path and supplied constraints. A heuristic or unavailable solver is not a formal proof. |
 
-```mermaid
-flowchart TD
-    subgraph L1["Layer 1: 策略与价值感知 (Model Layer)"]
-        DualHead["Policy + Value 双头网络"]
-        SetAttn["Set-Attention 置换等变性读取 (无位置偏置)"]
-        Abstain["Active Abstain Slot (主动弃权安全容错)"]
-    end
+The public package is an inference and runtime interface. Offline training, dataset generation, LoRA BPTT, patch compilation, replay, and self-play pipelines reside in the separate `gen-zero-research` project and are accessed through the tuning service at `tuning.gen-zero.ai`. This repository does not ship those pipelines or their trained artifacts. This architectural boundary does not establish availability of any particular hosted service or model.
 
-    subgraph L2["Layer 2: 规划混合专家层 (Planning MoE Layer · 10 大范式)"]
-        MoE["Decision MoE Router (动态自适应任务分发器)"]
-        MCTS["AlphaZero PUCT MCTS (零和对抗博弈/大树搜索)"]
-        AStar["Uncertainty A* Planner (拓扑迷宫/最短路)"]
-        WorldModel["GenZeroTextWorldModel (黑盒轻量世界模型)"]
-        CEM["MPC + CEM Planner (连续轨迹滚动优化)"]
-        GFN["GFlowNet Sampler (高熵/多解多样性探索)"]
-        Bidi["Bidirectional A* (双向相遇长程规划)"]
-        CFR["CFR Expert (非完全信息博弈/纳什均衡)"]
-        CPSAT["CP-SAT Solver (形式化约束满足与硬剪枝)"]
-        MoE --> MCTS & AStar & WorldModel & CEM & GFN & Bidi & CFR & CPSAT
-    end
+## Installation
 
-    subgraph L3["Layer 3: 对弈与主动挖掘 (Rollout Layer)"]
-        Miner["Hard Sample Miner (碰撞倒推 / 高熵 / TD-Error 挖掘)"]
-    end
+Use Python 3.10 or newer. From the repository root:
 
-    subgraph L5["Layer 5: Runtime Gates (Governance Layer)"]
-        Gate["Alignment / Perturbation / Policy Gates"]
-    end
-
-    L1 --> L2 --> L3 --> L5
-```
-
-1. **候选集合等变结构**：Set-Attention 的结构性质不等于端到端决策不变性；编码、并列分数和动作选择仍需单独验证。
-2. **System 1 与 System 2 动态双模态**：
-   - **System 1 (Reflex)**：单步候选评分；当前无可复现的端到端 <0.1ms 测量。
-   - **System 2 (Lookahead/MCTS)**：模型驱动规划；陷阱规避结果仅适用于对应评测环境，不能推广为普遍安全保证。
-3. **Offline learning is out of scope**: replay buffers, distillation, self-play and the RSI
-   daemon are not part of this package. They live in `gen-zero-research` and are offered
-   through the tuning API (`tuning.gen-zero.ai`).
-
----
-
-## 二、安装与环境配置
-
-### 1. 本地环境
-完整 Python 决策框架需要 Python 3.10+，运行依赖详见 `python/pyproject.toml` 的 `dependencies`（包括 numpy、torch、scipy、pydantic、mcp、aiohttp、httpx、zstandard、fastapi、uvicorn），可选依赖见 `[project.optional-dependencies]`。
-单机独立轻量 9B smoke demo（`examples/run_9b_demo.py`）是唯一例外：它只加载 `gen_zero/causal/rnn_set_adapter.py`，仅需 Python 3.10+ 和 numpy。
 ```bash
-# 克隆仓库并进入根目录
-cd python
-
-# 安装完整依赖 (torch 是必需依赖；没有 GPU 时 torch 在 CPU 上运行)
-pip install -r requirements.txt  # requirements.txt 还额外包含 ortools、transformers、huggingface_hub
+python3 -m venv .venv
+. .venv/bin/activate
+python -m pip install -e './python'
 ```
 
-### 2. A100 GPU 算力集群 (`ai-server`)
-支持在多卡或 A100 80GB 服务器上运行：
-```bash
-# 验证 GPU 就绪
-ssh ai "nvidia-smi"
-```
+Core dependencies are declared in [`python/pyproject.toml`](../pyproject.toml). Optional extras include `all` (OR-Tools, Transformers, and Hugging Face Hub), `vision`, and `dev`; for example, `python -m pip install -e './python[dev]'`. PyTorch is a core dependency and can run on CPU. GPU hardware is optional and does not supply trained weights.
 
----
+## Quickstart
 
-## 三、快速开始 (Quick Start)
-
-### 1. 30 秒极简决策调用
+### Candidate decision
 
 ```python
-from gen_zero import GenZero
+from gen_zero import GenZero, GenZeroConfig
 
-# 实例化 Gen-Zero 统一决策引擎
-engine = GenZero()
-# 默认没有训练好的双头权重；必须检查 degraded / scorer 等元数据。
-
-# 示例：复杂业务异常决策（自然语言状态）
-state = "Production DB alert: CPU usage at 96%, latency spike observed."
-candidates = ["scale_up", "restart_instance", "ignore"]
-
-# 自动多专家自适应决策 (Dynamic-K Planning MoE)
-result = engine.decide(
-    state=state,
-    candidates=candidates,
-    mode="auto"  # 模型自主感知输入特征与熵，自适应决定激活专家数 K ∈ [1, 3]
+# Replace this placeholder with an absolute path to a trained state_dict.
+client = GenZero(GenZeroConfig(dual_head_checkpoint="/absolute/path/to/dual_head.pt"))
+result = client.decide(
+    state="Database memory pressure is high",
+    candidates=["scale_read_replicas", "reject_new_sessions"],
+    mode="auto",
 )
 
-print("degraded:", result.get("degraded"), "scorer:", result.get("scorer"))
-print(f"推荐共识动作: {result['action']}")         # 经软加权共识或安全剪枝后的最高融合得分动作
-print(f"动态专家数 K: {result['k_experts']}")       # 1 (极速), 2 (安全流水线), 3 (多专家委员会)
-print(f"激活专家列表: {result['experts_activated']}") # ['cp_sat', 'mcts'] 等
-print(f"专家加权配比: {result['expert_weights']}")    # {'cp_sat': 0.84, 'world_model': 0.16}
-print(f"动作概率分布: {result['probs']}")
-print(f"决策耗时: {result['latency_ms']} ms")       # 进程内单步执行耗时（依负载与环境而定）
+if result.get("degraded"):
+    raise RuntimeError(f"Decision degraded: {result.get('degraded_reason')}")
+if result.get("action") is None:
+    raise RuntimeError("The engine did not select an action")
+print(result["action"], result["probs"])
+print(result["experts_activated"], result["latency_ms"])
 ```
 
-### 2. 图搜索与无回环规划 (`plan_path`)
+The checkpoint path is a placeholder, not a bundled artifact. A default `GenZero()` can be constructed without a checkpoint, but its neural decision output is marked degraded and must not be treated as a trained recommendation. HTTP decision endpoints reject requests with status 503 until a valid dual-head checkpoint is configured. For `task_hint`, supply an exact paradigm name such as `"astar"`, or omit it; free-text descriptions are not routing hints. Reported latency is per invocation and has no published service-level guarantee.
+
+### Uncertainty-weighted A* path
+
+This symbolic graph example does not require a trained dual-head checkpoint. The neighbor probability is supplied by the caller; Gen-Zero does not estimate or calibrate it.
 
 ```python
 from gen_zero import GenZero
 
-engine = GenZero()
+goal = (2, 2)
+walls = {(1, 1)}
 
-start = (0, 0)
-goal = (5, 5)
-walls = {(1, 1), (1, 2), (2, 2), (3, 2)}
+def neighbors(position):
+    row, col = position
+    for dr, dc, action in [(-1, 0, "north"), (1, 0, "south"),
+                           (0, 1, "east"), (0, -1, "west")]:
+        nxt = (row + dr, col + dc)
+        if 0 <= nxt[0] <= 2 and 0 <= nxt[1] <= 2 and nxt not in walls:
+            yield (nxt, action, 0.99)
 
-# 目标判定与邻居状态生成
-is_goal = lambda pos: pos == goal
-def get_neighbors(pos):
-    r, c = pos
-    nbrs = []
-    for dr, dc, act in [(-1, 0, "north"), (1, 0, "south"), (0, 1, "east"), (0, -1, "west")]:
-        nxt = (r + dr, c + dc)
-        if 0 <= nxt[0] <= 6 and 0 <= nxt[1] <= 6 and nxt not in walls:
-            nbrs.append((nxt, act, 0.99))  # (next_state, action_name, safety_prob)
-    return nbrs
-
-# 启发距离
-heuristic = lambda pos: abs(pos[0] - goal[0]) + abs(pos[1] - goal[1])
-
-# 执行图搜索
-plan = engine.plan_path(start, is_goal, get_neighbors, heuristic)
-print("规划成功:", plan["success"])
-print("规划动作链:", plan["path"])
+client = GenZero()
+plan = client.plan_path(
+    start_state=(0, 0),
+    is_goal_fn=lambda position: position == goal,
+    get_neighbors_fn=lambda position: list(neighbors(position)),
+    heuristic_fn=lambda position: abs(position[0] - goal[0]) + abs(position[1] - goal[1]),
+)
+print(plan["success"], plan["path"])
 ```
 
----
+## `GenZeroConfig`
 
-## 四、核心参数配置 (`GenZeroConfig`)
+[`config.py`](config.py) defines the following runtime settings. Defaults reflect the current source.
 
-通过 [`gen_zero/config.py`](config.py) 可以对全流程进行灵活微调：
+| Field | Default | Purpose |
+| --- | --- | --- |
+| `hidden_dim` / `embed_dim` | `4096` / `128` | Dual-head model dimensions. |
+| `num_attention_layers` / `num_attention_heads` | `2` / `4` | Set-Attention depth and head count. |
+| `use_value_head` / `enable_abstain` | `True` / `True` | Enable the value head and abstain slot. |
+| `backbone_name` | `"Qwen/Qwen3.5-9B"` | Configured backbone identifier; it does not load weights by itself. |
+| `dual_head_checkpoint` | `None` | Absolute path to trained dual-head weights; also read from `GENZERO_DUAL_HEAD_CHECKPOINT`. |
+| `astar_lambda` | `1.0` | Weight of the A* uncertainty penalty `-log(p)` on an edge. |
+| `mcts_simulations` / `mcts_depth` / `mcts_cpuct` | `64` / `6` / `1.4` | PUCT search budget, depth, and exploration coefficient. |
+| `neural_dynamics_checkpoint` | `None` | Absolute path to trained dynamics weights; also read from `GENZERO_NEURAL_DYNAMICS_CHECKPOINT`. |
+| `enable_adaptive_gating` / `adaptive_gating_artifact` | `False` / `None` | Artifact-backed gating; enabling it without the artifact fails closed. |
+| `arbiter_endpoint` / `arbiter_timeout_s` | `"http://localhost:8090/arbitrate"` / `2.0` | Optional remote arbitration endpoint and timeout. |
+| `hard_sample_history_steps` | `5` | Runtime hard-sample history window. |
 
-| 参数字段 | 默认值 | 作用说明与调优建议 |
-| :--- | :---: | :--- |
-| `mcts_simulations` | `64` | MCTS 树搜索单步虚拟展开次数。需要更强博弈能力可设为 `128` 或 `256`。 |
-| `mcts_depth` | `6` | 虚拟世界模型的前瞻最大深度。深层死胡同迷宫建议 `8`。 |
-| `astar_lambda` | `1.0` | 不确定性边权公式 $1 + \lambda(-\log p)$ 中的惩罚系数。 |
-| `hard_sample_history_steps`| `5` | 发生碰撞或低价值事件时向前追溯捕捉的步数。 |
+Checkpoint and adaptive-gating artifact paths must be absolute. Neural dynamics weights are separate from dual-head weights: a dual-head checkpoint does not enable neural latent transitions. Consult the source for the remaining thresholds and storage settings.
 
----
+## Evidence and limitations
 
-## 五、Training and self-play
+The former benchmark table contained historical figures without source data or reproducible artifacts in this repository, so it is omitted. Run the relevant evaluations in your own environment and report checkpoint, inputs, hardware, and dependency versions before making performance claims. A successful symbolic plan or an available gate is not evidence of calibrated neural predictions or universal safety.
 
-Removed from this package. Offline training, distillation, replay and self-play live in
-`gen-zero-research`; this package is the runtime client SDK only.
+## License
 
----
-
-## 六、实测性能基准 (Benchmark Results)
-
-### 1. 跨领域高阶基准实测表 (`evaluate_universal_suite.py`)
-
-> 以下数字来自历史实验记录；当前提交缺少其源数据和生成产物，无法从本仓库复现，不应作为当前性能承诺。
-
-| 领域 / 评测基准 | 任务场景与考察重点 | 单步直觉基线 (1-Step) | **Gen-Zero 规划 (MCTS/A\*)** | 性能增益 |
-| :--- | :--- | :---: | :---: | :---: |
-| **Games v2 (Test)** | Tic-Tac-Toe Minimax 零和对抗博弈 | 68.75% | **96.25%** | **+27.50%** 🚀 |
-| **Games v2 (Test)** | Grid Navigation 最短路径规划 | 95.00% | **100.00%** | **+5.00%** |
-| **Games v2 (OOD)** | 障碍高密集度分布外寻路 | 87.50% | **100.00%** | **+12.50%** 🚀 |
-| **Workflows v2** | 智能家居 / 实体属性检索业务流 | 40.00% | **73.21%** (家居 **98.44%**) | 规则约束零样本求解 |
-| **Scaled Local Maze** | POMDP 5x5 局部几何受限穿障 | - | **100.00%** | 几何连通性完美解析 |
-
-> 原「视野深度 A/B/C 对比实验」(`evaluate_lookahead_comparison.py`) 的数字来自已删除的失效脚本，不再引用。
-
----
-
-## 七、项目工程结构
-
-```text
-gen_zero/
-├── __init__.py               # 公共导出模块 (GenZero, GenZeroConfig)
-├── client.py                 # 统一高层调用接口 (decide, plan_path)
-├── config.py                 # 全局超参数与路径配置
-├── model/                    # [Layer 1] 模型层
-│   ├── dual_head.py          # Policy + Value 双头网络与 Set-Attention
-│   └── prefix_cache.py       # 前缀 KV-Cache 共享加速
-├── planner/                  # [Layer 2] 规划层
-│   ├── astar.py              # 不确定性 A* 规划器 (1 + λ(-log p))
-│   ├── mcts.py               # AlphaZero PUCT MCTS 树搜索
-│   └── world_model.py        # 轻量级文字/动力学世界模型
-├── rollout/                  # [Layer 3] 交互与采样层
-│   └── hard_miner.py         # 碰撞倒推与高熵困难样本挖掘器
-├── gate/                     # [Layer 5] 安全与治理层
-│   └── safety_gate.py        # 冻结天梯 99.5% 不退化安全闸门
-└── evaluate_universal_suite.py # 跨域通用高阶基准评测
-```
-
----
-
-## 八、开源许可证
-
-本项目采用 [Apache License 2.0](../../LICENSE) 开源。
+This project is released under the [Apache License 2.0](../../LICENSE).
