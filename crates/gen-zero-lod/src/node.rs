@@ -175,6 +175,17 @@ pub fn hdc_hamming_distance_256(a: &[u64; 4], b: &[u64; 4]) -> u32 {
         + (a[3] ^ b[3]).count_ones()
 }
 
+/// Largest payload (one document chunk or fact text) a node can carry, in bytes.
+pub const MAX_PAYLOAD_BYTES: usize = 64 * 1024;
+
+/// Largest `source_uri` a node can carry, in bytes.
+pub const MAX_SOURCE_URI_BYTES: usize = 2048;
+
+/// BLAKE3 digest of a payload's UTF-8 bytes.
+pub fn payload_digest(text: &str) -> [u8; 32] {
+    *blake3::hash(text.as_bytes()).as_bytes()
+}
+
 /// A node in the LodGraph.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LodNode {
@@ -204,6 +215,19 @@ pub struct LodNode {
     pub refuted: bool,
     /// Optional parent node in the hierarchy.
     pub parent_id: Option<u32>,
+    /// Knowledge text this node stands for: a document chunk or a fact, UTF-8,
+    /// at most [`MAX_PAYLOAD_BYTES`]. Fixed at insert.
+    #[serde(default)]
+    pub payload: Option<String>,
+    /// Where the payload came from: a document URI or file path. Fixed at insert.
+    #[serde(default)]
+    pub source_uri: Option<String>,
+    /// Version time of the knowledge, in nanoseconds since the Unix epoch.
+    #[serde(default)]
+    pub timestamp_ns: u64,
+    /// BLAKE3 digest of `payload`; all zero when there is no payload.
+    #[serde(default)]
+    pub payload_digest: [u8; 32],
 }
 
 impl LodNode {
@@ -226,7 +250,75 @@ impl LodNode {
             confidence: 0.5,
             refuted: false,
             parent_id: None,
+            payload: None,
+            source_uri: None,
+            timestamp_ns: 0,
+            payload_digest: [0; 32],
         }
+    }
+
+    /// Attach knowledge text, its source and its version time. The digest is
+    /// computed here. Refuses a blank payload, one over [`MAX_PAYLOAD_BYTES`],
+    /// and a blank or oversized `source_uri`.
+    pub fn with_payload(
+        mut self,
+        text: impl Into<String>,
+        source_uri: Option<String>,
+        timestamp_ns: u64,
+    ) -> Result<Self, LodError> {
+        let text = text.into();
+        self.payload_digest = payload_digest(&text);
+        self.payload = Some(text);
+        self.source_uri = source_uri;
+        self.timestamp_ns = timestamp_ns;
+        self.validate_payload()?;
+        Ok(self)
+    }
+
+    /// Check the payload invariants: a payload is non-blank, at most
+    /// [`MAX_PAYLOAD_BYTES`] and matches `payload_digest`; no payload means an
+    /// all-zero digest and no `source_uri`; a `source_uri` is non-blank and at
+    /// most [`MAX_SOURCE_URI_BYTES`]. The fields are public, so the graph checks
+    /// this again at insert.
+    pub fn validate_payload(&self) -> Result<(), LodError> {
+        match &self.payload {
+            Some(text) => {
+                if text.trim().is_empty() {
+                    return Err(LodError::EmptyInput("payload is blank".into()));
+                }
+                if text.len() > MAX_PAYLOAD_BYTES {
+                    return Err(LodError::PayloadTooLarge {
+                        len: text.len(),
+                        max: MAX_PAYLOAD_BYTES,
+                    });
+                }
+                if self.payload_digest != payload_digest(text) {
+                    return Err(LodError::InvalidPayload(
+                        "payload_digest is not the BLAKE3 digest of payload".into(),
+                    ));
+                }
+            }
+            None => {
+                if self.payload_digest != [0; 32] {
+                    return Err(LodError::InvalidPayload(
+                        "payload_digest must be all zero when there is no payload".into(),
+                    ));
+                }
+                if self.source_uri.is_some() {
+                    return Err(LodError::InvalidPayload(
+                        "source_uri needs a payload".into(),
+                    ));
+                }
+            }
+        }
+        if let Some(uri) = &self.source_uri {
+            if uri.trim().is_empty() || uri.len() > MAX_SOURCE_URI_BYTES {
+                return Err(LodError::InvalidPayload(format!(
+                    "source_uri must be 1..={MAX_SOURCE_URI_BYTES} bytes and not blank"
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Set the evidence prior. The posterior starts equal to it.
@@ -370,6 +462,52 @@ mod tests {
             ..GeometryParams::UNIT
         };
         assert!(node(coord).derive_band_from_coord(&broken).is_err());
+    }
+
+    #[test]
+    fn payload_carries_its_digest_and_the_gate_refuses_tampering() {
+        let bare = node(MixedCurvatureCoord::origin());
+        assert_eq!(bare.payload_digest, [0; 32]);
+        bare.validate_payload().unwrap();
+
+        let n = node(MixedCurvatureCoord::origin())
+            .with_payload("water boils at 100 C", Some("file:///notes.md".into()), 7)
+            .unwrap();
+        assert_eq!(
+            n.payload_digest,
+            *blake3::hash(b"water boils at 100 C").as_bytes()
+        );
+        assert_eq!(n.timestamp_ns, 7);
+
+        let mut tampered = n.clone();
+        tampered.payload = Some("water boils at 90 C".into());
+        assert!(matches!(
+            tampered.validate_payload(),
+            Err(LodError::InvalidPayload(_))
+        ));
+        let mut orphan_digest = bare.clone();
+        orphan_digest.payload_digest[0] = 1;
+        assert!(orphan_digest.validate_payload().is_err());
+        let mut orphan_uri = bare;
+        orphan_uri.source_uri = Some("file:///x".into());
+        assert!(orphan_uri.validate_payload().is_err());
+
+        let big = "x".repeat(MAX_PAYLOAD_BYTES + 1);
+        assert!(matches!(
+            node(MixedCurvatureCoord::origin()).with_payload(big, None, 0),
+            Err(LodError::PayloadTooLarge { .. })
+        ));
+        let full = "x".repeat(MAX_PAYLOAD_BYTES);
+        node(MixedCurvatureCoord::origin())
+            .with_payload(full, None, 0)
+            .unwrap();
+        assert!(matches!(
+            node(MixedCurvatureCoord::origin()).with_payload(" \n\t", None, 0),
+            Err(LodError::EmptyInput(_))
+        ));
+        assert!(node(MixedCurvatureCoord::origin())
+            .with_payload("fact", Some("  ".into()), 0)
+            .is_err());
     }
 
     #[test]

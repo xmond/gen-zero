@@ -118,6 +118,9 @@ pub enum ZeroVerb {
     GraphDeposit,
     /// Two-stage HDC + manifold recall over the live LodGraph.
     GraphRecall,
+    /// Three-stage retrieval over the live LodGraph: HDC prefilter, geodesic
+    /// rerank, PPR diffusion; hits carry their payload and source.
+    GraphRag,
     /// Personalized PageRank diffusion over the live LodGraph.
     GraphPpr,
     /// Evidence against one entity, then confidence evolution (or dry run), on
@@ -142,6 +145,7 @@ impl ZeroVerb {
         match self {
             Self::GraphDeposit => Some(GraphOp::Deposit),
             Self::GraphRecall => Some(GraphOp::Recall),
+            Self::GraphRag => Some(GraphOp::Rag),
             Self::GraphPpr => Some(GraphOp::Ppr),
             Self::GraphPrune => Some(GraphOp::Prune),
             Self::GraphEvolve => Some(GraphOp::Evolve),
@@ -174,6 +178,7 @@ impl ZeroVerb {
                 "pipeline" => return Ok(Self::Pipeline),
                 "graph_deposit" => return Ok(Self::GraphDeposit),
                 "graph_recall" => return Ok(Self::GraphRecall),
+                "graph_rag" => return Ok(Self::GraphRag),
                 "graph_ppr" => return Ok(Self::GraphPpr),
                 "graph_prune" => return Ok(Self::GraphPrune),
                 "graph_evolve" => return Ok(Self::GraphEvolve),
@@ -1646,8 +1651,9 @@ impl PolymorphicZeroEngine {
             let rej = Rejection::invalid(
                 "request",
                 format!(
-                    "`graph` is only accepted by graph_deposit, graph_recall, graph_ppr, \
-                     graph_prune and graph_evolve (name one in `action`), not {verb:?}"
+                    "`graph` is only accepted by graph_deposit, graph_recall, graph_rag, \
+                     graph_ppr, graph_prune, graph_evolve, graph_coarse_grain and graph_zoom \
+                     (name one in `action`), not {verb:?}"
                 ),
             );
             let meta = json!({"mount": mount_meta(binding.snapshot())});
@@ -1762,6 +1768,7 @@ impl PolymorphicZeroEngine {
             }
             ZeroVerb::GraphDeposit
             | ZeroVerb::GraphRecall
+            | ZeroVerb::GraphRag
             | ZeroVerb::GraphPpr
             | ZeroVerb::GraphPrune
             | ZeroVerb::GraphEvolve
@@ -3656,8 +3663,8 @@ impl PolymorphicZeroEngine {
     /// relation survives at the root and refuses when two or more do; it
     /// never picks among survivors. `meta.causal_fold.conflict_keys` counts
     /// the conflict keys in the table so a caller can see one was present.
-    /// Graph verbs: `graph_deposit`, `graph_recall`, `graph_ppr`, `graph_prune`,
-    /// `graph_evolve`, `graph_coarse_grain`, `graph_zoom` on this engine's live
+    /// Graph verbs: `graph_deposit`, `graph_recall`, `graph_rag`, `graph_ppr`,
+    /// `graph_prune`, `graph_evolve`, `graph_coarse_grain`, `graph_zoom` on this engine's live
     /// graph. See [`crate::graph_verb`].
     fn handle_graph(
         verb: ZeroVerb,

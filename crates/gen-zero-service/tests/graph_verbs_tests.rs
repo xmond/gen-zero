@@ -844,3 +844,218 @@ async fn coarse_grain_edges_and_requests_fail_closed() {
     assert_eq!(ppr.meta["graph_op"]["graph"]["nodes"], 3);
     assert_eq!(ppr.meta["graph_op"]["graph"]["csr_edges"], 0);
 }
+
+const PUMP: &str = "the reactor coolant pump failed during the night shift";
+const LOG: &str = "maintenance ticket 4411 replaced seal kit on unit two";
+const BUDGET: &str = "quarterly marketing budget for the new espresso brand";
+
+/// A node placed by projecting its payload: no `coord`, no `hdc`.
+fn text_node(entity: u64, text: &str, status: &str) -> Value {
+    json!({
+        "entity_id": entity, "label": format!("fact {entity}"), "band": 0,
+        "status": status, "confidence": 0.9,
+        "payload": text, "source_uri": format!("doc://kb/{entity}.md"),
+    })
+}
+
+async fn deposit_texts(engine: &PolymorphicZeroEngine) {
+    let mut pump = text_node(1, PUMP, "validated");
+    pump["timestamp_ns"] = json!(1_700_000_000_000_000_000_u64);
+    let out = run(
+        engine,
+        json!({"action": "graph_deposit", "graph": {
+            "nodes": [
+                pump,
+                text_node(2, LOG, "validated"),
+                text_node(3, BUDGET, "validated"),
+                // The query's own words, but refuted: must never be recalled.
+                text_node(4, "coolant pump failed during night shift", "falsified"),
+            ],
+            "edges": [
+                {"source": {"entity_id": 1}, "target": {"entity_id": 2}, "type": "causal_transition", "weight": 1.0},
+                {"source": {"entity_id": 4}, "target": {"entity_id": 3}, "type": "semantic", "weight": 1.0},
+            ],
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let nodes = out.meta["graph_op"]["nodes"].as_array().unwrap();
+    assert_eq!(nodes[0]["payload_bytes"], PUMP.len());
+    assert_eq!(
+        nodes[0]["payload_digest"],
+        blake3::hash(PUMP.as_bytes()).to_hex().to_string()
+    );
+    assert_eq!(nodes[0]["timestamp_ns"], 1_700_000_000_000_000_000_u64);
+    // No timestamp given: the deposit's wall-clock time, echoed.
+    assert!(nodes[1]["timestamp_ns"].as_u64().unwrap() > 1_600_000_000_000_000_000);
+    assert_eq!(nodes[1]["source_uri"], "doc://kb/2.md");
+}
+
+#[tokio::test]
+async fn graph_rag_answers_a_text_query_with_payload_and_graph_evidence() {
+    let engine = engine();
+    deposit_texts(&engine).await;
+    let out = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {
+            "query_text": "Coolant pump failed during the night shift?", "top_k": 1,
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    assert_eq!(out.verb, ZeroVerb::GraphRag);
+    let op = &out.meta["graph_op"];
+    assert_eq!(op["op"], "graph_rag");
+    assert_eq!(op["query"]["kind"], "text");
+    assert_eq!(op["query"]["projector"], gen_zero_lod::PROJECTOR_VERSION);
+    assert_eq!(op["crag_margin"], 0.0);
+    assert_eq!(op["stage1_candidates"], 3, "{op}");
+    assert_eq!(op["anchors"][0]["entity_id"], 1);
+    assert_eq!(op["diffusion"]["converged"], true);
+
+    let hits = op["hits"].as_array().unwrap();
+    let entities: Vec<u64> = hits
+        .iter()
+        .map(|h| h["entity_id"].as_u64().unwrap())
+        .collect();
+    // Anchor first, its causal successor by diffusion; the budget fact is
+    // reached by no anchor and the refuted fact is never a candidate.
+    assert_eq!(entities, vec![1, 2], "{op}");
+    let top = &hits[0];
+    assert_eq!(top["via"], "anchor");
+    assert_eq!(top["payload"], PUMP);
+    assert_eq!(top["source_uri"], "doc://kb/1.md");
+    assert_eq!(top["timestamp_ns"], 1_700_000_000_000_000_000_u64);
+    assert_eq!(
+        top["payload_digest"],
+        blake3::hash(PUMP.as_bytes()).to_hex().to_string()
+    );
+    assert!(top["anchor_distance"].as_f64().unwrap() >= 0.0);
+    let next = &hits[1];
+    assert_eq!(next["via"], "diffusion");
+    assert!(next["anchor_distance"].is_null());
+    assert_eq!(next["payload"], LOG);
+    assert_eq!(next["source_uri"], "doc://kb/2.md");
+    assert!(next["ppr_score"].as_f64().unwrap() > 0.0);
+    assert!(next["ppr_score"].as_f64().unwrap() < top["ppr_score"].as_f64().unwrap());
+}
+
+#[tokio::test]
+async fn graph_rag_takes_a_coord_query_and_mixes_bare_and_text_nodes() {
+    let engine = engine();
+    let out = run(
+        &engine,
+        json!({"action": "graph_deposit", "graph": {"nodes": [
+            node(json!({"entity_id": 10}), "bare fact", "validated", 0b1111),
+            text_node(11, PUMP, "hypothesized"),
+        ], "edges": [
+            {"source": {"entity_id": 10}, "target": {"entity_id": 11}, "type": "semantic", "weight": 1.0},
+        ]}}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    assert!(out.meta["graph_op"]["nodes"][0]["payload_digest"].is_null());
+    let out = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {
+            "coord": origin(), "hdc": [0b1111, 0, 0, 0], "top_k": 1, "alpha": 0.3, "max_iters": 500,
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    assert_eq!(op["query"]["kind"], "coord");
+    assert_eq!(op["diffusion"]["alpha"], json!(0.3_f32));
+    let hits = op["hits"].as_array().unwrap();
+    assert_eq!(hits[0]["entity_id"], 10);
+    assert!(hits[0]["payload"].is_null());
+    assert_eq!(hits[1]["entity_id"], 11);
+    assert_eq!(hits[1]["payload"], PUMP);
+}
+
+#[tokio::test]
+async fn graph_rag_and_text_deposits_fail_closed() {
+    let engine = engine();
+    let empty = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {"query_text": "anything", "top_k": 2}}),
+    )
+    .await;
+    assert!(!empty.is_error, "{:?}", empty.meta);
+    assert_eq!(empty.meta["graph_op"]["hits"], json!([]));
+    assert!(empty.meta["graph_op"]["diffusion"].is_null());
+
+    deposit_texts(&engine).await;
+    for (req, want) in [
+        (json!({"query_text": "   ", "top_k": 1}), "EmptyInput"),
+        (json!({"query_text": "?!", "top_k": 1}), "EmptyInput"),
+        (json!({"query_text": "pump", "top_k": 0}), "InvalidParams"),
+        (json!({"query_text": "pump", "top_k": 33}), "InvalidParams"),
+        (
+            json!({"query_text": "pump", "top_k": 1, "alpha": 1.0}),
+            "InvalidParams",
+        ),
+        (
+            json!({"query_text": "pump", "top_k": 1, "max_iters": 0}),
+            "InvalidParams",
+        ),
+        (
+            json!({"query_text": "pump", "top_k": 1, "coord": origin(), "hdc": [0, 0, 0, 0]}),
+            "InvalidParams",
+        ),
+        (json!({"coord": origin(), "top_k": 1}), "InvalidParams"),
+        (json!({"top_k": 1}), "InvalidParams"),
+        (
+            json!({"query_text": "pump", "top_k": 1, "extra": 1}),
+            "InvalidParams",
+        ),
+    ] {
+        let out = run(
+            &engine,
+            json!({"action": "graph_rag", "graph": req.clone()}),
+        )
+        .await;
+        assert!(out.is_error, "{req}");
+        assert_eq!(code(&out), want, "{req}");
+    }
+
+    let mut no_band = text_node(20, "a fact", "validated");
+    no_band.as_object_mut().unwrap().remove("band");
+    let mut coord_only = text_node(21, "a fact", "validated");
+    coord_only["coord"] = origin();
+    let mut uri_only = node(json!({"entity_id": 22}), "bare", "validated", 1);
+    uri_only["source_uri"] = json!("doc://x");
+    let mut stamp_only = node(json!({"entity_id": 23}), "bare", "validated", 1);
+    stamp_only["timestamp_ns"] = json!(5);
+    let mut neither = text_node(24, "a fact", "validated");
+    neither.as_object_mut().unwrap().remove("payload");
+    neither.as_object_mut().unwrap().remove("source_uri");
+    let blank = text_node(25, " \n ", "validated");
+    for (bad, want) in [
+        (no_band, "InvalidParams"),
+        (coord_only, "InvalidParams"),
+        (uri_only, "InvalidParams"),
+        (stamp_only, "InvalidParams"),
+        (neither, "InvalidParams"),
+        (blank, "EmptyInput"),
+        (
+            text_node(26, &"x".repeat(64 * 1024 + 1), "validated"),
+            "PayloadTooLarge",
+        ),
+    ] {
+        // A good node rides along: the whole deposit must be refused.
+        let out = run(
+            &engine,
+            json!({"action": "graph_deposit", "graph": {"nodes": [text_node(30, LOG, "validated"), bad.clone()]}}),
+        )
+        .await;
+        assert!(out.is_error, "{bad}");
+        assert_eq!(code(&out), want, "{bad}");
+    }
+    let out = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {"query_text": PUMP, "top_k": 1}}),
+    )
+    .await;
+    assert_eq!(out.meta["graph_op"]["graph"]["nodes"], 4, "{:?}", out.meta);
+}

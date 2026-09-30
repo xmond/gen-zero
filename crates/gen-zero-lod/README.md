@@ -2,7 +2,8 @@
 
 Multi-scale Level of Detail (Lod) graph fusion: dynamic graph topology, the
 epistemic lifecycle state machine, Spec 25 mixed-curvature product geometry,
-Personalized PageRank flow, and Banach fixed-point confidence evolution.
+Personalized PageRank flow, Banach fixed-point confidence evolution, and
+text retrieval over payload-carrying nodes.
 
 ## Architecture
 
@@ -43,6 +44,16 @@ Personalized PageRank flow, and Banach fixed-point confidence evolution.
     `zoom_out`; `migrate_band_to_coord(id)` steps to the band the coordinate
     implies. Both keep the coarse-grain order. Checkpoints restore bands and
     parents.
+  - Retrieval: `hybrid_rag_search(coord, hdc, top_k, crag_margin, ppr_alpha,
+    ppr_iters)` runs three stages under one read lock: Hamming prefilter to
+    `4 * top_k` live nodes, product-geodesic rerank (with the CRAG neighbor
+    expansion) to `top_k` anchors, then PPR from the anchors seeded
+    `1 / (1 + distance)`. Hits are every anchor plus up to `top_k` nodes reached
+    only by diffusion, ordered by PPR score, each with its confidence, payload,
+    `source_uri`, `timestamp_ns` and digest. `hybrid_rag_search_text` projects
+    the query with the graph's own projector first (`LodGraph::project_text`).
+    The Hamming scan is a linear `count_ones` loop; it is not benchmarked and
+    uses a hardware POPCNT only when the build enables that target feature.
 - `manifold`: Spec 25 mixed-curvature product manifolds,
   `M = H_{-c}^{d_h} x R^{d_e} x S_R^{d_s}` with product metric
   `g = alpha_h g_H + alpha_e g_E + alpha_s g_S`.
@@ -54,7 +65,19 @@ Personalized PageRank flow, and Banach fixed-point confidence evolution.
   `rho = 2 artanh(sqrt(c) ||x_H||)` is the normalized hyperbolic depth and
   `rho_max ~ 10.597` the deepest the chart's boundary floor allows. The origin
   is `Lod3Systemic`, the boundary `Lod0Atomic`: a convention (general concepts
-  near the origin), not a learned fact.
+  near the origin), not a learned fact. A node may carry a `payload` (knowledge
+  text, at most 64 KiB) with `source_uri`, `timestamp_ns` and its BLAKE3
+  `payload_digest`; `LodNode::with_payload` computes the digest and the graph
+  re-checks it at insert. No payload means an all-zero digest.
+- `projection`: `TextEmbeddingProjector`, a deterministic lexical projection of
+  text to a chart coordinate and a 256-bit SimHash fingerprint. Features are
+  word unigrams, word bigrams and character trigrams (keyed BLAKE3, weight
+  `1 + ln tf`, no IDF). The fingerprint is Charikar SimHash; the coordinate is a
+  16-row random projection: `H^4` by stereographic projection from the
+  hyperboloid into the ball, `S^3` as a unit direction, `R^8` through `tanh`.
+  Texts are close when they share n-grams; it is not a semantic embedding, and
+  the hyperbolic depth of a projected point carries no hierarchy. Blank text or
+  text with no alphanumeric token is `LodError::EmptyInput`.
 - `ppr`: Personalized PageRank sparse flow engine. Lock-free, CSR-based sparse
   power iteration for context diffusion, `p_{t+1} = (1-alpha) * W_semantic * p_t + alpha * e_seed`.
 - `semiring`: learned relation semiring (Spec 24 §8.6.2). `P(R)` under
@@ -76,6 +99,9 @@ Personalized PageRank flow, and Banach fixed-point confidence evolution.
 - `BufferedEdge`, `CsrGraph`, `EdgeType`, `FlushReport`, `GraphCheckpoint`,
   `LodGraph`, `PprRanking`, `FixedPointReport`, `StatusTransition`,
   `MAX_FIXED_POINT_STEPS`: graph topology, transactions and confidence evolution.
+- `HybridRagResult`, `RagHit`, `RagDiffusion`, `HYBRID_PPR_TOLERANCE`: hybrid
+  retrieval output.
+- `TextEmbeddingProjector`, `PROJECTOR_VERSION`, `HDC_BITS`: text projection.
 - `ContainmentCriteria`, `ContainmentScore`, `Digest`, `Epochs`, `FiberId`,
   `GeometryParams`, `Layout`, `MixedCurvatureCoord`, `Point`, `ProductGeometry`,
   `ProductManifold`, `Reject`, `GeometryResult`, `Tangent`, `TopologyPreset`,
@@ -83,7 +109,8 @@ Personalized PageRank flow, and Banach fixed-point confidence evolution.
 - `hdc_hamming_distance_256`, `EpistemicStatus`, `LodBand`, `LodNode`,
   `ZoomDirection`, `band_from_scale`, `band_scale_width`, `max_chart_depth`,
   `normalized_depth`, `scale_from_depth`: node representation and the
-  scale-to-band map.
+  scale-to-band map. `payload_digest`, `MAX_PAYLOAD_BYTES`,
+  `MAX_SOURCE_URI_BYTES`: node payloads.
 - `compute_ppr_csr`, `PprScores`: Personalized PageRank over a CSR graph; bad
   inputs are errors, never clamped.
 - `AssociativityReport`, `AssociativityViolation`, `FoldOutcome`, `Gender`,

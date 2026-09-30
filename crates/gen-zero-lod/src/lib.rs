@@ -5,7 +5,9 @@
 //! coordinates) and its 16-coordinate Lod graph chart (H^4 x R^8 x S^3) under the
 //! graph's `GeometryParams`, Banach fixed-point confidence evolution over the
 //! dependency edges, coarse-graining across Lod bands, atomic graph checkpoints
-//! with rollback, and discrete and soft relation semirings.
+//! with rollback, discrete and soft relation semirings, and text retrieval: a
+//! lexical text-to-chart projector, payload-carrying nodes and a three-stage
+//! hybrid search (HDC prefilter, geodesic rerank, PPR diffusion).
 
 #![allow(clippy::manual_is_multiple_of)]
 
@@ -14,13 +16,15 @@ pub mod graph;
 pub mod manifold;
 pub mod node;
 pub mod ppr;
+pub mod projection;
 pub mod semiring;
 pub mod weighted;
 
 pub use error::LodError;
 pub use graph::{
-    BufferedEdge, CsrGraph, EdgeType, FixedPointReport, FlushReport, GraphCheckpoint, LodGraph,
-    PprRanking, StatusTransition, MAX_FIXED_POINT_STEPS,
+    BufferedEdge, CsrGraph, EdgeType, FixedPointReport, FlushReport, GraphCheckpoint,
+    HybridRagResult, LodGraph, PprRanking, RagDiffusion, RagHit, StatusTransition,
+    HYBRID_PPR_TOLERANCE, MAX_FIXED_POINT_STEPS,
 };
 pub use manifold::{
     ContainmentCriteria, ContainmentScore, Digest, Epochs, FiberId, GeometryParams, Layout,
@@ -28,10 +32,12 @@ pub use manifold::{
     Tangent, TopologyPreset, Version, MAX_PRESET_DIM,
 };
 pub use node::{
-    band_from_scale, band_scale_width, hdc_hamming_distance_256, max_chart_depth,
-    normalized_depth, scale_from_depth, EpistemicStatus, LodBand, LodNode, ZoomDirection,
+    band_from_scale, band_scale_width, hdc_hamming_distance_256, max_chart_depth, normalized_depth,
+    payload_digest, scale_from_depth, EpistemicStatus, LodBand, LodNode, ZoomDirection,
+    MAX_PAYLOAD_BYTES, MAX_SOURCE_URI_BYTES,
 };
 pub use ppr::{compute_ppr_csr, PprScores};
+pub use projection::{TextEmbeddingProjector, HDC_BITS, PROJECTOR_VERSION};
 pub use semiring::{
     AssociativityReport, AssociativityViolation, FoldOutcome, Gender, RelId, RelationKey,
     RelationSemiring, ResultSet, SoftResultSet, SoftSetError, BUDGET_EXCEEDED_REASON,

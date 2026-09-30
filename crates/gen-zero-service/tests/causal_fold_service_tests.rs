@@ -202,6 +202,7 @@ async fn mcp_tools_list_advertises_causal_fold() {
         "{zero_actions:?}"
     );
     assert!(zero_actions.contains(&"graph_zoom"), "{zero_actions:?}");
+    assert!(zero_actions.contains(&"graph_rag"), "{zero_actions:?}");
 }
 
 #[tokio::test]
@@ -243,6 +244,47 @@ async fn mcp_tools_call_zero_action_causal_fold_succeeds() {
     .await;
     assert_eq!(v["result"]["isError"], false, "{v}");
     assert_eq!(v["result"]["_meta"]["causal_fold"]["predicted"], 16, "{v}");
+}
+
+/// A text fact deposited over HTTP `/message` comes back, payload and source
+/// included, from `graph_rag` over MCP `tools/call zero` on the same engine.
+#[tokio::test]
+async fn http_text_deposit_then_mcp_graph_rag_returns_the_payload() {
+    let engine = engine();
+    let deposit = json!({"action": "graph_deposit", "graph": {"nodes": [{
+        "entity_id": 77, "label": "boiling point", "band": 0, "status": "validated",
+        "confidence": 0.9, "payload": "water boils at 100 degrees celsius at sea level",
+        "source_uri": "doc://physics/water.md",
+    }]}});
+    let (status, body) = post(&engine, "/message", deposit).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["is_error"], false, "{body}");
+
+    let server = McpServer {
+        engine,
+        auth_token: None,
+        bridge_required: false,
+        closed_loop: None,
+    };
+    let args = json!({"action": "graph_rag", "graph": {
+        "query_text": "at what temperature does water boil", "top_k": 1,
+    }});
+    let v = frame(
+        &server,
+        json!({
+            "jsonrpc": "2.0", "id": 1, "method": "tools/call",
+            "params": {"name": "zero", "arguments": args},
+        }),
+    )
+    .await;
+    assert_eq!(v["result"]["isError"], false, "{v}");
+    let hit = &v["result"]["_meta"]["graph_op"]["hits"][0];
+    assert_eq!(hit["entity_id"], 77, "{v}");
+    assert_eq!(
+        hit["payload"],
+        "water boils at 100 degrees celsius at sea level"
+    );
+    assert_eq!(hit["source_uri"], "doc://physics/water.md");
 }
 
 // -------------------------------------------------------------- limits and table checks

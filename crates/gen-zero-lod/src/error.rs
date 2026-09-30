@@ -44,6 +44,12 @@ pub enum LodError {
         residual: f64,
         tolerance: f64,
     },
+    #[error("Empty input: {0}")]
+    EmptyInput(String),
+    #[error("Payload is {len} bytes; one chunk holds at most {max} bytes")]
+    PayloadTooLarge { len: usize, max: usize },
+    #[error("Invalid payload: {0}")]
+    InvalidPayload(String),
     #[error("Core error: {0}")]
     Core(#[from] gen_zero_core::CoreError),
 }

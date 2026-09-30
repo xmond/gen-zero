@@ -4,6 +4,11 @@
 //! - `graph_deposit`: append nodes and edges in one transaction, then flush them
 //!   into the CSR snapshot. Any failure rolls the whole deposit back.
 //! - `graph_recall`: two-stage HDC + manifold recall under the graph's geometry.
+//! - `graph_rag`: three-stage retrieval (`LodGraph::hybrid_rag_search`): HDC
+//!   prefilter, geodesic rerank to anchors, PPR diffusion from the anchors.
+//!   The query is text (`query_text`, projected with the graph's own
+//!   projector) or a `coord` + `hdc` pair. Every hit carries its payload,
+//!   source and digest.
 //! - `graph_ppr`: Personalized PageRank diffusion from seed entities.
 //! - `graph_prune`: record evidence against one entity, then evolve every
 //!   confidence to the fixed point; dependents that fall below `theta_lo` are
@@ -21,6 +26,12 @@
 //! A deposited node without `band` gets the band its coordinate implies
 //! (`LodNode::derive_band_from_coord`).
 //!
+//! A deposited node may carry a `payload` (knowledge text, at most 64 KiB) with
+//! an optional `source_uri` and `timestamp_ns` (default: the deposit's wall-clock
+//! time, echoed). A node without `coord` and `hdc` is placed by projecting its
+//! payload; it must then name its `band`, because the depth of a hashed
+//! projection carries no hierarchy.
+//!
 //! The graph's geometry (curvature, sphere radius, metric weights) is fixed when
 //! the engine starts (`GENZERO_GRAPH_GEOMETRY`) and echoed in every response.
 //!
@@ -34,8 +45,8 @@
 use crate::cognitive::Rejection;
 use crate::zero::action_id;
 use gen_zero_lod::{
-    EdgeType, EpistemicStatus, FixedPointReport, LodBand, LodError, LodGraph, LodNode,
-    MixedCurvatureCoord, ZoomDirection,
+    EdgeType, EpistemicStatus, FixedPointReport, HybridRagResult, LodBand, LodError, LodGraph,
+    LodNode, MixedCurvatureCoord, ZoomDirection, PROJECTOR_VERSION,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -52,6 +63,12 @@ pub const MAX_TOP_K: usize = 256;
 pub const MAX_PPR_SEEDS: usize = 64;
 pub const MAX_PPR_ITERS: usize = 1000;
 const MAX_LABEL_BYTES: usize = 256;
+/// Most anchors one `graph_rag` asks for. A response holds at most
+/// `2 * MAX_RAG_TOP_K` hits of at most 64 KiB payload each: 4 MiB.
+pub const MAX_RAG_TOP_K: usize = 32;
+/// CRAG margin of `graph_rag` when the request names none: 0 turns the
+/// neighbor expansion off. Echoed in every response.
+pub const DEFAULT_RAG_CRAG_MARGIN: f32 = 0.0;
 
 /// PPR parameters used when a request names none. Echoed in every response.
 pub const DEFAULT_PPR_ALPHA: f32 = 0.15;
@@ -71,11 +88,12 @@ pub const MAX_EVOLVE_RETRACTIONS: usize = 256;
 /// Most status transitions listed in one response; the total is always reported.
 pub const MAX_LISTED_TRANSITIONS: usize = 256;
 
-/// The seven graph operations.
+/// The eight graph operations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GraphOp {
     Deposit,
     Recall,
+    Rag,
     Ppr,
     Prune,
     Evolve,
@@ -88,6 +106,7 @@ impl GraphOp {
         match self {
             Self::Deposit => "graph_deposit",
             Self::Recall => "graph_recall",
+            Self::Rag => "graph_rag",
             Self::Ppr => "graph_ppr",
             Self::Prune => "graph_prune",
             Self::Evolve => "graph_evolve",
@@ -121,9 +140,13 @@ struct NodeSpec {
     /// Absent: the band the coordinate implies.
     band: Option<u8>,
     status: String,
-    coord: CoordSpec,
-    hdc: [u64; 4],
+    /// With `hdc`, or neither: then the payload is projected.
+    coord: Option<CoordSpec>,
+    hdc: Option<[u64; 4]>,
     confidence: f32,
+    payload: Option<String>,
+    source_uri: Option<String>,
+    timestamp_ns: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -152,6 +175,19 @@ struct RecallSpec {
     hdc: [u64; 4],
     top_k: usize,
     crag_margin: f32,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RagSpec {
+    /// Either `query_text`, or `coord` with `hdc`.
+    query_text: Option<String>,
+    coord: Option<CoordSpec>,
+    hdc: Option<[u64; 4]>,
+    top_k: usize,
+    crag_margin: Option<f32>,
+    alpha: Option<f32>,
+    max_iters: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -264,7 +300,8 @@ fn invalid(detail: impl Into<String>) -> Rejection {
     Rejection::invalid(STAGE, detail)
 }
 
-/// Input faults are 400, a duplicate entity 409, a missing entity 404, a
+/// Input faults are 400 (blank text `EmptyInput`), an oversized payload 413, a
+/// duplicate entity 409, a missing entity 404, a
 /// confidence evolution that did not converge inside its step bound 422. A CSR
 /// or checkpoint failure is an engine fault, 500.
 fn graph_rejection(e: LodError) -> Rejection {
@@ -273,6 +310,8 @@ fn graph_rejection(e: LodError) -> Rejection {
         LodError::SpineBreatheOutOfBounds { .. } => ("BandOutOfRange", 409),
         LodError::DuplicateEntity(_) => ("DuplicateEntity", 409),
         LodError::EntityNotFound(_) | LodError::NodeNotFound(_) => ("EntityNotFound", 404),
+        LodError::EmptyInput(_) => ("EmptyInput", 400),
+        LodError::PayloadTooLarge { .. } => ("PayloadTooLarge", 413),
         LodError::CsrInvariant(_) | LodError::FlushConflict | LodError::CheckpointRejected(_) => {
             ("GraphError", 500)
         }
@@ -389,9 +428,33 @@ fn node_json(graph: &LodGraph, id: u32) -> Value {
             "band": band_level(n.band),
             "prior": n.prior,
             "confidence": n.confidence,
+            "payload_bytes": n.payload.as_ref().map(String::len),
+            "payload_digest": n.payload.as_ref().map(|_| digest_hex(&n.payload_digest)),
+            "source_uri": n.source_uri,
+            "timestamp_ns": n.payload.as_ref().map(|_| n.timestamp_ns),
         }),
         None => json!({"node": id, "missing": true}),
     }
+}
+
+fn digest_hex(digest: &[u8; 32]) -> String {
+    blake3::Hash::from_bytes(*digest).to_hex().to_string()
+}
+
+/// Nanoseconds since the Unix epoch, the default version time of a payload.
+/// A clock before the epoch or past u64 nanoseconds is an engine fault, 500.
+fn now_ns() -> Result<u64, Rejection> {
+    let clock_fault = |detail: String| Rejection {
+        code: "GraphError".to_string(),
+        stage: STAGE.to_string(),
+        detail,
+        http_status: 500,
+    };
+    let elapsed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| clock_fault(format!("system clock is before the Unix epoch: {e}")))?;
+    u64::try_from(elapsed.as_nanos())
+        .map_err(|_| clock_fault("system clock overflows u64 nanoseconds".into()))
 }
 
 /// Run one graph verb. `Ok` holds a one-line summary and the result object.
@@ -403,6 +466,7 @@ pub fn execute_graph(
     let (summary, mut result) = match op {
         GraphOp::Deposit => deposit(graph, parse(block, op)?, false)?,
         GraphOp::Recall => recall(graph, parse(block, op)?)?,
+        GraphOp::Rag => rag(graph, parse(block, op)?)?,
         GraphOp::Ppr => ppr(graph, parse(block, op)?)?,
         GraphOp::Prune => prune(graph, parse(block, op)?)?,
         GraphOp::Evolve => evolve(graph, parse(block, op)?)?,
@@ -458,16 +522,49 @@ fn deposit(
                 "nodes[{i}].label must be 1..={MAX_LABEL_BYTES} bytes"
             )));
         }
-        let mut node = LodNode::new(
-            0,
-            LodBand::Lod0Atomic,
-            coord(graph, &n.coord)?,
-            label,
-            entity_id,
-        )
-        .with_status(parse_status(&n.status, allow_axiomatic)?)
-        .with_hdc_fingerprint(n.hdc)
-        .with_prior(n.confidence);
+        let (place, hdc) = match (&n.coord, n.hdc, &n.payload) {
+            (Some(c), Some(hdc), _) => (coord(graph, c)?, hdc),
+            (None, None, Some(text)) => {
+                if n.band.is_none() {
+                    return Err(invalid(format!(
+                        "nodes[{i}] is placed by projecting its payload and must name its \
+                         `band`: a hashed projection's depth carries no hierarchy"
+                    )));
+                }
+                graph.project_text(text).map_err(graph_rejection)?
+            }
+            (None, None, None) => {
+                return Err(invalid(format!(
+                    "nodes[{i}] needs `coord` and `hdc`, or a `payload` to project"
+                )))
+            }
+            _ => {
+                return Err(invalid(format!(
+                    "nodes[{i}] needs both `coord` and `hdc`, or neither"
+                )))
+            }
+        };
+        let mut node = LodNode::new(0, LodBand::Lod0Atomic, place, label, entity_id)
+            .with_status(parse_status(&n.status, allow_axiomatic)?)
+            .with_hdc_fingerprint(hdc)
+            .with_prior(n.confidence);
+        match &n.payload {
+            Some(text) => {
+                let timestamp_ns = match n.timestamp_ns {
+                    Some(t) => t,
+                    None => now_ns()?,
+                };
+                node = node
+                    .with_payload(text.as_str(), n.source_uri.clone(), timestamp_ns)
+                    .map_err(graph_rejection)?;
+            }
+            None if n.source_uri.is_some() || n.timestamp_ns.is_some() => {
+                return Err(invalid(format!(
+                    "nodes[{i}]: `source_uri` and `timestamp_ns` need a `payload`"
+                )))
+            }
+            None => {}
+        }
         node.band = match n.band {
             Some(band) => parse_band(band)?,
             None => node
@@ -560,6 +657,120 @@ fn recall(graph: &LodGraph, spec: RecallSpec) -> Result<(String, Value), Rejecti
         summary,
         json!({"results": results, "top_k": spec.top_k, "crag_margin": spec.crag_margin}),
     ))
+}
+
+fn rag(graph: &LodGraph, spec: RagSpec) -> Result<(String, Value), Rejection> {
+    if spec.top_k == 0 || spec.top_k > MAX_RAG_TOP_K {
+        return Err(invalid(format!("top_k must be 1..={MAX_RAG_TOP_K}")));
+    }
+    let crag_margin = spec.crag_margin.unwrap_or(DEFAULT_RAG_CRAG_MARGIN);
+    let alpha = spec.alpha.unwrap_or(DEFAULT_PPR_ALPHA);
+    let max_iters = spec.max_iters.unwrap_or(DEFAULT_PPR_MAX_ITERS);
+    if max_iters > MAX_PPR_ITERS {
+        return Err(invalid(format!(
+            "max_iters must be at most {MAX_PPR_ITERS}"
+        )));
+    }
+    let (result, query) = match (&spec.query_text, &spec.coord, spec.hdc) {
+        (Some(text), None, None) => (
+            graph
+                .hybrid_rag_search_text(text, spec.top_k, crag_margin, alpha, max_iters)
+                .map_err(graph_rejection)?,
+            json!({"kind": "text", "projector": PROJECTOR_VERSION}),
+        ),
+        (None, Some(c), Some(hdc)) => (
+            graph
+                .hybrid_rag_search(
+                    &coord(graph, c)?,
+                    &hdc,
+                    spec.top_k,
+                    crag_margin,
+                    alpha,
+                    max_iters,
+                )
+                .map_err(graph_rejection)?,
+            json!({"kind": "coord"}),
+        ),
+        _ => {
+            return Err(invalid(
+                "graph_rag needs exactly one query: `query_text`, or `coord` with `hdc`",
+            ))
+        }
+    };
+    let summary = rag_summary(&result);
+    let HybridRagResult {
+        hits,
+        anchors,
+        stage1_candidates,
+        diffusion,
+    } = result;
+    let hits: Vec<Value> = hits
+        .into_iter()
+        .map(|h| {
+            json!({
+                "node": h.node_id,
+                "entity_id": h.entity_id,
+                "label": h.label,
+                "status": status_name(h.status),
+                "band": band_level(h.band),
+                "confidence": h.confidence,
+                "ppr_score": h.ppr_score,
+                "anchor_distance": h.anchor_distance,
+                "via": if h.anchor_distance.is_some() { "anchor" } else { "diffusion" },
+                "payload_digest": h.payload.as_ref().map(|_| digest_hex(&h.payload_digest)),
+                "timestamp_ns": h.payload.as_ref().map(|_| h.timestamp_ns),
+                "payload": h.payload,
+                "source_uri": h.source_uri,
+            })
+        })
+        .collect();
+    let anchors: Vec<Value> = anchors
+        .iter()
+        .map(|&(id, distance)| {
+            let mut v = node_json(graph, id);
+            v["distance"] = json!(distance);
+            v
+        })
+        .collect();
+    let diffusion = diffusion.map(|d| {
+        json!({
+            "alpha": d.alpha,
+            "max_iters": d.max_iters,
+            "tolerance": d.tolerance,
+            "iterations": d.iterations,
+            "residual": d.residual,
+            "converged": d.converged,
+        })
+    });
+    Ok((
+        summary,
+        json!({
+            "query": query,
+            "hits": hits,
+            "anchors": anchors,
+            "stage1_candidates": stage1_candidates,
+            "diffusion": diffusion,
+            "top_k": spec.top_k,
+            "crag_margin": crag_margin,
+        }),
+    ))
+}
+
+fn rag_summary(result: &HybridRagResult) -> String {
+    match &result.diffusion {
+        None => "graph_rag: no live node to recall".to_string(),
+        Some(d) => format!(
+            "graph_rag: {} hit(s) from {} anchor(s); PPR {} after {} iteration(s)",
+            result.hits.len(),
+            result.anchors.len(),
+            if d.converged {
+                "converged"
+            } else {
+                "NOT converged"
+            },
+            d.iterations
+        ),
+    }
 }
 
 fn ppr(graph: &LodGraph, spec: PprSpec) -> Result<(String, Value), Rejection> {

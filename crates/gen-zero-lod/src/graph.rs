@@ -16,6 +16,12 @@
 //! enters through `falsify_node` and leaves through `retract_falsification`; the
 //! next evolution moves every dependent accordingly, in either direction.
 //!
+//! `hybrid_rag_search` chains the three retrieval stages under one read lock:
+//! HDC Hamming prefilter, product-geodesic rerank, then PPR diffusion from the
+//! reranked anchors, and returns each hit with its payload and source. The
+//! `_text` variant first projects the query with the graph's own
+//! [`TextEmbeddingProjector`], the one deposits use.
+//!
 //! `create_checkpoint` / `rollback_checkpoint` restore the whole mutable graph state
 //! atomically. Nothing here touches a search tree: the planner's MCTS is sequential
 //! and has no virtual loss (see `gen-zero-planner/src/config.rs`).
@@ -24,6 +30,7 @@ use crate::error::LodError;
 use crate::manifold::{Epochs, GeometryParams, MixedCurvatureCoord, ProductManifold, Version};
 use crate::node::{hdc_hamming_distance_256, EpistemicStatus, LodBand, LodNode, ZoomDirection};
 use crate::ppr::compute_ppr_csr;
+use crate::projection::TextEmbeddingProjector;
 use arc_swap::ArcSwap;
 use gen_zero_core::GraphFactProvider;
 use parking_lot::{Mutex, RwLock};
@@ -637,6 +644,55 @@ pub struct PprRanking {
     pub converged: bool,
 }
 
+/// PPR convergence tolerance of [`LodGraph::hybrid_rag_search`].
+pub const HYBRID_PPR_TOLERANCE: f32 = 1e-6;
+
+/// One hit of [`LodGraph::hybrid_rag_search`], with its evidence.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RagHit {
+    pub node_id: u32,
+    pub entity_id: u64,
+    pub label: String,
+    pub band: LodBand,
+    pub status: EpistemicStatus,
+    /// The node's posterior confidence.
+    pub confidence: f32,
+    /// PPR relevance from the anchors; the ranking key.
+    pub ppr_score: f32,
+    /// Product-geodesic distance to the query when the node is an anchor;
+    /// `None` when diffusion alone reached it.
+    pub anchor_distance: Option<f32>,
+    pub payload: Option<String>,
+    pub source_uri: Option<String>,
+    pub timestamp_ns: u64,
+    pub payload_digest: [u8; 32],
+}
+
+/// The PPR run of one [`LodGraph::hybrid_rag_search`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct RagDiffusion {
+    pub alpha: f32,
+    pub max_iters: usize,
+    pub tolerance: f32,
+    pub iterations: usize,
+    pub residual: f32,
+    pub converged: bool,
+}
+
+/// Output of [`LodGraph::hybrid_rag_search`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct HybridRagResult {
+    /// Every anchor plus at most `top_k` diffusion-reached nodes, highest PPR
+    /// score first.
+    pub hits: Vec<RagHit>,
+    /// Stage 2 anchors `(node id, distance)`, closest first.
+    pub anchors: Vec<(u32, f32)>,
+    /// Live nodes kept by the Stage 1 Hamming prefilter.
+    pub stage1_candidates: usize,
+    /// `None` when there was no anchor, so no diffusion ran.
+    pub diffusion: Option<RagDiffusion>,
+}
+
 static NEXT_GRAPH_ID: AtomicU64 = AtomicU64::new(1);
 
 /// Dynamic LodGraph integrating multi-scale nodes, ticketed edge buffer,
@@ -651,6 +707,9 @@ pub struct LodGraph {
     /// The manifold's parameters in the f32 precision of the node chart:
     /// `[alpha_h, alpha_e, alpha_s]`, curvature, radius.
     metric: ([f32; 3], f32, f32),
+    /// Text projector onto this graph's ball. Node texts and query texts must
+    /// both go through it, so they share one curvature.
+    projector: TextEmbeddingProjector,
     state: RwLock<GraphState>,
     csr_snapshot: ArcSwap<CsrGraph>,
     ticket_counter: AtomicU64,
@@ -707,6 +766,7 @@ impl LodGraph {
             graph_id: NEXT_GRAPH_ID.fetch_add(1, Ordering::Relaxed),
             manifold,
             metric: (alphas, c, r),
+            projector: TextEmbeddingProjector::new(c)?,
             state: RwLock::new(GraphState::default()),
             csr_snapshot: ArcSwap::from_pointee(CsrGraph::empty()),
             ticket_counter: AtomicU64::new(1),
@@ -721,6 +781,13 @@ impl LodGraph {
         self.manifold.params()
     }
 
+    /// Project `text` to a coordinate of this graph's chart and a 256-bit HDC
+    /// fingerprint with the graph's [`TextEmbeddingProjector`]. Blank text is
+    /// [`LodError::EmptyInput`].
+    pub fn project_text(&self, text: &str) -> Result<(MixedCurvatureCoord, [u64; 4]), LodError> {
+        self.projector.project_text(text)
+    }
+
     /// Distance between two coordinates under this graph's geometry.
     fn distance(&self, a: &MixedCurvatureCoord, b: &MixedCurvatureCoord) -> Result<f32, LodError> {
         let (alphas, c, r) = self.metric;
@@ -730,8 +797,8 @@ impl LodGraph {
     /// Insert a node and return its id. Refuses a coordinate outside this
     /// graph's geometry, a prior outside [0, 1], a posterior that differs from
     /// the prior, a refutation mark on a node that is not `Falsified`, an unknown
-    /// parent, and an entity id that already has a node: the gate addresses
-    /// nodes by entity.
+    /// parent, a payload that breaks [`LodNode::validate_payload`], and an entity
+    /// id that already has a node: the gate addresses nodes by entity.
     ///
     /// An `Axiomatic` node gets confidence 1. A `Falsified` node is refuted by
     /// evidence: confidence 0, entity revoked.
@@ -743,6 +810,7 @@ impl LodGraph {
     /// [`Self::add_node`] under a held write lock.
     fn insert_node(&self, st: &mut GraphState, mut node: LodNode) -> Result<u32, LodError> {
         node.coord.to_point(&self.manifold)?;
+        node.validate_payload()?;
         if !(node.prior.is_finite() && (0.0..=1.0).contains(&node.prior)) {
             return Err(LodError::InvalidNode(format!(
                 "prior {} must lie in [0, 1]",
@@ -1086,6 +1154,18 @@ impl LodGraph {
         tolerance: f32,
     ) -> Result<PprRanking, LodError> {
         let st = self.state.read();
+        self.ppr_in(&st, seeds, alpha, max_iters, tolerance)
+    }
+
+    /// [`Self::query_ppr`] under a held read lock.
+    fn ppr_in(
+        &self,
+        st: &GraphState,
+        seeds: &[(u32, f32)],
+        alpha: f32,
+        max_iters: usize,
+        tolerance: f32,
+    ) -> Result<PprRanking, LodError> {
         let snapshot = self.csr_snapshot.load();
         let num_nodes = st.nodes.len();
         if snapshot.num_nodes() > num_nodes {
@@ -1151,6 +1231,22 @@ impl LodGraph {
         top_k: usize,
         crag_margin: f32,
     ) -> Result<Vec<(u32, f32)>, LodError> {
+        let st = self.state.read();
+        Ok(self
+            .recall_in(&st, query_coord, query_hdc, top_k, crag_margin)?
+            .0)
+    }
+
+    /// [`Self::two_stage_recall`] under a held read lock. Also returns the
+    /// number of Stage 1 candidates.
+    fn recall_in(
+        &self,
+        st: &GraphState,
+        query_coord: &MixedCurvatureCoord,
+        query_hdc: &[u64; 4],
+        top_k: usize,
+        crag_margin: f32,
+    ) -> Result<(Vec<(u32, f32)>, usize), LodError> {
         if top_k == 0 {
             return Err(LodError::InvalidQuery("top_k must be at least 1".into()));
         }
@@ -1160,7 +1256,6 @@ impl LodGraph {
             )));
         }
         query_coord.to_point(&self.manifold)?;
-        let st = self.state.read();
         let (nodes, revs) = (&st.nodes, &st.revocations);
 
         let mut candidates: Vec<(u32, u32)> = nodes
@@ -1175,7 +1270,7 @@ impl LodGraph {
             .collect();
 
         if candidates.is_empty() {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), 0));
         }
 
         let candidate_pool_size = top_k.saturating_mul(4).min(candidates.len());
@@ -1208,7 +1303,124 @@ impl LodGraph {
         }
 
         reranked.truncate(top_k);
-        Ok(reranked)
+        Ok((reranked, candidate_pool_size))
+    }
+
+    /// Three-stage hybrid retrieval over one consistent state (one read lock):
+    ///
+    /// 1. HDC prefilter: Hamming distance to every live node, keep the `4 * top_k`
+    ///    closest (see [`Self::two_stage_recall`]).
+    /// 2. Product-geodesic rerank of those under this graph's geometry, with the
+    ///    CRAG neighbor expansion when the top two are within `crag_margin`; the
+    ///    `top_k` closest are the anchors.
+    /// 3. Personalized PageRank over the committed CSR snapshot, seeded with
+    ///    each anchor at weight `1 / (1 + distance)` (normalized by PPR), teleport
+    ///    probability `ppr_alpha`, at most `ppr_iters` iterations, tolerance
+    ///    [`HYBRID_PPR_TOLERANCE`].
+    ///
+    /// Hits are every anchor plus the `top_k` best other live nodes with a
+    /// positive PPR score (at most `2 * top_k`), all ordered by PPR score,
+    /// highest first. A node no anchor reaches has score 0 and is left out.
+    /// Each hit carries its confidence, PPR score, anchor distance (none for a
+    /// node reached only by diffusion) and payload evidence.
+    ///
+    /// Falsified and revoked nodes never appear. A graph with no live node gives
+    /// no anchors, no hits and `diffusion: None`. Refused: `top_k` 0, a bad
+    /// `crag_margin`, `ppr_alpha` outside (0, 1), `ppr_iters` 0, and a query
+    /// coordinate outside this graph's geometry. PPR that stops at `ppr_iters`
+    /// before reaching the tolerance is reported in `diffusion.converged`.
+    pub fn hybrid_rag_search(
+        &self,
+        query_coord: &MixedCurvatureCoord,
+        query_hdc: &[u64; 4],
+        top_k: usize,
+        crag_margin: f32,
+        ppr_alpha: f32,
+        ppr_iters: usize,
+    ) -> Result<HybridRagResult, LodError> {
+        if !(ppr_alpha > 0.0 && ppr_alpha < 1.0) {
+            return Err(LodError::InvalidQuery(format!(
+                "ppr_alpha must lie in (0, 1), got {ppr_alpha}"
+            )));
+        }
+        if ppr_iters == 0 {
+            return Err(LodError::InvalidQuery(
+                "ppr_iters must be at least 1".into(),
+            ));
+        }
+        let st = self.state.read();
+        let (anchors, stage1_candidates) =
+            self.recall_in(&st, query_coord, query_hdc, top_k, crag_margin)?;
+        if anchors.is_empty() {
+            return Ok(HybridRagResult {
+                hits: Vec::new(),
+                anchors,
+                stage1_candidates,
+                diffusion: None,
+            });
+        }
+        let seeds: Vec<(u32, f32)> = anchors
+            .iter()
+            .map(|&(id, dist)| (id, 1.0 / (1.0 + dist)))
+            .collect();
+        let ranking = self.ppr_in(&st, &seeds, ppr_alpha, ppr_iters, HYBRID_PPR_TOLERANCE)?;
+        let mut expanded = 0;
+        let hits = ranking
+            .ranked
+            .iter()
+            .filter(|&&(id, score)| {
+                if anchors.iter().any(|a| a.0 == id) {
+                    return true;
+                }
+                let keep = score > 0.0 && expanded < top_k;
+                expanded += usize::from(keep);
+                keep
+            })
+            .map(|&(id, ppr_score)| {
+                let node = &st.nodes[id as usize];
+                RagHit {
+                    node_id: id,
+                    entity_id: node.entity_id,
+                    label: node.label.clone(),
+                    band: node.band,
+                    status: node.status,
+                    confidence: node.confidence,
+                    ppr_score,
+                    anchor_distance: anchors.iter().find(|a| a.0 == id).map(|a| a.1),
+                    payload: node.payload.clone(),
+                    source_uri: node.source_uri.clone(),
+                    timestamp_ns: node.timestamp_ns,
+                    payload_digest: node.payload_digest,
+                }
+            })
+            .collect();
+        Ok(HybridRagResult {
+            hits,
+            anchors,
+            stage1_candidates,
+            diffusion: Some(RagDiffusion {
+                alpha: ppr_alpha,
+                max_iters: ppr_iters,
+                tolerance: HYBRID_PPR_TOLERANCE,
+                iterations: ranking.iterations,
+                residual: ranking.residual,
+                converged: ranking.converged,
+            }),
+        })
+    }
+
+    /// [`Self::hybrid_rag_search`] for a text query, projected with
+    /// [`Self::project_text`]. Blank text is [`LodError::EmptyInput`].
+    pub fn hybrid_rag_search_text(
+        &self,
+        query_text: &str,
+        top_k: usize,
+        crag_margin: f32,
+        ppr_alpha: f32,
+        ppr_iters: usize,
+    ) -> Result<HybridRagResult, LodError> {
+        let (coord, hdc) = self.project_text(query_text)?;
+        self.hybrid_rag_search(&coord, &hdc, top_k, crag_margin, ppr_alpha, ppr_iters)
     }
 
     /// Record direct evidence against a node: it becomes `Falsified` and refuted,
@@ -2922,5 +3134,165 @@ mod tests {
         // c = (1 - beta) 0.5 + beta * 0 = 0.075, below theta_lo.
         assert!((summary_node.confidence - 0.075).abs() < 1e-5);
         assert_eq!(summary_node.status, EpistemicStatus::Falsified);
+    }
+
+    /// A text node through the graph's own projector, carrying its text.
+    fn text_node(graph: &LodGraph, text: &str, entity: u64) -> LodNode {
+        let (coord, hdc) = graph.project_text(text).unwrap();
+        LodNode::new(0, LodBand::Lod0Atomic, coord, text, entity)
+            .with_hdc_fingerprint(hdc)
+            .with_payload(text, Some(format!("doc://kb/{entity}")), 1_000 + entity)
+            .unwrap()
+    }
+
+    const PUMP: &str = "the reactor coolant pump failed during the night shift";
+    const LOG: &str = "maintenance ticket 4411 replaced seal kit on unit two";
+    const BUDGET: &str = "quarterly marketing budget for the new espresso brand";
+
+    #[test]
+    fn hybrid_text_search_returns_anchor_payload_and_diffused_neighbor() {
+        let graph = LodGraph::new();
+        let pump = graph.add_node(text_node(&graph, PUMP, 1)).unwrap();
+        let log = graph.add_node(text_node(&graph, LOG, 2)).unwrap();
+        let budget = graph.add_node(text_node(&graph, BUDGET, 3)).unwrap();
+        // Same text as the query, but refuted: must never come back.
+        let refuted = graph
+            .add_node(
+                text_node(&graph, "coolant pump failed during night shift", 4)
+                    .with_status(EpistemicStatus::Falsified),
+            )
+            .unwrap();
+        graph
+            .add_edge(pump, log, EdgeType::CausalTransition, 1.0)
+            .unwrap();
+        graph
+            .add_edge(refuted, budget, EdgeType::Semantic, 1.0)
+            .unwrap();
+        graph.flush_edges_to_csr().unwrap();
+
+        let result = graph
+            .hybrid_rag_search_text("coolant pump failed during night shift", 1, 0.0, 0.15, 200)
+            .unwrap();
+        assert_eq!(result.anchors.len(), 1);
+        assert_eq!(result.anchors[0].0, pump);
+        assert_eq!(result.stage1_candidates, 3);
+        let ids: Vec<u32> = result.hits.iter().map(|h| h.node_id).collect();
+        // The budget node is live but no anchor reaches it: score 0, left out.
+        assert_eq!(ids, vec![pump, log], "{result:?}");
+        let top = &result.hits[0];
+        assert_eq!(top.payload.as_deref(), Some(PUMP));
+        assert_eq!(top.source_uri.as_deref(), Some("doc://kb/1"));
+        assert_eq!(top.timestamp_ns, 1_001);
+        assert_eq!(
+            top.payload_digest,
+            *blake3::hash(PUMP.as_bytes()).as_bytes()
+        );
+        assert!(top.anchor_distance.is_some());
+        let neighbor = &result.hits[1];
+        assert_eq!(neighbor.anchor_distance, None);
+        assert_eq!(neighbor.payload.as_deref(), Some(LOG));
+        assert!(neighbor.ppr_score > 0.0 && neighbor.ppr_score < top.ppr_score);
+        let diffusion = result.diffusion.unwrap();
+        assert!(diffusion.converged, "{diffusion:?}");
+        assert_eq!(diffusion.tolerance, HYBRID_PPR_TOLERANCE);
+    }
+
+    #[test]
+    fn hybrid_search_equals_recall_then_ppr_from_the_same_anchors() {
+        let graph = LodGraph::new();
+        let ids: Vec<u32> = [PUMP, LOG, BUDGET]
+            .iter()
+            .enumerate()
+            .map(|(i, t)| graph.add_node(text_node(&graph, t, 10 + i as u64)).unwrap())
+            .collect();
+        graph
+            .add_edge(ids[0], ids[1], EdgeType::DependsOn, 2.0)
+            .unwrap();
+        graph
+            .add_edge(ids[1], ids[2], EdgeType::Semantic, 1.0)
+            .unwrap();
+        graph.flush_edges_to_csr().unwrap();
+        let (coord, hdc) = graph.project_text("reactor pump seal failed").unwrap();
+
+        let result = graph
+            .hybrid_rag_search(&coord, &hdc, 2, 0.0, 0.2, 300)
+            .unwrap();
+        let recall = graph.two_stage_recall(&coord, &hdc, 2, 0.0).unwrap();
+        assert_eq!(result.anchors, recall);
+        let seeds: Vec<(u32, f32)> = recall
+            .iter()
+            .map(|&(id, d)| (id, 1.0 / (1.0 + d)))
+            .collect();
+        let ppr = graph
+            .query_ppr(&seeds, 0.2, 300, HYBRID_PPR_TOLERANCE)
+            .unwrap();
+        for hit in &result.hits {
+            let expected = ppr.ranked.iter().find(|r| r.0 == hit.node_id).unwrap().1;
+            assert_eq!(hit.ppr_score, expected);
+        }
+        assert!(result
+            .hits
+            .windows(2)
+            .all(|w| w[0].ppr_score >= w[1].ppr_score));
+    }
+
+    #[test]
+    fn hybrid_search_fails_closed_on_bad_input_and_is_empty_on_an_empty_graph() {
+        let graph = LodGraph::new();
+        let empty = graph
+            .hybrid_rag_search_text(PUMP, 3, 0.0, 0.15, 50)
+            .unwrap();
+        assert!(empty.hits.is_empty() && empty.anchors.is_empty());
+        assert_eq!(empty.diffusion, None);
+
+        graph.add_node(text_node(&graph, PUMP, 1)).unwrap();
+        for text in ["", "   ", "?!"] {
+            assert!(matches!(
+                graph.hybrid_rag_search_text(text, 3, 0.0, 0.15, 50),
+                Err(LodError::EmptyInput(_))
+            ));
+        }
+        for (alpha, iters) in [(0.0, 50), (1.0, 50), (f32::NAN, 50), (0.15, 0)] {
+            assert!(matches!(
+                graph.hybrid_rag_search_text(PUMP, 3, 0.0, alpha, iters),
+                Err(LodError::InvalidQuery(_))
+            ));
+        }
+        assert!(graph
+            .hybrid_rag_search_text(PUMP, 0, 0.0, 0.15, 50)
+            .is_err());
+        assert!(graph
+            .hybrid_rag_search_text(PUMP, 1, -1.0, 0.15, 50)
+            .is_err());
+    }
+
+    #[test]
+    fn insert_refuses_a_payload_whose_digest_was_tampered() {
+        let graph = LodGraph::new();
+        let mut n = text_node(&graph, PUMP, 1);
+        n.payload = Some("the pump is fine".into());
+        assert!(matches!(
+            graph.add_node(n),
+            Err(LodError::InvalidPayload(_))
+        ));
+        assert_eq!(graph.node_count(), 0);
+        let mut n = node("bare", 2);
+        n.source_uri = Some("doc://x".into());
+        assert!(graph.add_node(n).is_err());
+    }
+
+    #[test]
+    fn rollback_drops_the_payload_nodes_it_removes() {
+        let graph = LodGraph::new();
+        graph.add_node(text_node(&graph, PUMP, 1)).unwrap();
+        let checkpoint = graph.create_checkpoint();
+        graph.add_node(text_node(&graph, LOG, 2)).unwrap();
+        graph.rollback_checkpoint(&checkpoint).unwrap();
+        let result = graph.hybrid_rag_search_text(LOG, 2, 0.0, 0.15, 50).unwrap();
+        assert!(result
+            .hits
+            .iter()
+            .all(|h| h.payload.as_deref() != Some(LOG)));
+        assert_eq!(graph.node_for_entity(2), None);
     }
 }
