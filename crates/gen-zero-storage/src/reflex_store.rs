@@ -467,8 +467,10 @@ fn decompress_f16(compressed: &[u8], expected_len: usize) -> Result<Vec<f32>, St
         )));
     }
     Ok(raw
-        .chunks_exact(2)
-        .map(|c| half::f16::from_le_bytes([c[0], c[1]]).to_f32())
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|c| half::f16::from_le_bytes(*c).to_f32())
         .collect())
 }
 
