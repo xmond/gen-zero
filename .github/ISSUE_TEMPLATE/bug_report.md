@@ -44,4 +44,4 @@ Paste relevant cargo test / runtime logs or RUST_BACKTRACE=1 output here.
 ```
 
 ## Additional Context
-Add any other context about the problem here (e.g. MCP host environment: Claude Desktop, Cursor, Custom Agent).
+Add any other context about the problem here (e.g. MCP host environment: Cursor, Codex, Antigravity, Custom Agent).

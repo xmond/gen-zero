@@ -20,7 +20,7 @@ q9b_diff_compact (8192-D) x {linear_probe, adapter_formulation_a, supcon} with s
 | P2_layer_dynamics_diff | passed with real accuracy: this IS the 76.06% phase4 result |
 | P3_folded_heads | engineering done + unit tests pass; accuracy not evaluated (S8:445) |
 | P4_dual_source_fusion | engineering done + unit tests pass; accuracy not evaluated (S8:444-445), Gemma features never extracted |
-| P5_combined_ablation | this report: only P0+P2 have a real jointly-evaluated cell; P1/P3/P4 cannot be honestly combined into it yet (S7.1: '不要全组合盲搜...仅组合内层训练验证通过者' -- P1/P3/P4 never ran the inner nested-CV/1-SE ladder on real data at all) |
+| P5_combined_ablation | this report: only P0+P2 have a real jointly-evaluated cell; P1/P3/P4 cannot be honestly combined into it yet (S7.1: 'do not blind-search the full combination grid ... only combine axes that passed inner-layer training validation' -- P1/P3/P4 never ran the inner nested-CV/1-SE ladder on real data at all) |
 
 P0 leakage-gate spot check: 13 tasks, all_clean=True, nonzero_overlap=[]
 
@@ -31,8 +31,8 @@ P0 leakage-gate spot check: 13 tasks, all_clean=True, nonzero_overlap=[]
 | Cell | Status | Detail |
 |---|---|---|
 | q9b_diff_compact_8192d | evaluated | synthesize_layer_diff_features.py:15 compact = [h24; h24-h16], 8192-D; evidence: {"file": "benchmarks/results/01png_sota_ensemble_report_phase4.json", "key": "command (--features-dir ...q9b_diff_compact) and tasks.<task>.leakage_gate.q9b_diff_16_24_compact", "command_string": "D:\\genz\\benchmarks\\suites\\evaluate_full_13_grand_scorecard.py --features-dir D:\\genz\\features_uncap_v1\\q9b_diff_compact\\features --ranks 32,64,128 --device cuda --results-dir D:\\genz\\benchmarks\\results_phase4_compact"} |
-| q9b_mid_8192d | not_evaluated | Spec 20 S8 '未验证'/'未完成' (docs/zero/20-tri...; unit tests: n/a |
-| q9b_diff_full_12288d | not_evaluated | Spec 20 S8 '未验证'/'未完成' (docs/zero/20-tri...; unit tests: n/a |
+| q9b_mid_8192d | not_evaluated | Spec 20 S8 'not verified'/'not done' (docs/zero/20-tri...; unit tests: n/a |
+| q9b_diff_full_12288d | not_evaluated | Spec 20 S8 'not verified'/'not done' (docs/zero/20-tri...; unit tests: n/a |
 
 ### axis2_head
 
@@ -41,21 +41,21 @@ P0 leakage-gate spot check: 13 tasks, all_clean=True, nonzero_overlap=[]
 | linear_probe | evaluated | evidence: {"file": "benchmarks/results/01png_sota_ensemble_report_phase4.json", "key": "aggregate.macro_avg_13"} |
 | adapter_formulation_a | evaluated | evidence: {"file": "benchmarks/results/01png_sota_ensemble_report_phase4.json", "key": "aggregate.macro_avg_13"} |
 | supcon | evaluated | evidence: {"file": "benchmarks/results/01png_sota_ensemble_report_phase4.json", "key": "aggregate.macro_avg_13"} |
-| adapter_formulation_b | not_evaluated | Spec 20 S8 '未验证'/'未完成' (docs/zero/20-tri...; unit tests: 44 passed, 14 warnings in 8.63s |
+| adapter_formulation_b | not_evaluated | Spec 20 S8 'not verified'/'not done' (docs/zero/20-tri...; unit tests: 44 passed, 14 warnings in 8.63s |
 
 ### axis3_fusion
 
 | Cell | Status | Detail |
 |---|---|---|
 | single_qwen | evaluated | evidence: {"file": "benchmarks/results/01png_sota_ensemble_report_phase4.json", "key": "aggregate.macro_avg_13"} |
-| dual_manifold_qwen_gemma | not_evaluated | Spec 20 S8 '未验证'/'未完成' (docs/zero/20-tri...; unit tests: 20 passed, 4 warnings in 6.37s |
+| dual_manifold_qwen_gemma | not_evaluated | Spec 20 S8 'not verified'/'not done' (docs/zero/20-tri...; unit tests: 20 passed, 4 warnings in 6.37s |
 
 ### pooling_axis
 
 | Cell | Status | Detail |
 |---|---|---|
 | uniform_mean | evaluated_implicitly | The 13-task phase4 evaluation uses cached mean/last-token pooling baked into the q9b_diff_16_24_compact feature cache itself (synthesize_layer_diff_features.py), not a separate pooling module call; no task in the 13-task suite exercises >1536 tokens, so this is not a stress test of pooling choice.; evidence: {"file": "benchmarks/results/01png_sota_ensemble_report_phase4.json", "key": "aggregate.macro_avg_13"} |
-| partition_anchor_pooling | not_evaluated | Spec 20 S8 '未验证'/'未完成' (docs/zero/20-tri...; unit tests: 38 passed in 1.69s |
+| partition_anchor_pooling | not_evaluated | Spec 20 S8 'not verified'/'not done' (docs/zero/20-tri...; unit tests: 38 passed in 1.69s |
 
 ## 3. Per-task real scorecard (13 tasks, q9b_diff_compact + 1-SE selection)
 
@@ -134,4 +134,4 @@ q9b_diff_compact (8192-D) x {linear_probe, adapter_formulation_a, supcon} with s
 
 Not yet combinable: q9b_mid_8192d, q9b_diff_full_12288d, adapter_formulation_b, dual_manifold_qwen_gemma, partition_anchor_pooling
 
-Each has real, passing algorithmic-correctness unit tests (see unit_test_evidence) but was never run through the nested-CV training/selection ladder on the real 13-task data. Fabricating an accuracy delta for them would violate Spec 20 S7.2's own instruction ('推理路径不根据...伪装双源成功') and this task's anti-cheating mandate. Real P5 numbers for these axes require the 未完成 work S8:451 names: GPU extraction, CPU training, and a new nested-CV test evaluation -- none of which this report-generation script performs.
+Each has real, passing algorithmic-correctness unit tests (see unit_test_evidence) but was never run through the nested-CV training/selection ladder on the real 13-task data. Fabricating an accuracy delta for them would violate Spec 20 S7.2's own instruction ('do not fake dual-source success in the inference path based on ...') and this task's anti-cheating mandate. Real P5 numbers for these axes require the not-done work S8:451 names: GPU extraction, CPU training, and a new nested-CV test evaluation -- none of which this report-generation script performs.

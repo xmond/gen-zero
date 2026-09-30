@@ -206,7 +206,7 @@ class CounterfactualConstraintVerifier:
     def _exclude_along(residual: ArrayLike, reference: ArrayLike):
         """Project ``residual`` onto the orthogonal complement of ``reference``.
 
-        This is the exclusion (排异) core: the component of ``residual`` collinear
+        This is the exclusion core: the component of ``residual`` collinear
         with the shared ``reference`` drift is removed so the distinguishing
         direction is exposed. Returns ``(excluded_residual, cos^2_penalty)``.
         """

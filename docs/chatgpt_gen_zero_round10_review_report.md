@@ -1,28 +1,28 @@
-ChatGPT 说：
+ChatGPT says:
 
-嗯,好的,让我想一想.
+Hmm, okay, let me think about this.
 
-第十轮复核裁决：【NO-GO，暂缓生产发布】
+Round 10 Review Verdict: [NO-GO, Production Release Deferred]
 
-这次整改确实落地了：R9-H01 描述符问题可以正式关闭，R9-V01 审查版本不一致问题也可以关闭。
+This round's remediation has genuinely landed: the R9-H01 descriptor issue can be formally closed, and the R9-V01 review-version-mismatch issue can also be closed.
 
-但目前仍不能核发生产级 GO。剩余原因不是再次发现上轮字符串问题，而是：**指定提交尚无成功的远端 CI 记录；Release 只依赖 Python 测试，没有依赖 Rust 质量检查；安全验证的部分声明仍与实际实现不一致。**这些都是上一轮放行条件的未完成部分。
+However, a production-grade GO still cannot be issued at this time. The remaining reasons are not a rediscovery of the prior round's string-handling issue; rather: **the designated commit has no successful remote CI record yet; the Release workflow depends only on the Python tests, not on the Rust quality checks; and some of the safety-verification claims still do not match the actual implementation.** These are all unfinished parts of the prior round's release-gate conditions.
 
-一、四项放行条件的复核结果
-放行条件	本轮核验结果	状态
-描述符契约完整闭环	独立运行仓库相关测试 27 项通过；上轮证据包的原始测试 7 项通过	通过，关闭 R9-H01
-R8/R9 回归进入必跑门禁	CI 已改为运行整个 python/gen_zero/tests 目录；但实际 CI 尚未成功执行，真实 CP-SAT 测试依赖也未明确装配	配置整改接受，执行验收未完成
-发布绑定同一份成功验收的代码与制品	Commit、Tree、main 一致；Python → 构建 → Docker 的依赖成立，但 Rust 检查不在发布依赖链中	版本问题关闭，发布门禁部分完成
-生产承诺与证据严格相符	局部导数和单次求解迭代的说明已补充；CP-SAT 验证范围、旧梯度承诺及内存测量版本口径仍需对齐	部分完成
+I. Review Results for the Four Release-Gate Conditions
+Release-Gate Condition	This Round's Verification Result	Status
+Descriptor contract fully closed	Independently ran 27 repository-related tests, all passed; the original 7 tests from the prior round's evidence package also passed	Passed; R9-H01 closed
+R8/R9 regression added to the mandatory gate	CI has been changed to run the entire python/gen_zero/tests directory; however, the actual CI run has not yet completed successfully, and the real CP-SAT test dependency is not explicitly provisioned	Configuration remediation accepted; execution verification not yet complete
+Release bound to the same successfully verified code and artifacts	Commit, Tree, and main are consistent; the Python to build to Docker dependency chain holds, but the Rust checks are not part of the release dependency chain	Version-consistency issue closed; release gate partially complete
+Production claims strictly match the evidence	Explanations for local derivatives and single-solve iterations have been added; the CP-SAT verification scope, the legacy gradient claim, and the memory-measurement version alignment still need reconciliation	Partially complete
 
-下面分别说明哪些已经验证通过，以及剩余事项的具体证据。
+The sections below explain which items have been verified and passed, along with the specific evidence for the remaining open items.
 
-二、已经正式接受的整改
-1. Commit、Tree 与远端 main 完全一致
+II. Remediations Formally Accepted
+1. Commit, Tree, and the Remote main Branch Are Fully Consistent
 
-本次通过 GitHub 连接器读取的远端事实为：
+The remote facts retrieved via the GitHub connector this round are:
 
-纯文本
+Plain text
 Repository: xmond/gen-zero
 Branch:     main
 
@@ -32,40 +32,40 @@ Commit:
 Tree:
 7b119f7ffcace151282e9da638d6d7a890ebc605
 
-提交对象中的 Tree 与 main 返回的信息一致。本轮不存在使用旧提交审查新 main 的问题，R9-V01 关闭。
+The Tree recorded in the commit object matches the information returned for main. This round did not exhibit the issue of reviewing the new main against a stale commit; R9-V01 is closed.
 
-2. R9-H01：不是仅凭代码检查，而是独立复验通过
+2. R9-H01: Verified Through Independent Re-Verification, Not Just a Code Read
 
-我读取了指定提交的 descriptor.py、R8-H01 测试和 R9-H01 测试，重建为本地文件，并核对 Git Blob SHA：
+I read descriptor.py, the R8-H01 tests, and the R9-H01 tests from the designated commit, reconstructed them as local files, and verified their Git blob SHAs:
 
-文件	核对一致的 Git Blob SHA
+File	Verified Git Blob SHA (Match)
 descriptor.py	89613e716bd1ad427023bc24064a72a2a61cf022
 test_r8_h01_str_subclass_digest_roundtrip.py	a4e95a2f888a7d9956f0e83a7b0f144667456869
 test_r9_descriptor_canonical_domain.py	5dec87e9e884ba7d612a9fc44d8d01f86f2f8ca8
 
-被测文件与远端对应文件逐字节一致。源码中确实存在 _canon_str()、顶层字符串与权限元素规范化、frozenset 递归处理，以及字符串摘要标签统一。
+The tested files are byte-for-byte identical to their remote counterparts. The source code does contain _canon_str(), normalization of top-level strings and permission elements, recursive frozenset handling, and unified string-digest tagging.
 
-本轮实际执行结果：
+Actual execution results for this round:
 
-纯文本
-仓库 R8-H01 8 项 + 仓库 R9-H01 19 项：
+Plain text
+Repository R8-H01: 8 items + Repository R9-H01: 19 items:
 27 passed in 5.93s
 
-上轮证据包中的原始审查员测试：
+Original reviewer tests from the prior round's evidence package:
 7 passed in 0.05s
 
-执行环境为 CPython 3.13.5 / NumPy 2.3.5 / pytest 9.0.2。原始审查员文件也已与上轮 ZIP 中的文件逐字节比较，没有删减用例或改动断言。仓库 R8 测试中的六种 PYTHONHASHSEED 子进程检查随上述测试通过。
+Execution environment: CPython 3.13.5 / NumPy 2.3.5 / pytest 9.0.2. The original reviewer files were also compared byte-for-byte against the files in the prior round's ZIP archive; no test cases were removed and no assertions were altered. The six PYTHONHASHSEED subprocess checks in the repository's R8 tests passed alongside the tests above.
 
-这里的验证范围是模块级隔离测试，不等同于完整包安装或整个 CI 矩阵运行；但它足以确认：上一轮已复现的字符串类型摘要漂移问题，在这些对应入口上已修复。
+The scope of this verification is module-level isolated testing, which is not equivalent to a full package install or a complete CI matrix run; however, it is sufficient to confirm that the string-type digest drift issue reproduced in the prior round has been fixed at these corresponding entry points.
 
-因此，R9-H01 正式关闭，不需要继续围绕该问题添加补丁。
+Therefore, R9-H01 is formally closed, and no further patches are needed for this issue.
 
-三、R9-G01：门禁配置改善了，但生产发布闭环还没有完成
-1. 指定提交的远端 CI 仍然是 failure
+III. R9-G01: Gate Configuration Has Improved, but the Production-Release Loop Is Not Yet Closed
+1. The Remote CI for the Designated Commit Is Still a Failure
 
-本次查到的同一提交 CI 记录为：
+The CI record found for this same commit this round is:
 
-纯文本
+Plain text
 Workflow:   CI
 Run number: 26
 Run ID:     36527425281
@@ -73,97 +73,97 @@ Head SHA:   34a09bdd3c529c4f452336c16dc389d63c405111
 Status:     completed
 Conclusion: failure
 
-该运行创建于 2026 年 9 月 29 日 14:42:21，日本时间，更新时间为 14:42:27。这不是上一轮旧提交的失败记录。
+This run was created at 14:42:21 on September 29, 2026, Japan time, and last updated at 14:42:27. This is not a stale failure record from the prior round's old commit.
 
-进一步检查，七个任务均返回：
+Further inspection shows all seven jobs returned:
 
-纯文本
+Plain text
 conclusion: failure
 steps: []
 runner_id: 0
 runner_name: ""
 
-其中包括 Python 3.10、Python 3.11、Rustfmt、Clippy、Rust 测试和 MSRV。Python 3.11 任务的日志读取返回了 404 BlobNotFound。
+These include Python 3.10, Python 3.11, Rustfmt, Clippy, Rust tests, and MSRV. Reading the log for the Python 3.11 job returned 404 BlobNotFound.
 
-**这些证据不能证明代码测试断言失败。**当前没有可用的执行步骤和日志，失败根因尚不能确定，也不能擅自归因为计费、配额或依赖安装问题。
+**This evidence does not prove that a code test assertion failed.** No execution steps or logs are currently available, so the root cause of the failure cannot yet be determined, and it must not be attributed to billing, quota, or dependency-installation issues without confirmation.
 
-但可以确定的是：
+What can be confirmed, however, is:
 
-截至本次读取，没有取得指定提交成功完成远端质量验收的证据。
+As of this reading, there is no evidence that the designated commit has successfully completed remote quality verification.
 
-你提供的 177 passed in 65.43s 是开发团队报告的本地综合套件结果；本轮没有独立复跑该集合，也没有取得其完整命令、测试节点清单和日志，不能据此替代目录级 CI 的成功记录。
+The `177 passed in 65.43s` you provided is a local comprehensive-suite result reported by the development team; this round did not independently re-run that suite, and its complete command, list of test nodes, and logs were not obtained, so it cannot substitute for a successful directory-level CI record.
 
-2. 回归测试纳入目录级执行——这项代码整改接受
+2. Regression Tests Are Now Included in Directory-Level Execution: This Code Remediation Is Accepted
 
-当前 CI 的确已经改为：
+The current CI has indeed been changed to:
 
 Bash
 python -m pytest -ra --strict-config --strict-markers python/gen_zero/tests
 
-原先显式列举少量文件的问题已修正。对于“让该目录中的 R8/R9 测试进入持续回归”这一配置要求，我接受此次整改。
+The previous issue of explicitly enumerating only a small number of files has been fixed. For the configuration requirement of "bringing the R8/R9 tests in this directory into continuous regression," I accept this remediation.
 
-不过，必须区分两个验收结论：
+However, two distinct verification conclusions must be kept separate:
 
-纯文本
-测试已写入必跑命令：已确认。
-必跑命令在发布矩阵上全部执行成功：尚未确认。
+Plain text
+Tests have been added to the mandatory-run command: confirmed.
+The mandatory-run command has executed successfully across the full release matrix: not yet confirmed.
 
-后者需要解决当前 Actions 运行问题并取得真实执行结果，不能只靠 YAML 中出现了命令。
+The latter requires resolving the current Actions run failure and obtaining real execution results; the mere presence of the command in the YAML is not sufficient.
 
-3. needs: [test] 有效，但它只依赖 Release 内的 Python 任务
+3. `needs: [test]` Is Valid, but It Only Depends on the Python Job Within Release
 
-当前 release.yml 的依赖关系确实是：
+The current dependency chain in release.yml is indeed:
 
-纯文本
-Release 内的 Python test（3.10 / 3.11）
+Plain text
+Python test within Release (3.10 / 3.11)
                     ↓
                build-binary
                     ↓
               docker-publish
 
-这里没有忽略你的修复：Python 测试失败或跳过，会阻止下游依赖任务运行；这是 needs 的正常语义。 
+Your fix is not being disregarded here: if the Python tests fail or are skipped, the downstream dependent jobs are blocked from running; this is the normal semantics of `needs`. 
 GitHub Docs
 
-剩余缺口在于：release.yml 的 test，不是 ci.yml 中同名的 Rust 测试任务。
+The remaining gap is that the `test` job in release.yml is not the same as the identically named Rust test job in ci.yml.
 
-当前 Release 文件没有要求 Rustfmt、Clippy、Rust workspace tests 或 MSRV 成功。它也没有验证另一个 CI 工作流在同一提交上的整体成功状态。因此，新增依赖证明了“发布受到 Python 回归保护”，尚未证明“发布受到现有完整质量门禁保护”。
+The current Release file does not require Rustfmt, Clippy, Rust workspace tests, or MSRV to succeed. Nor does it verify the overall success status of the other CI workflow on the same commit. Therefore, the newly added dependency proves that "the release is protected by Python regression," but it has not yet proven that "the release is protected by the full existing quality gate."
 
-这里不需要重新设计发布系统。最直接的修复是：**将现有质量检查提取为可复用工作流，或在 Release 中明确纳入现有 Rust 检查，让构建发布依赖完整质量任务。**不要误以为两个 YAML 使用相同 job ID，就建立了跨工作流依赖。
+There is no need to redesign the release system here. The most direct fix is: **extract the existing quality checks into a reusable workflow, or explicitly incorporate the existing Rust checks into Release, so that the build and release depend on the complete set of quality jobs.** Do not assume that two YAML files sharing the same job ID establishes a cross-workflow dependency.
 
-4. 真实 CP-SAT 路径没有被测试安装配置明确保证
+4. The Real CP-SAT Path Is Not Explicitly Guaranteed by the Test Install Configuration
 
-还有一处与此次安全验证承诺直接相关的装配缺口：
+There is also a provisioning gap directly related to this round's safety-verification claim:
 
-纯文本
-CI / Release 安装：
+Plain text
+CI / Release install:
 ./python[dev] + pyyaml
 
-ORTools 声明位置：
+OR-Tools declared location:
 project.optional-dependencies.all
 
-ortools 不在基础依赖或 dev 中，当前安装命令也没有显式安装它。
+`ortools` is not in the base dependencies or the `dev` extra, and the current install command does not explicitly install it either.
 
-而求解器在 OR-Tools 缺失时，可以返回明确标记的 ORTOOLS_UNAVAILABLE_FALLBACK；这个分支仍可能具有 is_safe=True。因此，仅有安全相关单测通过，或者仅断言 is_safe，不能证明真实 CP-SAT 求解已经受到验收。
+When OR-Tools is missing, the solver can return the explicitly tagged `ORTOOLS_UNAVAILABLE_FALLBACK`; this branch can still have `is_safe=True`. Therefore, having only the safety-related unit tests pass, or only asserting `is_safe`, does not prove that the real CP-SAT solve path has been verified.
 
-若生产继续声明 CP-SAT 验证能力，应当增加一个显式安装 OR-Tools 的正向门禁，使用非平凡候选集合，并验证真实求解状态、未使用 fallback，以及最终输出动作的独立可行性。缺依赖路径可以继续单独测试，但不能替代真实求解路径。
+If production continues to claim CP-SAT verification capability, a positive gate should be added that explicitly installs OR-Tools, uses a non-trivial candidate set, and verifies the real solve status, confirms the fallback was not used, and independently checks the feasibility of the final output action. The missing-dependency path can continue to be tested separately, but it cannot substitute for the real solve path.
 
-四、R9-S01：新增限定说明方向正确，但仍有声明未对齐
-1. 局部活动面与单次求解迭代：接受这部分修正
+IV. R9-S01: The New Scoping Language Is Headed in the Right Direction, but Some Claims Are Still Misaligned
+1. Local Active Manifold vs. a Single Solve's Iterations: This Correction Is Accepted
 
-新说明已经明确区分了：
+The new explanation now clearly distinguishes between:
 
-固定活动面上的局部导数与全域光滑性，以及一次求解中的 200/500 次迭代与环境轨迹中的连续控制步骤。这一修正符合上一轮要求。
+the local derivative on a fixed active manifold versus global smoothness, and the 200/500 iterations within a single solve versus the successive control steps in an environment trajectory. This correction meets the requirement from the prior round.
 
-但同一文件开头仍保留：
+However, the same file's opening still retains:
 
-纯文本
+Plain text
 providing smooth non-zero gradients ||∇z|| <= 10.0
 
-实际 backward 是局部切空间投影，没有保证输出梯度非零，也没有把梯度范数限制在 10。
+The actual backward pass is a local tangent-space projection; it does not guarantee that the output gradient is non-zero, nor does it bound the gradient norm to 10.
 
-这可以直接从数学表达看出来：固定活动面的正交投影记作 
+This can be seen directly from the math: denote the orthogonal projection onto the fixed active manifold as 
 𝑃
-P，反向传播为
+P, and the backward pass as
 
 𝑔
 i
@@ -185,7 +185,7 @@ out
 
 .
 
-它能给出的对应范数关系是
+The corresponding norm relation it yields is
 
 ∥
 𝑃
@@ -222,15 +222,15 @@ out
 
 ,
 
-而不是与上游梯度无关的固定上限 10。投影也完全可能得到零向量。
+rather than a fixed upper bound of 10 that is independent of the upstream gradient. The projection can also easily yield the zero vector.
 
-建议删除旧承诺，不要为了维持文案而额外截断梯度；那反而会改变所声称的精确导数。
+Recommend removing the old claim rather than additionally clipping the gradient just to preserve the wording; doing so would in fact change the very "exact derivative" being claimed.
 
-2. CP-SAT 的新增说明仍然超出了实际调用范围
+2. The New CP-SAT Explanation Still Overstates the Actual Call Scope
 
-新文档写成了：通过 CP-SAT 对候选 one-hot 动作进行针对 A_sat*x<=b 的离散可行性验证。
+The new documentation states: candidate one-hot actions undergo discrete feasibility verification against A_sat*x<=b via CP-SAT.
 
-但当前实际代码仍是：
+But the current actual code is still:
 
 Python
 discrete_feasible = np.all(
@@ -238,11 +238,11 @@ discrete_feasible = np.all(
     axis=0,
 )
 
-这是 NumPy 侧依据原始约束执行的离散可行性检查。随后传给 CP-SAT 的 util_dict 包含全部候选，而 forbidden 来自 active_mask 的特定判断，并不是直接由完整的 discrete_feasible 掩码生成。
+This is a discrete feasibility check performed on the NumPy side against the original constraints. The `util_dict` subsequently passed to CP-SAT contains all candidates, while `forbidden` comes from a specific judgment on `active_mask`, and is not generated directly from the full `discrete_feasible` mask.
 
-求解器构建的模型则是在经过自身过滤的候选集合上，添加 exactly-one 约束并优化效用；它没有接收原始 A_sat、b_sat。
+The model the solver builds adds an exactly-one constraint and optimizes utility over a candidate set that has already been filtered by the solver itself; it does not receive the raw `A_sat`, `b_sat`.
 
-此外，当前返回字段仍然是：
+In addition, the field currently returned is still:
 
 Python
 cpsat_hard_verified = (
@@ -251,33 +251,33 @@ cpsat_hard_verified = (
     and discrete_verified
 )
 
-这里没有绑定 cpsat_res.selected_action 与最终投影的 argmax；求解器的单候选分支还可以不调用 CP-SAT，直接返回 DETERMINISTIC_SAFE_SOLVED，同时 fallback_used=False。所以，“未 fallback”也不能单独代表“已经执行 CP-SAT”。
+This does not bind `cpsat_res.selected_action` to the argmax of the final projection; the solver's single-candidate branch can also skip calling CP-SAT entirely and return `DETERMINISTIC_SAFE_SOLVED` directly while `fallback_used=False`. So "fallback was not used" cannot, on its own, stand for "CP-SAT was actually executed."
 
-**这不是本轮已经复现了不安全动作。**NumPy 侧的离散可行性筛选仍然存在，不能否定它的作用。这里尚未闭环的是：验证来源、验证对象和对外证明字段之间的对应关系。
+**This is not saying that this round reproduced an unsafe action.** The NumPy-side discrete feasibility filtering is still in place, and its role should not be dismissed. What remains open here is the correspondence between the verification source, the verification target, and the externally reported proof field.
 
-最小整改可以复用现有逻辑：将完整离散可行性掩码传入候选门禁，明确记录是否实际执行 CP-SAT，并将验证对象绑定到最终输出动作。另一条可接受路径是缩减对外契约，明确区分“NumPy 离散可行性检查通过”与“CP-SAT 求解及验证通过”，不再将两者合并表述为同一种证明。
+A minimal remediation can reuse the existing logic: pass the full discrete-feasibility mask into the candidate gate, explicitly record whether CP-SAT was actually executed, and bind the verification target to the final output action. An alternative acceptable path is to narrow the external contract, clearly distinguishing "NumPy discrete feasibility check passed" from "CP-SAT solve and verification passed," instead of continuing to merge the two into a single claim of proof.
 
-3. 内存测量版本：源码是 CPython 3.11，不是 3.11/3.13
+3. Memory-Measurement Version: The Source States CPython 3.11, Not 3.11/3.13
 
-指定版本的 pickle_budget.py 明确写的是：
+The designated version of pickle_budget.py explicitly states:
 
-常数基于 CPython 3.11 测量，其他 CPython 小版本尚未重新验证。
+Constants measured on CPython 3.11; other CPython minor versions have not been re-verified.
 
-这比申请中的“CPython 3.11/3.13 下实测”更保守，也更明确。应当以源码和实际测量记录为准。
+This is more conservative and more explicit than the submission's claim of "measured on CPython 3.11/3.13." The source code and the actual measurement record should take precedence.
 
-这里不要求为了发布而强行扩展到 3.13：可以将当前已验证内存预算的运行时限定在 3.11；需要宣称 3.13 支持时，再提供相应测量。本轮在 3.13 上运行的描述符测试，不构成内存预算验证证据。
+There is no requirement here to force an extension to 3.13 for the sake of release: the runtime for the currently verified memory budget can be scoped to 3.11, and the corresponding measurements can be supplied later if 3.13 support needs to be claimed. This round's descriptor tests, which ran on 3.13, do not constitute evidence for memory-budget verification.
 
-五、剩余放行事项与最终结论
+V. Remaining Release Items and Final Verdict
 
-本轮不新增一套架构要求。剩余工作可以集中为以下三项：
+This round does not add a new set of architectural requirements. The remaining work can be consolidated into the following three items:
 
-剩余事项	完成标准
-取得实际成功的质量验收	最终发布 SHA 的 CI 完整执行成功，保存执行命令、环境、测试集合和结果；查明当前无步骤、无日志的失败原因。
-补齐发布依赖与真实求解测试	Release 依赖现有 Python 和 Rust 质量检查；继续声明 CP-SAT 能力时，存在真实 OR-Tools 路径的正向验收，而非只验证 fallback。
-对齐安全证据与声明	删除残留的全域光滑、非零和固定梯度上限承诺；明确 CP-SAT 验证来源与输出动作绑定；统一内存测量版本口径。
+Remaining Item	Completion Criterion
+Obtain an actual successful quality verification	The CI for the final release SHA completes fully and successfully; retain the execution command, environment, test set, and results; determine the root cause of the current no-steps, no-logs failure.
+Complete the release dependency chain and the real-solve test	Release depends on the existing Python and Rust quality checks; if CP-SAT capability continues to be claimed, a positive verification of the real OR-Tools path must exist, not merely a verification of the fallback.
+Align the safety evidence with the claims	Remove the remaining claims of global smoothness, non-zero gradients, and a fixed gradient upper bound; make explicit the CP-SAT verification source and its binding to the output action; unify the memory-measurement version statement.
 
-本轮没有执行完整 Rust 工作区、你方报告的 177 项综合集合、检查点内存峰值实验或具身设备闭环测试，不能将这些项目写成本轮已通过。
+This round did not execute the full Rust workspace, the 177-item comprehensive suite you reported, the checkpoint peak-memory experiment, or the embodied-device closed-loop test; these items must not be written up as having passed this round.
 
-最终裁决：R9-H01、R9-V01 正式关闭；R9-G01、R9-S01 尚未完整关闭，因此 34a09bdd… / 7b119f7f… 暂不签发生产 GO。
+Final verdict: R9-H01 and R9-V01 are formally closed; R9-G01 and R9-S01 are not yet fully closed, so no production GO is issued for 34a09bdd… / 7b119f7f… at this time.
 
-下载第十轮复核证据包：源码哈希、27 项及原始 7 项测试日志、远端门禁事实摘录
+Download the Round 10 review evidence package: source hashes, logs for the 27 and the original 7 tests, and an excerpt of the remote gate facts.

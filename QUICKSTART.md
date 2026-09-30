@@ -36,7 +36,7 @@ The SSE URL is `http://127.0.0.1:8999/sse`. Keep the token private; use a secret
 
 ## 3. Connect an MCP client
 
-For Claude Desktop (`claude_desktop_config.json`) or Cursor (`mcp.json`), add a server entry with the **absolute** path to your built binary:
+For Cursor (`mcp.json`) or another standard MCP client, add a server entry with the **absolute** path to your built binary:
 
 ```json
 {
@@ -60,12 +60,6 @@ For SSE clients that support request headers:
     }
   }
 }
-```
-
-For a Claude CLI installation that supports `claude mcp add`, check `claude mcp add --help` for its current flags. A typical stdio registration is:
-
-```bash
-claude mcp add gen-zero -- /absolute/path/to/gen-zero/target/release/gen-zero serve --mode stdio
 ```
 
 For Antigravity CLI, use its MCP server configuration with the same stdio command or SSE URL and bearer header. Client syntax and supported transports vary by version; verify them with the installed client's help.

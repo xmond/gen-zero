@@ -215,7 +215,7 @@ impl RelationSemiring {
     }
 
     /// Direct table lookup `T(r1, r2, g)`; a missing entry returns `∅` (definition
-    /// 8.6.1: "缺失键使该括号化贡献 ∅").
+    /// 8.6.1: "a missing key makes this bracketed contribution ∅").
     pub fn lookup(&self, key: &RelationKey) -> ResultSet {
         self.table.get(key).cloned().unwrap_or_default()
     }

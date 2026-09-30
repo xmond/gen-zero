@@ -1,62 +1,62 @@
-# Gen-Zero × Dense 大模型舰队工程实施主规划 (Implementation Master Plan)
+# Gen-Zero × Dense Large-Model Fleet Engineering Implementation Master Plan (Implementation Master Plan)
 
-- **创建时间**：2026-09-27
-- **主机来源**：`luy-open-box` (Linux / `/ebs/pj/gen-zero`)
-- **跨机同步**：已同步至 `~/inbox/gen-zero/docs/260927-openbox-gen-zero-dense-fleet-implementation-plan.md`
-- **代码基线**：`/ebs/pj/gen-zero` (HEAD `acb2c0ccf3f30a708cd9a4f638248973c4709188`)
-- **前置研究**：
-  - `docs/research/b0927c-t1-geom-audit/REPORT.md` (微分几何与辛拓扑升维)
-  - `docs/research/b0927c-t2-wm/REPORT.md` (零 Token 连续哈密顿世界模型)
-  - `docs/zero/31-multiscale-dense-resonance-etf-dual-process-plan.md` (多尺度流形干涉与广义 ETF)
-  - `docs/zero/31-dense-fleet-manifold-anchor-t4-sys-design.md` (405B 单卡 67 层截断与 NanoCore 蒸馏)
-
----
-
-## 0. 现实底座与防腐四大铁律
-
-在实施本规划时，所有承接任务的外部子代理（Codex / Claude 系列）必须无条件服从 Gen-Zero 防腐铁律：
-
-1. **做了必须真正上线（零孤岛代码）**：
-   - 严禁新增任何在生产主干（`crates/gen-zero-service`、`crates/gen-zero-nanocore`、`python/gen_zero/client.py`）中引用数为 0 的自嗨库代码；
-   - 必须提供真实的调用拓扑（`Caller -> Callee`）与端到端触发测试证据。
-2. **彻底拔除旧逻辑（零历史残留）**：
-   - 新上线接口取代旧逻辑时，必须物理连根删除旧符号，`git grep -rn "<旧符号>"` 命中数严格为 0；
-   - 绝不允许“出于求稳”搞双轨并存或静默 fallback。
-3. **拒绝静默 Bypass 与作弊式实现（Fail-Closed 原则）**：
-   - 任何降级必须显式打日志或报错；严禁在维度不匹配时静默补零/截断；严禁使用未绑定的随机哈希伪转移冒充动力学。
-4. **拒绝把“数学假设”偷换成“已实现能力”**：
-   - 必须严格区分：70B/72B 已提取真实特征 vs 123B/180B/405B 待提取特征；结论永远用数据说话，附带原始退出码、真实运行日志与 `path:line` 证据。
+- **Created**: 2026-09-27
+- **Host of origin**: `luy-open-box` (Linux / `/ebs/pj/gen-zero`)
+- **Cross-host sync**: synced to `~/inbox/gen-zero/docs/260927-openbox-gen-zero-dense-fleet-implementation-plan.md`
+- **Code baseline**: `/ebs/pj/gen-zero` (HEAD `acb2c0ccf3f30a708cd9a4f638248973c4709188`)
+- **Prerequisite research**:
+  - `docs/research/b0927c-t1-geom-audit/REPORT.md` (differential geometry and symplectic-topology dimension lifting)
+  - `docs/research/b0927c-t2-wm/REPORT.md` (zero-token continuous Hamiltonian world model)
+  - `docs/zero/31-multiscale-dense-resonance-etf-dual-process-plan.md` (multiscale manifold interference and generalized ETF)
+  - `docs/zero/31-dense-fleet-manifold-anchor-t4-sys-design.md` (405B single-GPU 67-layer truncation and NanoCore distillation)
 
 ---
 
-## 一、 总体阶段划分与流水线推进图
+## 0. Ground-Truth Foundation and the Four Anti-Corruption Iron Rules
 
-实施划分为四个自闭环、循序渐进的工程阶段（Phases）：
+When implementing this plan, all external subagents taking on tasks (the external CLI agent fleet) must unconditionally comply with the Gen-Zero anti-corruption iron rules:
+
+1. **What is built must actually ship (zero orphan code)**:
+   - Adding any self-contained library code with a zero reference count in the production trunk (`crates/gen-zero-service`, `crates/gen-zero-nanocore`, `python/gen_zero/client.py`) is strictly forbidden;
+   - A real call topology (`Caller -> Callee`) and end-to-end trigger-test evidence must be provided.
+2. **Completely remove old logic (zero legacy residue)**:
+   - When a newly shipped interface replaces old logic, the old symbol must be physically removed root and branch; the hit count of `git grep -rn “<old symbol>”` must be strictly 0;
+   - Dual-track coexistence or a silent fallback “for the sake of stability” is never permitted.
+3. **Reject silent bypasses and cheating implementations (Fail-Closed principle)**:
+   - Any degradation must be explicitly logged or raised as an error; silently zero-padding/truncating on a dimension mismatch is strictly forbidden; using unbound random-hash pseudo-transitions to impersonate dynamics is strictly forbidden.
+4. **Reject substituting a “mathematical assumption” for an “implemented capability”**:
+   - A strict distinction must be maintained: 70B/72B have already had real features extracted, versus 123B/180B/405B, for which feature extraction is still pending; conclusions must always be backed by data, accompanied by raw exit codes, genuine run logs, and `path:line` evidence.
+
+---
+
+## I. Overall Phase Breakdown and Pipeline Progression Diagram
+
+The implementation is divided into four self-contained, sequential engineering phases:
 
 ```mermaid
 flowchart TD
-    subgraph Phase1["Phase 1: 基础设施修复与防腐筑基"]
-        P1_1["1.1 修复 405B 启动脚本路径漂移与防呆门禁"]
-        P1_2["1.2 清算 Python 辛动力学静默截断/补零缺陷"]
-        P1_3["1.3 修复 Rust 规划器 pipeline 终端目标误拦截问题"]
+    subgraph Phase1["Phase 1: Infrastructure Remediation and Anti-Corruption Foundation"]
+        P1_1["1.1 Fix 405B launch-script path drift and add foolproof gating"]
+        P1_2["1.2 Eliminate silent truncation/zero-padding defects in Python symplectic dynamics"]
+        P1_3["1.3 Fix Rust planner pipeline's false interception of terminal goals"]
     end
 
-    subgraph Phase2["Phase 2: 405B/180B 单卡截断与特征提取工具链"]
-        P2_1["2.1 实现 GGUF 头部张量切片工具 slice_gguf_layers.py"]
-        P2_2["2.2 405B Q2_K 截断至 K=67 层物理常驻 A100 80GB 单卡验证"]
-        P2_3["2.3 启动 Mistral Large 2 (123B) 13 任务特征自动化提取"]
+    subgraph Phase2["Phase 2: 405B/180B Single-GPU Truncation and Feature-Extraction Toolchain"]
+        P2_1["2.1 Implement the GGUF header tensor-slicing tool slice_gguf_layers.py"]
+        P2_2["2.2 Truncate 405B Q2_K to K=67 layers, verify physical residency on a single A100 80GB GPU"]
+        P2_3["2.3 Launch automated feature extraction for Mistral Large 2 (123B) across 13 tasks"]
     end
 
-    subgraph Phase3["Phase 3: 广义 CCA 流形干涉与广义 ETF 决策层"]
-        P3_1["3.1 实现广义 CCA 流形干涉算子 (剥离共性语义核与个性残差)"]
-        P3_2["3.2 实现马氏度量自适应广义 ETF ChoiceHead"]
-        P3_3["3.3 构建保形预测集大小 (|C_α(x)|) 动态级联路由网关"]
+    subgraph Phase3["Phase 3: Generalized CCA Manifold Interference and Generalized ETF Decision Layer"]
+        P3_1["3.1 Implement the generalized CCA manifold-interference operator (separate the shared semantic core from individual residuals)"]
+        P3_2["3.2 Implement the Mahalanobis-metric adaptive generalized ETF ChoiceHead"]
+        P3_3["3.3 Build a dynamic cascading routing gateway driven by conformal-prediction set size (|C_α(x)|)"]
     end
 
-    subgraph Phase4["Phase 4: NanoCore 128维 CPU 原生动力学生产闭环"]
-        P4_1["4.1 训练 8192/16384维 -> 128维流形保角投影 Student Encoder"]
-        P4_2["4.2 接入 crates/gen-zero-nanocore 并打通 nanocore_ask 生产端点"]
-        P4_3["4.3 端到端延迟基准测试与全仓零残留清算"]
+    subgraph Phase4["Phase 4: NanoCore 128-Dimensional CPU-Native Dynamics Production Closed Loop"]
+        P4_1["4.1 Train the 8192/16384-dim -> 128-dim manifold conformal-projection Student Encoder"]
+        P4_2["4.2 Integrate into crates/gen-zero-nanocore and wire up the nanocore_ask production endpoint"]
+        P4_3["4.3 End-to-end latency benchmarking and repo-wide zero-residue cleanup"]
     end
 
     Phase1 --> Phase2
@@ -66,39 +66,39 @@ flowchart TD
 
 ---
 
-## 二、 阶段任务拆解与子代理派发卡片
+## II. Phase Task Breakdown and Subagent Dispatch Cards
 
-### 【Phase 1】 基础设施修复与防腐筑基（Fail-Closed 改造）
+### [Phase 1] Infrastructure Remediation and Anti-Corruption Foundation (Fail-Closed Retrofit)
 
-#### 任务 1.1：405B 启动脚本路径漂移修复与 GGUF 签名校验
-- **目标**：解决 `benchmarks/suites/run_llama405b_extract.bat:8` 默认指向不存在的 Q3_K_M 18 分片的问题，将其与下载器 `queue_dense_fleet_downloads.py:118`（Q2_K 单文件 `Meta-Llama-3.1-405B-Instruct-Q2_K.gguf`）对齐；增加 GGUF 魔数签名和单槽校验。
-- **改动文件**：`benchmarks/suites/run_llama405b_extract.bat`
-- **派发档位**：Tier 2 (`sonnet` / `xmond`)
+#### Task 1.1: 405B Launch-Script Path Drift Fix and GGUF Signature Verification
+- **Objective**: Resolve the issue where `benchmarks/suites/run_llama405b_extract.bat:8` defaults to a nonexistent 18-shard Q3_K_M split, and align it with the downloader `queue_dense_fleet_downloads.py:118` (single Q2_K file `Meta-Llama-3.1-405B-Instruct-Q2_K.gguf`); add GGUF magic-number signature and single-slot verification.
+- **Files changed**: `benchmarks/suites/run_llama405b_extract.bat`
+- **Dispatch tier**: Tier 2 (`sonnet` / `xmond`)
 
-#### 任务 1.2：清算 Python 辛动力学静默补零截断与伪动作缺陷
-- **目标**：
-  - 彻底删除 `python/gen_zero/world_model/hamiltonian_dynamics.py:220` 处的静默补零与截断代码，改为严格的维度尺寸核验，尺寸不合必须抛出 `ValueError`（Fail-Closed）；
-  - 解决 `python/gen_zero/world_model/latent_dynamics.py:374` 中由 Python `hash()` 驱动的正弦伪转移行为，拒绝无真实语义的随机退化。
-- **改动文件**：
+#### Task 1.2: Eliminate Silent Zero-Padding/Truncation and Pseudo-Action Defects in Python Symplectic Dynamics
+- **Objective**:
+  - Completely remove the silent zero-padding and truncation code at `python/gen_zero/world_model/hamiltonian_dynamics.py:220`, replacing it with strict dimension-size verification; a size mismatch must raise `ValueError` (Fail-Closed);
+  - Resolve the sinusoidal pseudo-transition behavior driven by Python `hash()` in `python/gen_zero/world_model/latent_dynamics.py:374`, rejecting random degeneration with no genuine semantics.
+- **Files changed**:
   - `python/gen_zero/world_model/hamiltonian_dynamics.py`
   - `python/gen_zero/world_model/latent_dynamics.py`
-  - 补充回归单测：`python/tests/test_fail_closed_dynamics.py`
-- **派发档位**：Tier 2 (`opus` / `sapex`)
+  - Add regression unit test: `python/tests/test_fail_closed_dynamics.py`
+- **Dispatch tier**: Tier 2 (`opus` / `sapex`)
 
-#### 任务 1.3：修复 Rust Planner Pipeline 终端目标误报拦截问题
-- **目标**：解决 `crates/gen-zero-planner/src/pipeline.rs:4` 将所有 `done` 一律当作危险拦截的逻辑漏洞，明确区分 `TerminalGoal`（目标达成）与 `TerminalTrap`（致命陷阱），使世界模型到达目标状态能正确结算而非抛出 Panic/Reject。
-- **改动文件**：
+#### Task 1.3: Fix Rust Planner Pipeline's False-Positive Interception of Terminal Goals
+- **Objective**: Fix the logic flaw in `crates/gen-zero-planner/src/pipeline.rs:4` that treats every `done` as a dangerous state to intercept; clearly distinguish `TerminalGoal` (goal achieved) from `TerminalTrap` (fatal trap), so that when the world model reaches a goal state it settles correctly instead of raising a Panic/Reject.
+- **Files changed**:
   - `crates/gen-zero-planner/src/pipeline.rs`
   - `crates/gen-zero-planner/src/engine.rs`
-- **派发档位**：Tier 2 (`sonnet` / `sapex`)
+- **Dispatch tier**: Tier 2 (`sonnet` / `sapex`)
 
 ---
 
-## 三、 派发与验收推进规则
+## III. Dispatch and Acceptance Progression Rules
 
-1. **严格按流水线逐项执行**：Phase 1 修复为基石，Phase 1 验收完成后即刻开启 Phase 2；
-2. **所有代码修改必须在独立隔离工作树（Worktree）中进行**：
-   - 派发前由主控预建专属 worktree，避免多 agent 交叉抢写；
-3. **双 Reviewer 硬审闭环**：
-   - 每个任务交付后，由两名独立 Reviewer（含 Fable / Astra）针对四项一票否决指标（孤岛审查、静默 Bypass 审查、证据链核验、旧残留清算）严格把关；
-   - 评审全部通过后，由主控执行合入并删除隔离工作树。
+1. **Execute strictly item by item along the pipeline**: Phase 1 fixes form the foundation; Phase 2 begins immediately once Phase 1 acceptance is complete;
+2. **All code changes must be made in an independent, isolated worktree**:
+   - The controller pre-creates a dedicated worktree before dispatch, to avoid cross-writes among multiple agents;
+3. **Dual-reviewer hard-gate closed loop**:
+   - After each task is delivered, two independent reviewers (including Fable / Astra) strictly gate it against four veto-level criteria (orphan-code review, silent-bypass review, evidence-chain verification, legacy-residue cleanup);
+   - Once all reviews pass, the controller performs the merge and removes the isolated worktree.

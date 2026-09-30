@@ -10,8 +10,8 @@ names, no regex in the online source" rule):
     into the task's compact (r, r_cf) space -- this module contains no PCA
     basis application, no ZCA, no tokenization and no per-task literal names.
     `task_id` is an opaque string key into the codebook's own section index,
-    exactly as doc 15 section 2 specifies ("任务差异只体现在码本的
-    task_id -> section 索引里").
+    exactly as doc 15 section 2 specifies ("task differences show up only in
+    the codebook's task_id -> section index").
   * The dynamics readout is the closed-form fixed point
         h* = (I - A)^-1 (B x + W_c c)
     which is mathematically identical to iterating `h_{t+1} = A h_t + B x + W_c c`

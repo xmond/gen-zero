@@ -352,7 +352,7 @@ class TestDEQThinkingModule(unittest.TestCase):
 class TestNoPrivatePathLeaks(unittest.TestCase):
     """Zero private filesystem paths in the module and its tests."""
 
-    PATTERNS = [r"/home/\w+", r"/Users/\w+", r"/ebs/", r"C:\\Users", r"\.claude", r"~/inbox"]
+    PATTERNS = [r"/home/\w+", r"/Users/\w+", r"/ebs/", r"C:\\Users", r"(?:/|~)/\.[a-z][a-z-]*/", r"~/inbox"]
 
     def test_no_private_paths(self):
         here = Path(__file__).resolve()

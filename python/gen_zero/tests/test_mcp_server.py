@@ -430,7 +430,7 @@ class TestMCPServer(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(set(server._stream_sessions.keys()), {"s2", "s3"})
 
     async def test_09e_zero_stream_non_string_session_id_is_rejected_not_silently_ephemeral(self):
-        """Round-2 阻断1: a session_id of the wrong type must return an explicit validation
+        """Round-2 blocker 1: a session_id of the wrong type must return an explicit validation
         error, never silently fall back to an anonymous ephemeral engine."""
         for bad_session_id in (42, 3.14, [], {}, True, ""):
             resp = await self.server.handle_request({
@@ -452,7 +452,7 @@ class TestMCPServer(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(self.server._stream_sessions, {})
 
     async def test_09f_zero_stream_illegal_request_never_touches_session_state(self):
-        """Round-2 阻断2: an illegal request (bad observation/candidate_actions) must be
+        """Round-2 blocker 2: an illegal request (bad observation/candidate_actions) must be
         rejected before any session engine is acquired or created, so it can never trigger an
         LRU eviction of an unrelated, legitimate session."""
         server = MCPServer(max_stream_sessions=1)

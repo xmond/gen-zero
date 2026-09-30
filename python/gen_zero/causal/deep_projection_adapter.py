@@ -64,7 +64,7 @@ class DeepProjectionAdapter(nn.Module):
     regardless of ``W1``: the adapter starts bit-identical (up to floating-point
     rounding) to the linear projector it extends, and any change after training
     is therefore attributable to learning, not to a different starting point
-    (the doc's "出现退化立刻可归因" contract, doc 10 §3.3).
+    (the doc's "any regression is immediately attributable" contract, doc 10 §3.3).
     """
 
     def __init__(

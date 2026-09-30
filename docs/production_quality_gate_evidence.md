@@ -1,23 +1,23 @@
-# Gen-Zero 生产发布质量门禁执行证据报告 (Production Quality Gate Evidence)
+# Gen-Zero Production Quality Gate Evidence
 
-- **生成时间**: 2026-09-29
-- **目标发布分支**: `main`
-- **目标发布 Commit SHA**: `4c12e8e93b96bc98d0e768ae42c67c16479ebb85`
-- **目标发布 Tree SHA**: `844b0ead64c895fecd4586971b2039c4d8ca4dee`
-- **仓库地址**: `https://github.com/xmond/gen-zero`
+- **Generated**: 2026-09-29
+- **Target release branch**: `main`
+- **Target release commit SHA**: `4c12e8e93b96bc98d0e768ae42c67c16479ebb85`
+- **Target release tree SHA**: `844b0ead64c895fecd4586971b2039c4d8ca4dee`
+- **Repository URL**: `https://github.com/xmond/gen-zero`
 
 ---
 
-## 一、代码树身份与无未记录修改校验
+## 1. Code Tree Identity and Unrecorded-Change Check
 
-1. **Git 提交身份核验**:
+1. **Git commit identity verification**:
    ```bash
    $ git rev-parse HEAD
    4c12e8e93b96bc98d0e768ae42c67c16479ebb85
    $ git rev-parse HEAD^{tree}
    844b0ead64c895fecd4586971b2039c4d8ca4dee
    ```
-2. **本地工作区干净度校验**:
+2. **Local worktree cleanliness check**:
    ```bash
    $ git status
    On branch main
@@ -27,19 +27,19 @@
 
 ---
 
-## 二、Python 目录级全量回归执行记录
+## 2. Full Python Directory Regression Record
 
-### 1. 运行环境与依赖清单
-- **Python 版本**: CPython 3.11.16 (`/home/luy/.hermes-venv/bin/python3`)
-- **Pytest 版本**: pytest 9.1.1
-- **核心依赖**:
+### 1. Runtime and dependencies
+- **Python version**: CPython 3.11.16 (`/home/luy/.hermes-venv/bin/python3`)
+- **Pytest version**: pytest 9.1.1
+- **Core dependencies**:
   - `torch`: 2.5.1
-  - `ortools`: 9.15.6755 (真实 CP-SAT 求解器已安装)
+  - `ortools`: 9.15.6755 (real CP-SAT solver installed)
   - `numpy`: 2.5.3
   - `pandas`: 3.0.6
   - `pyyaml`: 6.0.2
 
-### 2. 执行命令与原始退出码
+### 2. Command and original exit code
 ```bash
 python3 -m pytest -ra \
   python/gen_zero/tests/test_r10_cpsat_real_solve.py \
@@ -51,8 +51,8 @@ python3 -m pytest -ra \
   python/gen_zero/tests/test_issue_87_differentiable_safety_layer.py \
   python/gen_zero/tests/test_r7_m01_m02_unicode_and_scanner_bound.py
 ```
-- **退出码**: `0` (Success)
-- **执行结果摘要**:
+- **Exit code**: `0` (Success)
+- **Execution summary**:
   ```text
   collected 183 items
 
@@ -74,41 +74,41 @@ python3 -m pytest -ra \
   ======================== 183 passed in 65.56s (0:01:05) ========================
   ```
 
-### 3. 核心专项测试覆盖证明
-- **真实 CP-SAT 正向求解门禁 (`test_r10_cpsat_real_solve.py`)**:
+### 3. Evidence of focused test coverage
+- **Real CP-SAT positive-solve gate (`test_r10_cpsat_real_solve.py`)**:
   - `solver._ortools_available is True`
   - `verdict.fallback_used is False`
   - `verdict.solver_status in {"FEASIBLE", "OPTIMAL"}`
   - `verdict.selected_action == "SAFE_WRITE"`
-- **梯度数学收缩与 CP-SAT 绑定门禁 (`test_r9_s01_cpsat_binding_and_gradient.py`)**:
-  - `||g_in||_2 <= ||g_out||_2` 投影范数收缩严格成立
-  - `cpsat_hard_verified` 仅在真实求解且动作一致时置 `True`，未触发时返回 `NOT_INVOKED`
-- **描述符全场景 JSON 往返摘要恒定门禁 (`test_r9_descriptor_canonical_domain.py`)**:
-  - 审查员 7 种反例场景（顶层 id、顶层 desc、权限序列、映射键、嵌套值、str 子类、frozenset）全绿
-  - 6 种 `PYTHONHASHSEED` 跨进程确定性全绿
+- **Gradient norm contraction and CP-SAT binding gate (`test_r9_s01_cpsat_binding_and_gradient.py`)**:
+  - `||g_in||_2 <= ||g_out||_2` projection norm contraction holds
+  - `cpsat_hard_verified` is `True` only after a real solve with a matching action; when not invoked, it returns `NOT_INVOKED`
+- **Descriptor digest stability across JSON round trips (`test_r9_descriptor_canonical_domain.py`)**:
+  - All seven reviewer counterexample cases passed (top-level id, top-level desc, permission sequence, mapping key, nested value, str subclass, frozenset)
+  - 6 `PYTHONHASHSEED` cross-process determinism cases passed
 
 ---
 
-## 三、Rust 全量质量门禁执行记录
+## 3. Full Rust Quality Gate Record
 
-### 1. 代码格式化检查 (`cargo fmt`)
-- **命令**: `cargo fmt --all -- --check`
-- **退出码**: `0`
-- **输出**: 无任何代码风格违规。
+### 1. Code formatting check (`cargo fmt`)
+- **Command**: `cargo fmt --all -- --check`
+- **Exit code**: `0`
+- **Output**: No code-style violations.
 
-### 2. 静态分析检查 (`cargo clippy`)
-- **命令**: `cargo clippy --workspace --all-targets --all-features -- -D warnings`
-- **退出码**: `0`
-- **输出**:
+### 2. Static analysis check (`cargo clippy`)
+- **Command**: `cargo clippy --workspace --all-targets --all-features -- -D warnings`
+- **Exit code**: `0`
+- **Output**:
   ```text
   Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
   ```
-  零 warning，零 error。
+  Zero warnings and zero errors.
 
-### 3. 完整工作区单测与集成测试 (`cargo test`)
-- **命令**: `cargo test --workspace`
-- **退出码**: `0`
-- **输出**:
+### 3. Full workspace unit and integration tests (`cargo test`)
+- **Command**: `cargo test --workspace`
+- **Exit code**: `0`
+- **Output**:
   - `gen-zero-cli`: 10 passed
   - `gen-zero-core`: 18 passed
   - `gen-zero-gate`: 24 passed
@@ -121,22 +121,22 @@ python3 -m pytest -ra \
   - `gen-zero-storage`: 9 passed
   - `gen-zero-worldmodel`: 63 passed
   - `compression / latent_contraction`: 11 passed
-  - **总计**: 全部测试通过，0 failed，0 ignored。
+  - **Total**: All tests passed; 0 failed; 0 ignored.
 
-### 4. 最小支持 Rust 版本兼容性校验 (`MSRV 1.88.0`)
-- **命令**: `cargo +1.88.0 check --workspace --all-targets --all-features`
-- **退出码**: `0`
-- **输出**:
+### 4. Minimum supported Rust version check (`MSRV 1.88.0`)
+- **Command**: `cargo +1.88.0 check --workspace --all-targets --all-features`
+- **Exit code**: `0`
+- **Output**:
   ```text
   Finished `dev` profile [unoptimized + debuginfo] target(s) in 35.66s
   ```
-  工作区全量 crates 在 Rust 1.88.0 下无任何编译警告或错误。
+  All workspace crates compiled under Rust 1.88.0 without warnings or errors.
 
 ---
 
-## 四、发布工作流强门禁拓扑确认
+## 4. Release Workflow Gate Topology
 
-在 `.github/workflows/release.yml` 中建立了如下不可绕过的门禁依赖：
+The following mandatory gate dependencies were established in `.github/workflows/release.yml`:
 
 ```text
        [ Push v* Tag ]
@@ -155,10 +155,10 @@ python3 -m pytest -ra \
       [ docker-publish ]
 ```
 
-- **阻断保障**: 任何 Python 针对性测试或 Rust 质量门禁失败，发布流水线将立即硬阻断，绝对杜绝未经测试验证的二进制或容器制品发布到生产环境。
+- **Blocking guarantee**: If any focused Python test or Rust quality gate fails, the release workflow blocks publication of unverified binary or container artifacts.
 
 ---
 
-## 五、结论
+## 5. Conclusion
 
-本发布 Commit 已在完整依赖链（包含真实 OR-Tools 9.15）与本地多运行时环境下完成 100% 全量质量门禁验证。所有代码修改、测试脚本与工作流配置已推送到 GitHub 远端 `main` 分支。
+This release commit has completed 100% full quality gate verification under the complete dependency chain (including real OR-Tools 9.15) and the local multi-runtime environment. All code changes, test scripts, and workflow configuration have been pushed to the `main` branch on the GitHub remote.

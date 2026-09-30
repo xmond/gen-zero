@@ -34,7 +34,7 @@
 │ --disable-verification                      --enable-verification             Disable task verification (skip running tests)                                                     │
 ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
 ╭─ Agent ──────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────╮
-│ --agent              -a      <oracle|nop|claude-code|antigravity-sdk|codex|cursor-cli|gemini-cli|mini  Agent name (default: oracle)                                              │
+│ --agent              -a      <oracle|nop|[legacy-agent]|antigravity-sdk|codex|cursor-cli|gemini-cli|mini  Agent name (default: oracle)                                              │
 │                              -swe-agent|swe-agent|opencode>                                                                                                                      │
 │ --agent-import-path          <str>                                                                     Import path for custom agent                                              │
 │ --model              -m      <str>                                                                     Model name for the agent (can be used multiple times)                     │

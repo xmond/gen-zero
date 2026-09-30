@@ -1,36 +1,37 @@
-# 冻结 Qwen3.5-9B 原生基准持久化档案（永久静态参照）
+# Frozen Qwen3.5-9B native baseline archive (permanent static reference)
 
-> **说明**：本文件为原生 Qwen3.5-9B 在 13 个任务（930 条样本）上的零样本 / 候选打分基准。
-> 一次性计算固化为标准基线，后续任何模块、动力学评测与实验**直接引用本档案，无需重复计算**。
+> **Note**: this file records the native Qwen3.5-9B zero-shot / candidate-scoring baseline on 13 tasks (930 samples).
+> Computed once and frozen as the standard baseline; any later module, dynamics evaluation, or experiment
+> **cites this archive directly and does not recompute it**.
 
-## 1. 硬件与资源基准
-- **模型**：Qwen/Qwen3.5-9B（BF16）
-- **显存占用**：18.0 GB VRAM（必须 A100/H100 运行）
-- **端到端推理时延 (P50)**：170.49 ms / 样本
-- **推理吞吐**：~5.0 样本 / 秒
+## 1. Hardware and resource baseline
+- **Model**: Qwen/Qwen3.5-9B (BF16)
+- **VRAM usage**: 18.0 GB VRAM (requires an A100/H100 to run)
+- **End-to-end inference latency (P50)**: 170.49 ms / sample
+- **Inference throughput**: ~5.0 samples / second
 
-## 2. 宏平均基准对标
+## 2. Macro-average baseline comparison
 
-| 指标 | 裸 9B (ar_loglik) | 裸 9B (winning 零标签) | 多数类随机盲猜 | 官方 Nimble-9B (微调) | 官方 Jevons (微调) |
+| Metric | Bare 9B (ar_loglik) | Bare 9B (winning zero-label) | Majority-class random guess | Official Nimble-9B (fine-tuned) | Official Jevons (fine-tuned) |
 |---|---:|---:|---:|---:|---:|
-| **11 共享任务宏平均** | **54.85%** | **56.73%** | 51.21% | **80.40%** | **83.54%** |
-| **13 全任务宏平均** | **56.92%** | **58.91%** | 50.26% | — | — |
-| **930 题全量 Micro 准确率** | **53.33%** | **55.05%** | — | — | — |
+| **Macro avg, 11 shared tasks** | **54.85%** | **56.73%** | 51.21% | **80.40%** | **83.54%** |
+| **Macro avg, all 13 tasks** | **56.92%** | **58.91%** | 50.26% | — | — |
+| **Micro accuracy, all 930 items** | **53.33%** | **55.05%** | — | — | — |
 
-## 3. 逐任务原生底色表
+## 3. Per-task native baseline table
 
-| 任务名 | 候选数 $K$ | 样本量 $n$ | 裸 9B 准确率 % | 多数类基线 % | 盲猜机会 % | 超过多数类 |
+| Task | Candidates $K$ | Sample size $n$ | Bare 9B accuracy % | Majority-class baseline % | Random-guess chance % | Beats majority class |
 |---|---:|---:|---:|---:|---:|:---:|
-| massive_en | 18 | 30 | 50.00% | 23.33% | 5.56% | ✅ 是 |
-| massive_de | 18 | 30 | 46.67% | 23.33% | 5.56% | ✅ 是 |
-| vitaminc | 3 | 30 | 36.67% | 36.67% | 33.33% | ❌ 否 |
-| boolq | 2 | 30 | 80.00% | 83.33% | 50.00% | ❌ 否 |
-| squad2 | 2 | 30 | 53.33% | 53.33% | 50.00% | ❌ 否 |
-| paws | 2 | 400 | 54.00% | 50.00% | 50.00% | ✅ 是 |
-| civil_comments | 2 | 30 | 80.00% | 86.67% | 50.00% | ❌ 否 |
-| aegis_safety | 2 | 30 | 83.33% | 63.33% | 50.00% | ✅ 是 |
-| multinli | 3 | 30 | 23.33% | 40.00% | 33.33% | ❌ 否 |
-| pubmedqa | 3 | 30 | 73.33% | 70.00% | 33.33% | ✅ 是 |
-| summeval | 5 | 30 | 43.33% | 33.33% | 20.00% | ✅ 是 |
-| arc_challenge | 4 | 30 | 93.33% | 36.67% | 25.00% | ✅ 是 |
-| gsm8k | 4 | 200 | 48.50% | 25.00% | 25.00% | ✅ 是 |
+| massive_en | 18 | 30 | 50.00% | 23.33% | 5.56% | ✅ Yes |
+| massive_de | 18 | 30 | 46.67% | 23.33% | 5.56% | ✅ Yes |
+| vitaminc | 3 | 30 | 36.67% | 36.67% | 33.33% | ❌ No |
+| boolq | 2 | 30 | 80.00% | 83.33% | 50.00% | ❌ No |
+| squad2 | 2 | 30 | 53.33% | 53.33% | 50.00% | ❌ No |
+| paws | 2 | 400 | 54.00% | 50.00% | 50.00% | ✅ Yes |
+| civil_comments | 2 | 30 | 80.00% | 86.67% | 50.00% | ❌ No |
+| aegis_safety | 2 | 30 | 83.33% | 63.33% | 50.00% | ✅ Yes |
+| multinli | 3 | 30 | 23.33% | 40.00% | 33.33% | ❌ No |
+| pubmedqa | 3 | 30 | 73.33% | 70.00% | 33.33% | ✅ Yes |
+| summeval | 5 | 30 | 43.33% | 33.33% | 20.00% | ✅ Yes |
+| arc_challenge | 4 | 30 | 93.33% | 36.67% | 25.00% | ✅ Yes |
+| gsm8k | 4 | 200 | 48.50% | 25.00% | 25.00% | ✅ Yes |

@@ -1,7 +1,7 @@
 """Gen-Zero Universal MCP Decision & Cognitive Extension Server.
 
 Provides a unified Model Context Protocol (MCP) stdio interface exposing
-the single polymorphic `zero` tool to developer coding agents (Claude Code, Codex, agy, pi).
+the single polymorphic `zero` tool to developer coding agents (Codex, Antigravity, Cursor, pi).
 """
 
 from .server import (

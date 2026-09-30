@@ -48,42 +48,42 @@ NO_ISSUE: str = "noIssue"
 # Structured Mechanism Taxonomies strictly adhering to Issue #22 table
 MECHANISM_TAXONOMY: Dict[str, List[str]] = {
     RiskDimension.CORRECTNESS.value: [
-        "condition",       # 条件处理错误
-        "state",           # 状态读写保留错误
-        "dataFlow",        # 数据流转换传递错误
-        "asyncControl",    # 异步乱序/异常处理错误
+        "condition",       # condition-handling error
+        "state",           # state read/write retention error
+        "dataFlow",        # data-flow transformation/propagation error
+        "asyncControl",    # async ordering / exception-handling error
         "other",
         NO_ISSUE,
     ],
     RiskDimension.SECURITY.value: [
-        "authorization",   # 权限/信任边界削弱
-        "injection",       # 不可信输入注入
-        "exposure",        # 敏感信息泄露
-        "unsafeDefault",   # 不安全默认配置
+        "authorization",   # weakened authorization/trust boundary
+        "injection",       # untrusted input injection
+        "exposure",        # sensitive information exposure
+        "unsafeDefault",   # unsafe default configuration
         "other",
         NO_ISSUE,
     ],
     RiskDimension.RELIABILITY.value: [
-        "cleanup",         # 资源泄露/副作用未清理
-        "concurrency",     # 并发竞争/死锁
-        "recovery",        # 容灾/故障恢复失效
-        "crash",           # 非预期抛错异常崩溃
+        "cleanup",         # resource leak / side effect not cleaned up
+        "concurrency",     # concurrency race / deadlock
+        "recovery",        # failed disaster recovery / failover
+        "crash",           # unexpected uncaught exception / crash
         "other",
         NO_ISSUE,
     ],
     RiskDimension.COMPATIBILITY.value: [
-        "api",             # 公开接口不兼容
-        "behavior",        # 现有调用者观测行为破坏
-        "dataFormat",      # 持久化/交换格式不兼容
-        "protocol",        # 外部契约协议破坏
+        "api",             # breaking change to a public interface
+        "behavior",        # observable behavior break for existing callers
+        "dataFormat",      # incompatible persistence/exchange format
+        "protocol",        # broken external contract/protocol
         "other",
         NO_ISSUE,
     ],
     RiskDimension.TEST_GAP.value: [
-        "branch",          # 重要分支缺乏覆盖
-        "failure",         # 失败/取消路径缺乏测试
-        "boundary",        # 边界/极值未测
-        "integration",     # 模块间交互未测
+        "branch",          # important branch lacks coverage
+        "failure",         # failure/cancellation path lacks tests
+        "boundary",        # boundary/extreme values untested
+        "integration",     # inter-module interaction untested
         "other",
         NO_ISSUE,
     ],

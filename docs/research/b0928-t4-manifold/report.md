@@ -1,20 +1,20 @@
-# B11 / B12 / B13 / B18 修复与证据
+# B11 / B12 / B13 / B18 Fixes and Evidence
 
-工作树 `/tmp/fleet-wt/b0928-t4-manifold`。未提交、未推送；未调用子代理或 reviewer。
+Worktree: `/tmp/fleet-wt/b0928-t4-manifold`. No commit or push was made; no subagent or reviewer was called.
 
-## 已实现与验证
+## Implemented and verified
 
-| 项目 | 实际行为与主调用链 | 可核查位置 |
+| Item | Actual behavior and main call path | Verifiable location |
 |---|---|---|
-| B11 | 连续系统要求最大特征值实部严格小于负 epsilon；离散系统要求谱半径小于 1。拟合结果不做稳定性“修饰”，失败抛错。导出 float32 后再次检查，加载重新检查。 | `python/gen_zero/causal/universal_manifold_extractor.py:395`、`:512`、`:529` |
-| B11 生产脚本 | 删除把独立题目行当作时序轨迹、宣称已证明收缩的流程；现在必须提供 `--trajectory` 与 `--dt`。 | `benchmarks/suites/run_universal_extraction_a100.py:71`、`:185` |
-| B12 | GCCA CLI 默认 rank 128，显式请求 128 而可用秩不足时拒绝。保存每个 view 的 MAXVAR 岭回归 W、训练均值、尺度；锚点允许 128→128，拒绝 64→128。 | `benchmarks/suites/generalized_cca_manifold_interference.py:155`、`:166`、`:315`、`:472` |
-| B12 验证隔离 | 保存源数据摘要与拟合/验证索引，核对导出时的拟合行确实来自本次 fit；锚点 CLI 复用 GCCA 划分，不再随机重切分或在验证集拟合。GCCA 文件、索引、manifest 具有完整性摘要。 | `python/gen_zero/causal/manifold_anchor_distiller.py:84`、`:349` |
-| B13 | 锚点 manifest 绑定 source_model、layer、norm、GCCA_map、anchor_basis、core、domain_id。bridge 必须接收独立传入的目标 core manifest；源样本必须携带 values/space；缺失身份、同维异基、错误 domain 均拒绝。 | `python/gen_zero/causal/manifold_anchor_distiller.py:116`、`:126`；`python/gen_zero/causal/nanocore_bridge.py:44` |
-| B13 主入口 | `gen_zero.cli anchor --core-manifest` 与 client 加载入口传递契约，client 决策还核对注册 core 的 space_manifest。延迟脚本同步新契约，删除假产物自测入口。 | `python/gen_zero/cli.py:417`；`python/gen_zero/client.py:3190`、`:3268`；`benchmarks/suites/profile_nanocore_latency.py:73` |
-| B18 | launcher 必须显式指定路径和 MODEL_PROFILE。full: 100 GB 下限、126 层、输出头；slice: 显式 SLICE_LAYERS/NGL、截断层数、无输出头，按结构校验，不套完整版体积门槛。 | `benchmarks/suites/run_llama405b_extract.bat:12`；`benchmarks/suites/verify_gguf_model.py:45`；`scripts/slice_gguf_layers.py:193` |
+| B11 | Continuous systems require the largest real part of any eigenvalue to be strictly below negative epsilon; discrete systems require a spectral radius below 1. A fitted result is never altered to appear stable: failure raises an error. Stability is checked again after float32 export and on load. | `python/gen_zero/causal/universal_manifold_extractor.py:395`, `:512`, `:529` |
+| B11 production script | Removed the path that treated independent question rows as a time series and claimed to prove contraction. `--trajectory` and `--dt` are now required. | `benchmarks/suites/run_universal_extraction_a100.py:71`, `:185` |
+| B12 | The GCCA CLI defaults to rank 128 and rejects an explicit rank-128 request when the available rank is lower. It saves each view's MAXVAR ridge regression matrix W, training mean, and scale. The anchor accepts 128→128 and rejects 64→128. | `benchmarks/suites/generalized_cca_manifold_interference.py:155`, `:166`, `:315`, `:472` |
+| B12 validation isolation | Saves source-data hashes and fit/validation indices, and checks that exported fit rows came from this fit. The anchor CLI reuses the GCCA split instead of creating another random split or fitting on validation data. GCCA files, indices, and manifests have integrity hashes. | `python/gen_zero/causal/manifold_anchor_distiller.py:84`, `:349` |
+| B13 | The anchor manifest binds `source_model`, `layer`, `norm`, `GCCA_map`, `anchor_basis`, `core`, and `domain_id`. The bridge requires a separately supplied target core manifest; source samples must carry `values` and `space`. Missing identity, equal dimensions with different bases, and the wrong domain are rejected. | `python/gen_zero/causal/manifold_anchor_distiller.py:116`, `:126`; `python/gen_zero/causal/nanocore_bridge.py:44` |
+| B13 main entry points | `gen_zero.cli anchor --core-manifest` and the client loading entry point pass through the contract; client decisions also check the registered core's `space_manifest`. The latency script follows the new contract, and the entry point that self-tested against a fabricated artifact was removed. | `python/gen_zero/cli.py:417`; `python/gen_zero/client.py:3190`, `:3268`; `benchmarks/suites/profile_nanocore_latency.py:73` |
+| B18 | The launcher requires an explicit path and `MODEL_PROFILE`. `full` requires at least 100 GB, 126 layers, and an output head. `slice` requires explicit `SLICE_LAYERS/NGL`, a truncated layer count, and no output head. Structural checks apply to each profile; the full-model size threshold is not imposed on slices. | `benchmarks/suites/run_llama405b_extract.bat:12`; `benchmarks/suites/verify_gguf_model.py:45`; `scripts/slice_gguf_layers.py:193` |
 
-运行命令（从工作树根目录执行）：
+Commands run from the worktree root:
 
 ```bash
 bash /tmp/b0928-t4-evidence/run-tests.sh
@@ -23,35 +23,35 @@ OPENBLAS_NUM_THREADS=1 PYTHONPATH=python:benchmarks/suites python /tmp/b0928-t4-
 
 > **Pruned 2026-09-29.** `run-tests.sh` was removed. It named two test files that no longer exist (`benchmarks/tests/test_run_llama405b_launcher.py`, `benchmarks/tests/test_llama405b_extraction.py`), so it cannot be re-run as shipped. The recorded result (`final-tests.exit`) is historical. `real_transform_check.py` is kept: its imports still resolve, but it reads features from a host-local path.
 
-- 第一条真实退出码 **0**，输出尾部：`187 passed, 11 warnings in 24.52s`。完整命令在 `run-tests.sh`，原始日志在 `final-tests.log`，原始退出码在 `final-tests.exit`。警告来自极端值拒绝测试的数值溢出；没有忽略测试失败或静默回退。
-- 第二条真实退出码 **0**，见 `real.log`、`real.exit`。LLaMA-70B/Qwen-72B BoolQ 特征原始配对 ID/标签一致性校验通过；500 行训练、200 行验证。保存/重载后逐样本坐标最大误差均为 **0.0**，逐样本 ID、两份实际输出、误差、fit/eval 索引保存在 `/tmp/b0928-t4-evidence/real-paired-transform-evidence.npz`。`artifacts.json` 给出产物大小、路径、SHA256。
-- 真实锚点为 128→128 正交变换，所以能量保留率/余弦相关系数为 1 不是任务能力突破。此次没有计算分类正确率，也不宣称泛化提升。
-- `git diff --check`、指定文件 `python -m compileall -q ...`、Rust 测试文件 `rustfmt --check` 退出码均为 **0**；完整 argv/stdout/stderr 在 `checks.json`。compileall 只证明 Python 编译，rustfmt 只证明 Rust 语法格式，不代表 cargo 编译。
-- 开发中初轮 10 项失败、扩展轮 4 项失败均已记录在 `/tmp/b0928-t4-evidence/initial-tests.log` 与 `tests.log`，真实退出码均为 1；修复后才得到最终绿色结果。
+- The first command had an actual exit code of **0**; its output ended with `187 passed, 11 warnings in 24.52s`. The complete command was in `run-tests.sh`, the raw log is `final-tests.log`, and the original exit code is in `final-tests.exit`. The warnings arose from numerical overflow in extreme-value rejection tests. No test failure was ignored and no silent fallback was added.
+- The second command had an actual exit code of **0**; see `real.log` and `real.exit`. Paired BoolQ features from LLaMA-70B and Qwen-72B passed raw ID and label consistency checks: 500 training rows and 200 validation rows. After saving and reloading, the maximum coordinate error per sample was **0.0**. Per-sample IDs, both actual outputs, errors, and fit/evaluation indices are in `/tmp/b0928-t4-evidence/real-paired-transform-evidence.npz`. `artifacts.json` records artifact sizes, paths, and SHA256 hashes.
+- The real anchor is a 128→128 orthogonal transform, so energy retention and cosine correlation of 1 are **not evidence of improved task capability**. Classification accuracy was not computed, and no generalization gain is claimed.
+- `git diff --check`, `python -m compileall -q ...` on the specified files, and `rustfmt --check` on the Rust test file all exited **0**. Full argv, stdout, and stderr are in `checks.json`. `compileall` establishes only Python compilation; `rustfmt` checks Rust syntax and formatting, not cargo compilation.
+- An initial set of 10 failures and an expanded set of 4 failures during development are recorded in `/tmp/b0928-t4-evidence/initial-tests.log` and `tests.log`; both original exit codes were 1. The final passing result was obtained only after fixes.
 
-测试变更说明：原测试要求“发散拟合经缩放必定稳定”、默认机器路径、v1 无来源产物可直通 bridge，这些预期与整改要求冲突。已替换为 Hurwitz/Schur 正反例、GCCA 原始岭回归数值对照、共享划分拒绝、manifest 错配拒绝、CLI 实际入口测试、启动 profile 结构校验。候选数、domain、重复候选、非有限输入、f32 溢出等检查改为参数化。旧 v1 真实产物保留，测试要求明确拒绝它；没有给它补造 GCCA/core 来源。原 Rust replay 测试改为校验该旧产物被 Python 拒绝，没有把历史快照再当作新链路成功证据。
+Test changes: Previous tests assumed that scaling a divergent fit necessarily made it stable, relied on a default machine path, and allowed an unsourced v1 artifact through the bridge. Those expectations conflicted with the fixes. They were replaced with positive and negative Hurwitz/Schur cases, a numerical comparison against the original GCCA ridge regression, rejection of inconsistent splits and mismatched manifests, tests of the actual CLI entry point, and launcher profile structure checks. Checks for candidate count, domain, duplicate candidates, nonfinite input, and float32 overflow were parameterized. The real old v1 artifact remains, but tests require its explicit rejection; no GCCA/core provenance was fabricated for it. The old Rust replay test was changed to verify Python's rejection of that artifact, rather than treating a historical snapshot as evidence that the new path succeeded.
 
-## 未验证
+## Unverified
 
-- Windows `.bat` 在 Windows 上启动完整 405B / 小切片的实际 llama-server 加载与显存占用；已验证参数/结构门禁，未执行大模型启动。
-- A100 有序轨迹上的真实动态系统辨识；只运行了数学稳定/发散反例与生产代码编译检查。
-- 更新后的 Rust 测试没有运行 cargo 编译/执行。此次未进行重型编译，没有远程部署。
-- 本次边界是产物、Python bridge、CLI/client。Rust `nanocore_ask` 的直接裸向量调用仍是原有 shape 检查（`crates/gen-zero-service/src/zero.rs:2261`），不会自动获得 Python 身份校验；不能把本次结果表述为“所有 Rust/MCP 裸调用均强制空间身份”。
+- Actual Windows `.bat` startup of a full 405B model or a small slice in llama-server, including VRAM use. Argument and structure gates were verified; the large model was not started.
+- Dynamic system identification from a real ordered trajectory on A100. Only mathematical stable/divergent counterexamples and a production-code compilation check were run.
+- The updated Rust tests were not compiled or executed with cargo. No large build or remote deployment was performed.
+- This work covers artifacts, the Python bridge, CLI, and client. Direct raw-vector calls to Rust `nanocore_ask` still have the preexisting shape check (`crates/gen-zero-service/src/zero.rs:2261`); they do not automatically receive Python's identity check. This result does not establish mandatory space identity for all raw Rust/MCP calls.
 
-## 未完成
+## Incomplete
 
-- 与新 GCCA/anchor 空间匹配的真实 core 训练、core manifest 发布与 live Rust/MCP 接受验证。仓内现有 core/fixture 未提供这种绑定；真实验证产物刻意保持 **unbound**，bridge 实测拒绝信息为 `artifact lacks complete source -> GCCA -> anchor -> core identity`。未用随意 core 摘要给真实产物伪造可用性。
-- 没有任务准确率提升结论，也没有用模型假设代替训练证据。
+- Real core training matched to the new GCCA/anchor space, publication of a core manifest, and live Rust/MCP acceptance verification. Existing repository cores and fixtures lack this binding. The real validation artifact was deliberately left **unbound**; the measured bridge rejection said `artifact lacks complete source -> GCCA -> anchor -> core identity`. An arbitrary core hash was not attached to make the artifact look usable.
+- No task accuracy improvement is claimed, and model assumptions were not substituted for training evidence.
 
-## 对要求 1–10 的核查
+## Review against requirements 1–10
 
-1. 明确披露独立样本伪轨迹、错用判稳、真实 core 缺失、Rust 直接调用边界。
-2. 不稳定、低秩、旧版本、错配身份、坏划分、坏启动 profile 均报错；无新增静默 fallback。
-3. 数学单测、真实拟合与能力评估分开；逐样本 transform 数据可复核，不声称能力突破。
-4. 上述三类状态与原始退出码、完整日志、代码位置对应。
-5. 新变换已用于锚点 CLI、bridge、client；数值 CLI 入口测试通过。被替代稳定缩放符号和旧生产调用已移除。Rust 裸入口边界明确列出，未冒称覆盖。
-6. 未执行 stash/checkout/reset/clean/push --force。
-7. 修复后继续排查生产调用、隔离划分、修改受影响测试并运行全套聚焦检查。
-8. 本次是单线程 NumPy 与 Python 测试，无大体积编译；未制造远端任务或残留服务。
-9. 不用同维空间伪装兼容，不用数学构造数据宣称训练能力，不把旧 fixture 直通称为新契约接受。
-10. 不保留旧稳定投影或无来源 bridge 兼容分支；v1 产物明确拒绝，完整模型与切片显式分离。
+1. Discloses the false trajectory made from independent samples, incorrect stability checking, missing real core, and the boundary of direct Rust calls.
+2. Unstable fits, insufficient rank, old versions, mismatched identity, invalid splits, and invalid launch profiles raise errors; no new silent fallback was added.
+3. Mathematical unit tests, fitting on real features, and capability evaluation are kept distinct. Per-sample transform data is available for review; no capability breakthrough is claimed.
+4. The three evidence states above are tied to original exit codes, complete logs, and code locations.
+5. The new transform is used by the anchor CLI, bridge, and client; numerical CLI entry-point tests passed. Superseded stability-scaling symbols and the old production call were removed. The raw Rust entry-point boundary is disclosed rather than claimed as covered.
+6. No stash, checkout, reset, clean, or force-push was performed.
+7. After the initial fixes, the production calls and split isolation were checked, affected tests were updated, and all focused checks were run.
+8. The work involved single-threaded NumPy and Python tests, with no large build. No remote task or residual service was created.
+9. Equal-dimensional spaces were not presented as compatible; mathematically constructed data was not presented as trained capability; and an old fixture passing through was not called acceptance of the new contract.
+10. No old stability projection or unsourced bridge compatibility branch remains. V1 artifacts are explicitly rejected, and full models and slices have separate explicit profiles.

@@ -1,66 +1,66 @@
-# b0927c-t1-geom：Dense 表征的几何与辛动力学研究方案
+# b0927c-t1-geom: Research Plan for Geometry and Symplectic Dynamics of Dense Representations
 
-研究日期：2026-09-27。工作目录：`/ebs/pj/gen-zero`。检查起点 HEAD：`acb2c0ccf3f30a708cd9a4f638248973c4709188`。
+Research date: 2026-09-27. Working directory: `/ebs/pj/gen-zero`. Audit start HEAD: `acb2c0ccf3f30a708cd9a4f638248973c4709188`.
 
-**结论：现有资产足以启动“有配对样本约束的局部切丛对齐”实验，不足以宣称已发现 Dense 模型的内在曲率、已实现跨模型规范不变语义映射，或已获得无 token 世界预测能力。** 最值得实施的是先证明局部几何比全局映射具有样本外收益，再用真实动作轨迹辨识余切相空间与动力学。把已有隐藏向量一分为二、送进稳定振子，得到的只是稳定振子。
+**Conclusion: existing assets are enough to start an experiment on "local tangent-bundle alignment under paired-sample constraints," but not enough to claim that the Dense models' intrinsic curvature has been discovered, that a cross-model gauge-invariant semantic mapping has been achieved, or that token-free world prediction has been obtained.** The most worthwhile next step is to first prove that local geometry gives an out-of-sample gain over global mapping, then use real action trajectories to identify a cotangent phase space and dynamics. Splitting an existing hidden vector in half and feeding it into a stable oscillator only produces a stable oscillator.
 
 > **Pruned 2026-09-29.** The 16 `*.snapshot.txt` source copies were removed from this directory. They duplicated code that has since changed or been deleted. `SHA256.json` keeps their hashes as the record of what was audited. Its entry `gpu_extract_qwen72b_13tasks-suites.snapshot.txt` was already absent before this pruning. `path:line` citations below refer to HEAD `acb2c0c`, not to the current tree.
 
-本次只新增报告、只读核验的命令记录、日志与数据证据，没有修改代码文件、训练模型、部署服务、提交或推送，也没有派子代理。开始时已存在的 `docs/zero/evidence/b0927c-t1-geom/geom_diag.py` 等未跟踪资产没有修改或执行；它们不是本次验证证据。
+This work only added a report, read-only verification command logs, and evidence data; it did not modify code files, train a model, deploy a service, commit, or push, and it did not dispatch a subagent. Untracked assets that already existed at the start, such as `docs/zero/evidence/b0927c-t1-geom/geom_diag.py`, were not modified or executed; they are not evidence for this verification.
 
-## 1. 先纠正最危险的前提
+## 1. Correcting the Most Dangerous Premises First
 
-### 1.1 三个数学概念不能混用
+### 1.1 Three Mathematical Concepts That Must Not Be Conflated
 
-1. **切丛是 \(TM\)，余切丛是 \(T^*M\)**。前者承载位移/速度，后者承载协向量/动量。给定度量 \(g\) 才能用 \(p=g(v,\cdot)\) 关联二者。\(T^*M\) 有自然辛结构；一般的 \(TM\) 没有无需选择即可获得的同一结构。
-2. **高环境维数不等于高内在维数，更不意味着高曲率。** 8192 维向量可以采样自直线、球面的一小片、多个不相连簇或根本不是光滑流形的分层集合。有限点云也不能唯一辨识底层拓扑。
-3. **辛性、保体积、保能量、稳定、预测正确是五项不同要求。** 辛性推出相空间体积保持；反向不成立。辛积分器一般不精确保原哈密顿量。能量保持也不保证轨道有界，更不保证语义正确。
+1. **The tangent bundle is \(TM\); the cotangent bundle is \(T^*M\)**. The former carries displacement/velocity, the latter carries covectors/momentum. Only with a given metric \(g\) can the two be linked via \(p=g(v,\cdot)\). \(T^*M\) has a natural symplectic structure; a generic \(TM\) does not have that same structure without an additional choice.
+2. **A high ambient dimension is not the same as a high intrinsic dimension, and still less does it imply high curvature.** An 8192-dimensional vector can be sampled from a line, a small patch of a sphere, several disconnected clusters, or a stratified set that is not a smooth manifold at all. A finite point cloud also cannot uniquely identify the underlying topology.
+3. **Being symplectic, volume-preserving, energy-preserving, stable, and predicting correctly are five different requirements.** Symplecticity implies phase-space volume preservation; the converse does not hold. Symplectic integrators generally do not preserve the original Hamiltonian exactly. Energy preservation also does not guarantee bounded orbits, still less semantic correctness.
 
-### 1.2 当前代码与任务背景已有差异
+### 1.2 Gaps That Already Exist Between the Current Code and the Task Background
 
-| 核查项 | 代码事实与证据 | 对研究的影响 |
+| Check item | Code facts and evidence | Impact on the research |
 |---|---|---|
-| Procrustes “非对称残差” | `benchmarks/suites/cross_model_manifold_alignment.py:150`，尤其 `:173`：总是低维映入高维；`:183` 用薄 SVD 核计算核范数 | 映射方向仍有意义，但当前**标量残差对交换输入对称**。不能再把解决“非对称残差”作为新贡献 |
-| 对齐不等于部署转换器 | 同文件 `:245`、`:265`：加载、核验、输出指标；`:185` 只返回标量 | 当前报告不包含可用于新样本的已部署跨模型转换器 |
-| 最后层不等于逐层轨迹 | `gpu_extract_qwen72b_13tasks.py:191`、`:199`、`:203`：完整文本、final post-norm last token、`pair_fields_extracted=False` | 无法从这些 NPZ 直接测层间动力学、真实时间导数或意图动量 |
-| ETF 名称与实现不一致 | `crates/gen-zero-model/src/choice_head.rs:7` 说明旧固定顶点绑定已去掉；`:83` 接收候选表示；`:99` 开始余弦打分 | 当前 Rust 服务 head 是内容余弦打分，不可报告成 ETF 极值求解器 |
-| Rust 辛模型是先验 | `crates/gen-zero-worldmodel/src/symplectic_dynamics.rs:20`、`:34`、`:132`：未训练，action ID 的正弦中心，手设奖励 | 保结构工程资产真实存在，语义动作因果能力没有由此建立 |
-| 服务确有调用链 | `crates/gen-zero-service/src/zero.rs:1546` → `worldsim.rs:240`、`:295` → `SymplecticWorldModelDynamics::transition` | 不能说现有 Rust 辛模块“0 引用”；但本次只验证源码连接，未验证线上执行 |
-| Python 静默降级 | `python/gen_zero/world_model/latent_dynamics.py:35` 请求 CUDA 可转 CPU；`:158` 无 Torch 转 `_step_numpy`；`:374` hash 正弦伪转移 | 不符合本任务的能力 provenance 与 fail-closed 标准，应成为后续整改阻断项 |
-| “保持熵”名不副实 | 同文件 `:149` 宣称 so(D) dynamics；`:341` 实际只是把 next 向量缩回原模长 | 保范数不等于保熵、保辛，也不等于测地运动 |
-| Python 辛控制输入 | `hamiltonian_dynamics.py:188` 随机动作权重，`:220` 静默 pad/truncate，`:247` Python hash 伪动作 | 没有训练与动作语义约束；Python hash 跨进程还受 hash seed 影响 |
+| Procrustes "asymmetric residual" | `benchmarks/suites/cross_model_manifold_alignment.py:150`, especially `:173`: always maps low-dimensional into high-dimensional; `:183` computes a nuclear norm via a thin-SVD kernel | The mapping direction is still meaningful, but the current **scalar residual is symmetric under swapping the input pair**. "Solving the asymmetric residual" can no longer be claimed as a new contribution. |
+| Alignment is not a deployed converter | Same file `:245`, `:265`: load, verify, output metrics; `:185` returns only a scalar | The current report does not include a deployed cross-model converter usable on new samples. |
+| Last layer is not per-layer trajectory | `gpu_extract_qwen72b_13tasks.py:191`, `:199`, `:203`: full text, final post-norm last token, `pair_fields_extracted=False` | Inter-layer dynamics, true time derivatives, or intent momentum cannot be measured directly from these NPZ files. |
+| ETF name and implementation diverge | `crates/gen-zero-model/src/choice_head.rs:7` states that the old fixed-vertex binding has been removed; `:83` accepts a candidate representation; `:99` begins cosine scoring | The current Rust service head is content-based cosine scoring; it must not be reported as an ETF extremal solver. |
+| The Rust symplectic model is a prior | `crates/gen-zero-worldmodel/src/symplectic_dynamics.rs:20`, `:34`, `:132`: untrained, sinusoidal centering keyed on action ID, hand-set reward | The structure-preserving engineering asset genuinely exists; semantic action-causal capability has not thereby been established. |
+| The service does have a call chain | `crates/gen-zero-service/src/zero.rs:1546` → `worldsim.rs:240`, `:295` → `SymplecticWorldModelDynamics::transition` | It cannot be said that the existing Rust symplectic module has "zero references"; but this check only verifies source-code wiring, not live execution. |
+| Python silent degradation | `python/gen_zero/world_model/latent_dynamics.py:35` falls back from requested CUDA to CPU; `:158` falls back to `_step_numpy` when Torch is absent; `:374` uses a hashed sine as a pseudo-transition | This does not meet this task's capability-provenance and fail-closed standard, and should become a blocking item for follow-up remediation. |
+| "Entropy-preserving" is a misnomer | Same file `:149` claims so(D) dynamics; `:341` in fact only rescales the next vector back to the original norm | Preserving the norm is not the same as preserving entropy, being symplectic, or geodesic motion. |
+| Python symplectic control input | `hamiltonian_dynamics.py:188` uses random action weights, `:220` silently pads/truncates, `:247` uses a Python hash as a pseudo-action | There is no training or action-semantic constraint; a Python hash across processes is also affected by the hash seed. |
 
-这些问题不是本次实现引入的；本次按“不要修改任何代码文件”保留现状并公开列出。不得以“已有数学模块”绕过这些风险。
+These issues were not introduced by this work; per the instruction "do not modify any code file," this work preserved the status quo and lists it openly. "An existing math module" must not be used to bypass these risks.
 
-### 1.3 三类证据状态
+### 1.3 Three Categories of Evidence Status
 
-**已实现且本次验证：** 既有加载/配对检查、当前对称 Procrustes 标量与历史 13-task 测试集结果；30 项既有对齐测试；真实文件错配 ID 的拒绝行为。具体命令与退出码见第 9 节。
+**Implemented and verified in this work:** the existing load/pairing checks, the current symmetric Procrustes scalar and historical 13-task test-set results, the 30 existing alignment tests, and the rejection behavior on genuinely mismatched file IDs. See Section 9 for the specific commands and exit codes.
 
-**未验证：** 已有 Rust/Python 辛服务的实际运行行为、当前部署版本、五款 Dense 的完整数据到服务链、历史报告置换对照的本次重算。源码接线不等于 live acceptance。
+**Unverified:** the actual runtime behavior of the existing Rust/Python symplectic service, the currently deployed version, the full data-to-service chain for the five Dense models, and a recomputation in this work of the historical report's permutation controls. Source-code wiring is not the same as live acceptance.
 
-**未完成：** 本报告提出的局部联络适配器、曲率估计与补偿、可辨识 q/p、训练所得哈密顿量、真实长期前瞻和新生产接入。它们是后续工程与实验计划，不是本次已实现能力。
+**Not completed:** the local connection adapter, curvature estimation and compensation, identifiable q/p, a trained Hamiltonian, genuine long-horizon lookahead, and new production integration proposed in this report. These are follow-up engineering and experimental plans, not capabilities already implemented in this work.
 
-## 2. 现实数据资产与本次实测
+## 2. Real Data Assets and What Was Actually Measured This Time
 
-### 2.1 可访问范围
+### 2.1 Accessible Scope
 
-本机 `/ebs/data/extracted_features/` 有 Qwen72B 与 Llama70B 的完整 13-task NPZ；另有 GTE7B 的单任务文件。没有在此目录找到 Mistral123B、Falcon180B、Llama405B 的配对特征。此结论限定于检查的资产目录，不推断其他机器没有数据。
+On this machine, `/ebs/data/extracted_features/` has complete 13-task NPZ files for Qwen72B and Llama70B, plus single-task files for GTE7B. No paired features for Mistral123B, Falcon180B, or Llama405B were found in this directory. This conclusion is limited to the asset directory that was checked; it does not imply that no other machine has the data.
 
-抽取代码约定宽度分别为 Qwen72B/Llama70B 8192、Mistral123B 12288、Falcon180B 14848、Llama405B 16384。后三者的代码证据分别为 `gpu_extract_mistral123b_13tasks.py:62`、`gpu_extract_falcon180b_13tasks.py:63`、`gpu_extract_llama405b_13tasks.py:31`；常量不是成功抽取证明。
+The extraction code specifies widths of 8192 for Qwen72B/Llama70B, 12288 for Mistral123B, 14848 for Falcon180B, and 16384 for Llama405B. The code evidence for the latter three is `gpu_extract_mistral123b_13tasks.py:62`, `gpu_extract_falcon180b_13tasks.py:63`, and `gpu_extract_llama405b_13tasks.py:31` respectively; a constant is not proof of successful extraction.
 
-本次 26 个 NPZ 的实际 metadata 表明，两款模型用 **GGUF Q4_K_M、llama-server、final post-norm last token、embd_normalize=-1**。因此本报告的实测结论限定于这一量化、pooling、prompt 与后端设置，不能直接推广到 BF16 原生中间层。
+Actual metadata from the 26 NPZ files checked this time shows that both models used **GGUF Q4_K_M, llama-server, final post-norm last token, embd_normalize=-1**. So the empirical conclusions in this report are limited to this quantization, pooling, prompt, and backend setup, and cannot be directly generalized to native BF16 intermediate layers.
 
-### 2.2 核验边界
+### 2.2 Verification Boundary
 
-本次读取全部 train/test ID、train label 与特征；调用现有 `load_features` 和 `verify_id_alignment`；另检查 ID 唯一性与 train/test ID 交集；对每个完整文件计算 SHA256。26/26 哈希与历史报告匹配，各模型各任务 ID 重复和 train/test ID 交集均为零。
+This work read all train/test IDs, train labels, and features; called the existing `load_features` and `verify_id_alignment`; additionally checked ID uniqueness and the train/test ID intersection; and computed SHA256 for every complete file. All 26/26 hashes match the historical report, and the duplicate-ID count and train/test ID intersection are zero for every model and task.
 
-但 **相同 ID 不等于原始文本逐字相同**。当前对齐器不核对 `info_json`、token 序列、候选字符串语义顺序或原始文本哈希；本次也没有重新生成抽取输入逐条复核。后续严格配对契约必须补这些信息。metadata 声称 13 个 test 块截断数均为 0，两模型 `max_tok=1536`；这是元数据核查，非本次重跑 tokenizer 的证明。
+But **an identical ID is not the same as identical raw text verbatim**. The current aligner does not cross-check `info_json`, the token sequence, the semantic order of candidate strings, or a raw-text hash; this work also did not regenerate the extraction inputs for a line-by-line recheck. A future strict pairing contract must add this information. The metadata claims zero truncations across the 13 test blocks and `max_tok=1536` for both models; this is a metadata check, not proof that the tokenizer was rerun in this work.
 
-所有测试集样本用于本次**描述性统计**，没有据此训练或挑选适配器。未来超参数只能在 train 内划分选择，不能把这次探索过的 test 当作从未见过的最终确认集。
+All test-set samples were used this time for **descriptive statistics** only; nothing was trained or selected on this basis. Future hyperparameters may only be chosen within a train-internal split; the test set explored here cannot be treated as a never-seen final confirmation set going forward.
 
-### 2.3 真实测量结果
+### 2.3 Actual Measurement Results
 
-对中心化测试特征 \(X_c\)，令 \(G=X_cX_c^\top\)。使用
+For centered test features \(X_c\), let \(G=X_cX_c^\top\). Using
 
 \[
 \operatorname{CKA}(X,Y)=\frac{\langle G_X,G_Y\rangle_F}{\|G_X\|_F\|G_Y\|_F},\qquad
@@ -68,7 +68,7 @@ d_{\rm PR}=\frac{(\sum_i\lambda_i)^2}{\sum_i\lambda_i^2},\quad
 \operatorname{CV}_{\|x\|}=\frac{\operatorname{sd}(\|x\|)}{\operatorname{mean}(\|x\|)}.
 \]
 
-Gram 形式与既有 CKA 的特征协方差形式代数等价；这是显式记录的只读计算优化，不是隐藏替换生产算法。Procrustes 直接调用当前仓库函数。
+The Gram form is algebraically equivalent to the existing CKA's feature-covariance form; this is an explicitly recorded read-only computational optimization, not a hidden substitution of the production algorithm. Procrustes calls the current repository function directly.
 
 | task | test n | CKA | Procrustes | PR Qwen72B | PR Llama70B |
 |---|---:|---:|---:|---:|---:|
@@ -86,47 +86,47 @@ Gram 形式与既有 CKA 的特征协方差形式代数等价；这是显式记�
 | summeval_relevance | 240 | 0.428177 | 0.753045 | 9.27 | 7.55 |
 | vitaminc | 599 | 0.378081 | 0.761987 | 16.05 | 18.02 |
 
-CKA 与历史 test 值最大绝对差 \(2.220446049250313\times10^{-16}\)；Procrustes 最大差 \(2.3314683517128287\times10^{-15}\)。历史未加权 task 均值为 0.5160 和 0.6791，本次逐项复现。历史 null CKA 均值 0.0569、null Procrustes 均值 1.0580 **只作为历史对照引用，本次未重跑置换分布**。
+The maximum absolute difference from the historical test values is \(2.220446049250313\times10^{-16}\) for CKA and \(2.3314683517128287\times10^{-15}\) for Procrustes. The historical unweighted per-task means were 0.5160 and 0.6791, reproduced item by item this time. The historical null CKA mean of 0.0569 and null Procrustes mean of 1.0580 **are cited only as a historical reference; this work did not rerun the permutation distribution**.
 
-**尤其注意：当前 `test_full` Procrustes 在测试块自身重新中心化、归一化并求最优残差。它是该点云的描述性拟合，不是 train 上拟合的映射在 test 上泛化的成绩。** 后续泛化实验必须保存 train 的均值、尺度、子空间和映射，只在 test 上应用；不允许每个测试批次重求最优旋转后声称可迁移。
+**Note in particular: the current `test_full` Procrustes re-centers, re-normalizes, and solves the optimal residual within the test block itself. It is a descriptive fit to that point cloud, not the generalization score, on test, of a mapping fitted on train.** A future generalization experiment must save train's mean, scale, subspace, and mapping, and apply them on test only; it must not re-solve the optimal rotation for each test batch and then claim transferability.
 
-Qwen 的模长 CV 为 0.01763–0.04074；Llama 为 0.00341–0.00758。可支持“该提取方式下径向波动小”；不能支持“数据填满一个球面”或“内在截面曲率为正”。final norm、量化与大均值都可能造成此现象。
+Qwen's norm CV ranges 0.01763–0.04074; Llama's ranges 0.00341–0.00758. This can support "radial fluctuation is small under this extraction method"; it cannot support "the data fills a sphere" or "the intrinsic sectional curvature is positive." The final norm, quantization, and a large mean can all produce this pattern.
 
-PR 是**方差谱有效秩**，不是流形维数估计的替代品。低 PR 可由少数高幅值方向造成；不能据此选一个 4 维流形并宣称无损压缩。中心化测试矩阵秩最多 \(n-1\)，这里仅 143–598，无法辨识整个 8192 维空间的几何。
+PR is an **effective rank of the variance spectrum**, not a substitute for manifold-dimension estimation. A low PR can be caused by a small number of high-magnitude directions; it cannot be used to pick a 4-dimensional manifold and claim lossless compression on that basis. The centered test matrix has rank at most \(n-1\), which here is only 143–598, so it cannot identify the geometry of the full 8192-dimensional space.
 
-## 3. 几何升维：从点表示转到局部几何对象
+## 3. Raising the Dimensionality of the Geometry: From Point Representations to Local Geometric Objects
 
-### 3.1 先把假设写清楚
+### 3.1 State the Assumptions Clearly First
 
-设同一语义样本 \(s_i\) 在模型 \(m\) 的观测为
+Let the observation of the same semantic sample \(s_i\) under model \(m\) be
 
 \[
 x_i^{(m)}=f_m(s_i)+\epsilon_i^{(m)}\in\mathbb R^{d_m}.
 \]
 
-工作假设是某个局部区域可由低维光滑 \(M_m\) 描述，\(f_m\) 在共享语义子空间上近似局部可逆。**这两个条件都需要检验**：模型可能丢失不同信息；类别边界可能形成分层集合；跨模型共享维数可能随区域变化。
+The working assumption is that some local region can be described by a low-dimensional smooth \(M_m\), and that \(f_m\) is approximately locally invertible on a shared semantic subspace. **Both conditions need to be checked**: a model may discard different information; class boundaries may form a stratified set; the shared cross-model dimension may vary by region.
 
-第一版使用提取空间的诱导欧氏度量做可复现基线，并分别记录 raw、train-fitted z-score、去均值/白化等选择。白化改变度量，不是无害坐标更名。若以后能访问冻结模型输出分布，可考虑 pullback Fisher
+The first version uses the induced Euclidean metric of the extraction space as a reproducible baseline, and records raw, train-fitted z-score, and de-meaned/whitened choices separately. Whitening changes the metric; it is not a harmless renaming of coordinates. If a frozen model's output distribution becomes accessible in the future, a pullback Fisher metric could be considered
 
 \[
 g_x=\mathbb E_{y\sim p_\theta(y\mid x)}
 [\nabla_x\log p_\theta(y\mid x)\nabla_x\log p_\theta(y\mid x)^\top].
 \]
 
-它度量表示扰动对输出分布的影响，但需要 logit/梯度接口，可能退化；当前 NPZ 不能计算。不得把普通协方差逆矩阵命名为已获得的 Fisher 度量。
+It measures how a representation perturbation affects the output distribution, but it needs a logit/gradient interface and can degenerate; it cannot be computed from the current NPZ files. An ordinary inverse-covariance matrix must not be labeled as an already-obtained Fisher metric.
 
-### 3.2 局部切空间与法向残差
+### 3.2 Local Tangent Space and Normal Residual
 
-仅用训练点构造多尺度 mutual-kNN 图。对锚点 \(i\)：
+Construct a multiscale mutual-kNN graph using train points only. For anchor \(i\):
 
 \[
 C_i^{(m)}=\frac{\sum_{j\in N_i}w_{ij}(x_j-x_i)(x_j-x_i)^\top}{\sum_jw_{ij}},
 \quad U_i^{(m)}\in\mathbb R^{d_m\times r},\quad U_i^\top U_i=I.
 \]
 
-\(U_i\) 为局部 PCA 帧，切坐标 \(v_{ij}=U_i^\top(x_j-x_i)\)。小邻域下它近似 log map；有限邻域误差必须保留，不能把 PCA 投影当成精确黎曼对数。
+\(U_i\) is the local PCA frame; the tangent coordinates are \(v_{ij}=U_i^\top(x_j-x_i)\). Over a small neighborhood this approximates the log map; the finite-neighborhood error must be kept and reported, and a PCA projection must not be treated as an exact Riemannian logarithm.
 
-以留出的邻域样本评价
+Evaluate on held-out neighborhood samples:
 
 \[
 e_{\perp,i}=\frac{\sum_j\|(I-U_iU_i^\top)(x_j-x_i)\|^2}
@@ -134,56 +134,56 @@ e_{\perp,i}=\frac{\sum_j\|(I-U_iU_i^\top)(x_j-x_i)\|^2}
 e_{\rm frame}=\|U_iU_i^\top-\widetilde U_i\widetilde U_i^\top\|_F.
 \]
 
-第二个量比较重采样后的子空间，不比较任意符号的特征向量。建议预注册 \(k\in\{32,64,128,256\}\)、\(r\in\{4,8,16,32\}\)，只保留 \(k\ge4r\) 的组合；这是有限样本工程约束，不是充分性定理。无谱间隙、重复点过多、邻域不连通或基底不稳定时，输出 `geometry_unidentified`，不默认欧氏补位。
+The second quantity compares the resampled subspace; it does not compare individual eigenvectors of arbitrary sign. Pre-registering \(k\in\{32,64,128,256\}\) and \(r\in\{4,8,16,32\}\), keeping only combinations with \(k\ge4r\), is recommended; this is a finite-sample engineering constraint, not a sufficiency theorem. When there is no spectral gap, too many duplicate points, a disconnected neighborhood, or an unstable basis, the output should be `geometry_unidentified`; it must not silently fall back to Euclidean.
 
-局部 PCA + 正交邻域对齐有现成理论基础，但其收敛要求光滑流形、合适采样密度、邻域尺度和充分样本，不能直接套在 250 个离散任务样本上。[Singer & Wu, Vector Diffusion Maps](https://arxiv.org/abs/1102.0075)
+Local PCA plus orthogonal-neighborhood alignment has an established theoretical basis, but its convergence requires a smooth manifold, adequate sampling density, an appropriate neighborhood scale, and sufficient samples; it cannot be applied directly to 250 discrete task samples. [Singer & Wu, Vector Diffusion Maps](https://arxiv.org/abs/1102.0075)
 
-### 3.3 曲率必须由多个独立指标支持
+### 3.3 Curvature Must Be Supported by Multiple Independent Indicators
 
-在切坐标下拟合法向二阶项：
+Fit a second-order normal term in tangent coordinates:
 
 \[
 x(v)\simeq x_i+U_iv+\tfrac12\mathrm{II}_i(v,v).
 \]
 
-若欧氏嵌入模型成立，对正交单位切向量 \(u,v\)，Gauss 方程给出
+If the Euclidean-embedding model holds, then for orthogonal unit tangent vectors \(u,v\), the Gauss equation gives
 
 \[
 K_i(u,v)=\langle\mathrm{II}_i(u,u),\mathrm{II}_i(v,v)\rangle
 -\|\mathrm{II}_i(u,v)\|^2.
 \]
 
-高 codimension 下拟合完整二阶张量参数量过大；第一版只估 bootstrap 稳定的少数主法向分量，并公开法向截断误差。至少比较多尺度邻域、训练/留出拟合残差和同协方差谱的无流形 null。导数估计不稳定时不得输出确定曲率符号。
+At high codimension, fitting the full second-order tensor has too many parameters; the first version only estimates the small number of bootstrap-stable principal normal components, and reports the normal-truncation error openly. At minimum, compare across multiscale neighborhoods, train/held-out fit residuals, and a no-manifold null with the same covariance spectrum. When the derivative estimate is unstable, a definite curvature sign must not be output.
 
-辅助指标可以包含：
+Auxiliary indicators can include:
 
-- **四点双曲性**：对四个点的三种对边距离和排序 \(s_1\le s_2\le s_3\)，\(\delta=(s_3-s_2)/2\)。报告抽样分布及尺度归一化，不把抽样最大值称为全空间最小双曲常数。小 \(\delta\) 不证明负截面曲率，高维距离集中也可令它变小。
-- **球面候选度量**：在明确归一化后用 \(d_S(x,y)=R\arccos(\langle x,y\rangle/R^2)\)；把点强制放到球上只是建模，不是发现球面拓扑。
-- **双曲候选度量**：Lorentz 模型 \(\langle x,x\rangle_L=-R^2\)、\(d_H(x,y)=R\operatorname{arcosh}(-\langle x,y\rangle_L/R^2)\)。映射及 \(R\) 只能由训练/验证集确定。
-- **持续同调**：对固定度量、多尺度抽样构造过滤，比较稳定的 H0/H1 条形与噪声 null；用地标近似时标明近似。有限点云的洞不自动是模型语义空间的真实洞。
+- **Four-point hyperbolicity**: for the three pairwise-sum distances among four points, sorted \(s_1\le s_2\le s_3\), \(\delta=(s_3-s_2)/2\). Report the sampling distribution and scale normalization; do not call a sampled maximum the global minimum hyperbolic constant. A small \(\delta\) does not prove negative sectional curvature; concentration of distances in high dimension can also shrink it.
+- **Spherical candidate metric**: after explicit normalization, use \(d_S(x,y)=R\arccos(\langle x,y\rangle/R^2)\); forcing points onto a sphere is only modeling, not the discovery of spherical topology.
+- **Hyperbolic candidate metric**: the Lorentz model \(\langle x,x\rangle_L=-R^2\), \(d_H(x,y)=R\operatorname{arcosh}(-\langle x,y\rangle_L/R^2)\). The mapping and \(R\) may only be determined from the train/validation set.
+- **Persistent homology**: for a fixed metric and multiscale sampling, build a filtration and compare stable H0/H1 bars against a noise null; when landmark approximation is used, state so explicitly. Holes in a finite point cloud are not automatically genuine holes in the model's semantic space.
 
-竞争模型应包含 \(\mathbb R^{r_E}\times S^{r_S}(R_S)\times\mathbb H^{r_H}(R_H)\)，而不预设全部语义为负曲率。此类乘积空间是文献中的可训练表示选择，不是现有五款 Dense 几何的证据。Gu 等 2019 工作的 OpenReview 原文访问本次遇到浏览器验证，故不据其未读取正文宣称具体实验或保证。
+The competing model set should include \(\mathbb R^{r_E}\times S^{r_S}(R_S)\times\mathbb H^{r_H}(R_H)\), rather than presupposing that all semantics have negative curvature. Such product spaces are a trainable representation choice found in the literature; they are not evidence about the geometry of the five existing Dense models. Access to the OpenReview original text for the Gu et al. 2019 work hit a browser verification page during this check, so no specific experiment or guarantee from it is claimed without having read the body text.
 
-实际选择标准是留出图距离失真、近邻稳定性、跨模型迁移和下游损失，而不是“图画得更像双曲盘”。如果线性 ridge 持续更好，应接受局部几何模型目前不值得部署。
+The actual selection criterion is held-out graph-distance distortion, near-neighbor stability, cross-model transfer, and downstream loss, not "the plot looks more like a hyperbolic disk." If a linear ridge model keeps performing better, it should be accepted that the local geometric model is not currently worth deploying.
 
-## 4. 规范场、李群和跨模型平行移动
+## 4. Gauge Fields, Lie Groups, and Cross-Model Parallel Transport
 
-### 4.1 帧的规范自由度
+### 4.1 Gauge Freedom of the Frame
 
-局部切帧可以换成 \(U_i'=U_iH_i\)，\(H_i\in O(r)\)；同一几何向量坐标变为 \(v_i'=H_i^\top v_i\)。自然结构群是正交标架丛的 \(O(r)\)，不能无条件设成 \(SO(r)\)：PCA 存在反射自由度，空间也未证明可定向。
+A local tangent frame can be changed to \(U_i'=U_iH_i\), \(H_i\in O(r)\); the coordinates of the same geometric vector become \(v_i'=H_i^\top v_i\). The natural structure group is the \(O(r)\) of the orthogonal frame bundle; it cannot be set unconditionally to \(SO(r)\), since PCA has a reflection ambiguity and orientability has not been established for the space.
 
-设 \(P_{ij}\) 表示从点 \(i\) 运到点 \(j\) 的坐标变换。离散估计为
+Let \(P_{ij}\) denote the coordinate transformation transported from point \(i\) to point \(j\). The discrete estimate is
 
 \[
 P_{ij}^{(m)}=\operatorname{polar}((U_j^{(m)})^\top U_i^{(m)}),\qquad
 P'_{ij}=H_j^\top P_{ij}H_i.
 \]
 
-仅在子空间接近、交叠矩阵非退化时接受 polar 因子。这样得到的是**模型内部**的近似平行移动；不同模型环境维数不等，不能直接计算 \((U^B)^\top U^A\)。
+The polar factor is accepted only when the subspaces are close and the overlap matrix is non-degenerate. What this gives is an approximate parallel transport **within a single model**; different models have different ambient dimensions, so \((U^B)^\top U^A\) cannot be computed directly.
 
-### 4.2 跨模型配对给出纤维映射
+### 4.2 Cross-Model Pairing Gives a Fiber Map
 
-在共享锚点 ID 及其训练配对邻域上，求
+On shared anchor IDs and their trained paired neighborhoods, solve
 
 \[
 C_i=\arg\min_{C\in O(r)}\sum_{j\in N_i}w_{ij}
@@ -191,96 +191,96 @@ C_i=\arg\min_{C\in O(r)}\sum_{j\in N_i}w_{ij}
 \quad C'_i=(H_i^B)^\top C_iH_i^A.
 \]
 
-若局部维数不同，先明确共享秩 \(r\)，报告两模型被丢弃的方差和任务信息；矩形 Stiefel 嵌入不再是可逆规范变换。对于 405B→72B，全维无损等距/辛同构没有根据。
+If the local dimensions differ, first fix an explicit shared rank \(r\) and report the variance and task information discarded by each model; a rectangular Stiefel embedding is no longer an invertible gauge transformation. For 405B→72B, there is no basis for a full-dimensional lossless isometry/symplectomorphism.
 
-核心联合目标是
+The core joint objective is
 
 \[
 \mathcal L=\sum_{i,j}w_{ij}\|v_{ij}^{B}-C_iv_{ij}^{A}\|^2
 +\lambda\sum_{(i,j)}w_{ij}\|C_jP^A_{ij}-P^B_{ij}C_i\|_F^2.
 \]
 
-第一项绑定真实配对语义；第二项要求“先移动再映射”与“先映射再移动”一致。若无第一项，群同步可能得到漂亮但语义错误的答案。对新样本，必须只靠源模型的训练锚点定位；不允许用其目标模型 test 表征选择邻居。
+The first term anchors real paired semantics; the second term requires "transport then map" to agree with "map then transport." Without the first term, group synchronization can produce an answer that looks good but is semantically wrong. For a new sample, positioning must rely only on the source model's trained anchors; it is not allowed to use the target model's test representation to choose neighbors.
 
-\(C_i\) 或局部非等距雅可比适配器可以只拟合外置小模型，冻结全部 Dense 权重。这里“不微调权重”指不改教师权重，**不是零训练、零配对数据**。
+\(C_i\), or a local non-isometric Jacobian adapter, may fit only a small external model while keeping all Dense weights frozen. Here "not fine-tuning the weights" means the teacher weights are unchanged, **not** zero training and zero paired data.
 
-### 4.3 从局部旋转到联络与曲率
+### 4.3 From Local Rotations to Connection and Curvature
 
-连续记号下，\(A\in\Omega^1(M;\mathfrak{so}(r))\)：
+In continuous notation, \(A\in\Omega^1(M;\mathfrak{so}(r))\):
 
 \[
 \nabla v=dv+Av,\quad A'=H^{-1}AH+H^{-1}dH,
 \quad F=dA+A\wedge A,\quad F'=H^{-1}FH.
 \]
 
-沿路径 \(\gamma\)，\(\dot v+A(\dot\gamma)v=0\)，故
-\(P_\gamma=\mathcal P\exp(-\int_\gamma A)\)。联络描述坐标帧如何随位置变化，曲率描述沿不同路径运输的差异。
+Along a path \(\gamma\), \(\dot v+A(\dot\gamma)v=0\), so
+\(P_\gamma=\mathcal P\exp(-\int_\gamma A)\). The connection describes how the coordinate frame changes with position; the curvature describes the difference between transport along different paths.
 
-对小闭环 \(i\to j\to k\to i\)，
+For a small closed loop \(i\to j\to k\to i\),
 
 \[
 W_i=P_{ki}P_{jk}P_{ij},\quad W'_i=H_i^\top W_iH_i.
 \]
 
-\(\operatorname{tr}W_i\)、\(\|W_i-I\|_F\) 和特征角具有规范不变性；小环且估计可靠时 \(\log W_i\) 与曲率通量相关。实际必须减去采样/帧估计噪声，不能把所有非零 holonomy 都称为语义曲率。
+\(\operatorname{tr}W_i\), \(\|W_i-I\|_F\), and the eigenangles are gauge invariant; for small loops with reliable estimates, \(\log W_i\) correlates with curvature flux. In practice, sampling/frame-estimation noise must be subtracted out; not every non-zero holonomy can be called semantic curvature.
 
-只有在定向一致、变换位于可用对数分支时才使用 \(\Omega=\log P\in\mathfrak{so}(r)\)。\(\det P=-1\) 不能写成实反对称矩阵的指数；接近特征值 -1 的分支歧义必须报出。
+\(\Omega=\log P\in\mathfrak{so}(r)\) may only be used when orientation is consistent and the transformation lies on a usable log branch. \(\det P=-1\) cannot be written as the exponential of a real antisymmetric matrix; branch ambiguity near eigenvalue -1 must be reported.
 
-**曲率无法通过换 gauge 消掉。** 若两个模型曲率张量并不共轭，就不存在令全部平行移动严格一致的等距束同构。可测的补偿是显式拟合受控局部伸缩 \(J_i=R_iS_i\)，\(S_i\succ0\)，并付出度量失真；不是声称“规范不变性修复任何模型差异”。还要检查局部 Jacobian 场的可积性和图册重叠一致性：一组任意 \(C_i\) 不必来自任何全局微分同胚。
+**Curvature cannot be removed by a change of gauge.** If the curvature tensors of two models are not conjugate, there is no isometric bundle isomorphism that makes all parallel transports agree exactly. A measurable compensation is to explicitly fit a controlled local stretch \(J_i=R_iS_i\), \(S_i\succ0\), and pay a metric-distortion cost; it is not to claim "gauge invariance fixes any model difference." Integrability of the local Jacobian field and consistency of atlas overlaps must also be checked: an arbitrary set of \(C_i\) need not come from any global diffeomorphism.
 
-不变的最终对象应是距离、内积、运输后比较或环路谱；单个坐标向量是**等变**的，不是逐坐标不变的。
+The invariant final object should be distances, inner products, transported comparisons, or loop spectra; a single coordinate vector is **equivariant**, not invariant coordinate by coordinate.
 
-### 4.4 可部署的局部输出形式
+### 4.4 A Deployable Local Output Form
 
-新样本在锚点 \(i\) 附近：
+For a new sample near anchor \(i\):
 
 \[
 \widehat x^B=\operatorname{Retr}_{x_i^B}
 \big(U_i^BC_i(U_i^A)^\top(x^A-x_i^A)\big).
 \]
 
-第一版 retraction 可用明确标为一阶近似的 \(x_i^B+U_i^Bv\)，并输出信赖半径、法向残差和映射不确定性。跨图册融合必须先运输到同一帧再加权，不能直接平均不同帧坐标。拒绝域外样本；若另提供线性模式，须由调用者显式选择并在响应里标明模式，不允许失败后悄悄调用它。
+The first version may use the retraction \(x_i^B+U_i^Bv\), explicitly labeled as a first-order approximation, and output the trust radius, normal residual, and mapping uncertainty. Cross-atlas fusion must transport into the same frame before weighting; it must not directly average coordinates from different frames. Out-of-domain samples should be rejected; if a linear-mode fallback is also offered, the caller must explicitly select it, and the response must label the mode used: it must not be invoked silently after a failure.
 
-## 5. 辛拓扑与 q/p：能成立的严格路线
+## 5. Symplectic Topology and q/p: A Rigorous Path That Can Actually Be Established
 
-### 5.1 静态云没有可辨识动量
+### 5.1 A Static Point Cloud Has No Identifiable Momentum
 
-当前数据只观测 \(x(s)\)，没有 \(\dot x\) 或 \((s,a,s')\)。无穷多个动力系统具有相同静态点集。即使找到了低维坐标，也无法仅凭它确定时间方向、动作响应和奖励。
+The current data only observes \(x(s)\), not \(\dot x\) or \((s,a,s')\). Infinitely many dynamical systems share the same static point set. Even if a low-dimensional coordinate is found, it alone cannot determine the direction of time, action response, or reward.
 
-所需新增数据是同一 episode 的真实 \((o_t,a_t,o_{t+1},\Delta t,r_t,done_t)\)，冻结 Dense 提供各时刻观测编码，至少两帧或历史编码器提供速度可观测性。层索引、token 索引可作为独立的计算过程实验，**不能冒充环境时间**。[Hamiltonian Neural Networks](https://arxiv.org/abs/1906.01563) 的像素实验也通过相邻帧提供速度信息，并训练能量及表示；该论文不能证明任意 LLM 半向量天然是动量。
+The new data needed is real \((o_t,a_t,o_{t+1},\Delta t,r_t,done_t)\) from the same episode, with the frozen Dense model providing the encoding at each time step, and at least two frames or a history encoder providing velocity observability. Layer index and token index can serve as independent computational-process experiments, but **must not be mistaken for environment time**. The pixel experiments in [Hamiltonian Neural Networks](https://arxiv.org/abs/1906.01563) also supply velocity information through adjacent frames and train energy and representation together; that paper does not prove that an arbitrary LLM half-vector is naturally momentum.
 
-构造 \(q_t=E_m(o_{\le t})\in Q\)，令 \(p_t=M(q_t)\dot q_t\)，或者通过真实轨迹训练可观测历史编码器 \((q_t,p_t)=E_m(o_{t-k:t})\)。\(p\) 首先是经辨识的动态协变量；要称为“意图”，还需意图干预及混杂控制实验。
+Construct \(q_t=E_m(o_{\le t})\in Q\), let \(p_t=M(q_t)\dot q_t\), or train a history encoder on real trajectories to give \((q_t,p_t)=E_m(o_{t-k:t})\). \(p\) is first an identified dynamical covariate; calling it "intent" requires further intent-intervention and confound-control experiments.
 
-### 5.2 正则辛形式与 cotangent lift
+### 5.2 The Canonical Symplectic Form and the Cotangent Lift
 
-在 \(T^*Q\) 上取 \(\theta=p_i dq^i\)、\(\omega=-d\theta=\sum_i dq^i\wedge dp_i\)。令 \(z=(q,p)\)、\(J=\begin{bmatrix}0&I\\-I&0\end{bmatrix}\)，则
+On \(T^*Q\) take \(\theta=p_i dq^i\), \(\omega=-d\theta=\sum_i dq^i\wedge dp_i\). Let \(z=(q,p)\), \(J=\begin{bmatrix}0&I\\-I&0\end{bmatrix}\); then
 
 \[
 \dot z=J\nabla H,\qquad \Phi^*\omega=\omega,\qquad
 D\Phi^\top JD\Phi=J.
 \]
 
-相同维数的可逆局部位置映射 \(q_B=f(q_A)\)，可提升为
+An invertible local position map \(q_B=f(q_A)\) between spaces of equal dimension can be lifted to
 
 \[
 q_B=f(q_A),\qquad p_B=Df(q_A)^{-\top}p_A.
 \]
 
-它保持 \(p_B^\top dq_B=p_A^\top dq_A\)，从而保持辛形式。这给出规范对齐和世界模型之间最明确的桥梁：**位置和动量必须按互为逆转置的 Jacobian 变换**，不能各自跑一次不相关的 Procrustes。[Meinrenken, Symplectic Geometry，cotangent lifts](https://www.math.utoronto.ca/mein/teaching/LectureNotes/symplectic.pdf)
+This preserves \(p_B^\top dq_B=p_A^\top dq_A\), and thus preserves the symplectic form. This gives the clearest bridge between gauge alignment and world models: **position and momentum must transform by mutually inverse-transpose Jacobians**, not by two separate, unrelated Procrustes fits. [Meinrenken, Symplectic Geometry, cotangent lifts](https://www.math.utoronto.ca/mein/teaching/LectureNotes/symplectic.pdf)
 
-若 \(f\) 不可逆、秩不足、维数不同或 Jacobian 条件数超阈值，这一公式不可直接用。显式选择共享子流形会损失信息；不得用伪逆后继续宣称全维辛同构。
+If \(f\) is not invertible, is rank-deficient, has a different dimension, or the Jacobian condition number exceeds a threshold, this formula cannot be applied directly. Explicitly choosing a shared submanifold loses information; a pseudo-inverse must not be used while still claiming a full-dimensional symplectomorphism.
 
-### 5.3 拓扑层面的真实限制
+### 5.3 Real Limits at the Topological Level
 
-非退化反对称二形式要求相空间偶数维；Darboux 坐标只是局部存在结论，**不给原始表示提供 \(\omega\)**，也不保证一个全局 q/p 拆分。若语义底空间近似球面，最自然的相空间是 \(T^*S^r\)，不是把球面向量直接改名为 canonical coordinates。
+A non-degenerate antisymmetric two-form requires the phase space to have even dimension; Darboux coordinates are only a local-existence result, **they do not supply \(\omega\) for the original representation**, nor do they guarantee a global q/p split. If the semantic base space is approximately a sphere, the most natural phase space is \(T^*S^r\), not a sphere vector directly renamed as canonical coordinates.
 
-辛结构比保体积严格：在线性层面 \(S=\operatorname{diag}(a,b,1/a,1/b)\) 依 canonical 配对可为辛变换，单纯令任意矩阵 \(\det S=1\) 则不够。非挤压现象进一步约束共轭平面的可压缩性，但这些数学事实不等于“语义永不丢失”。辛拓扑不是一个可直接从当前 NPZ 输出的推理能力指标。
+Being symplectic is stricter than being volume-preserving: at the linear level, \(S=\operatorname{diag}(a,b,1/a,1/b)\) can be a symplectic transformation under the canonical pairing, but merely requiring an arbitrary matrix with \(\det S=1\) is not enough. The non-squeezing phenomenon further constrains the compressibility of conjugate planes, but these mathematical facts do not mean "semantics is never lost." Symplectic topology is not a metric that can be read directly off the current NPZ outputs as a reasoning-capability score.
 
-如果选择非 canonical \(\omega(z)\)，须同时保证反对称、非退化与闭性 \(d\omega=0\)；只学一个反对称矩阵并不充分。Poisson 结构还需 Jacobi 恒等式。第一版优先使用明确的 canonical cotangent charts，避免把额外不可辨识自由度塞进模型。
+If a non-canonical \(\omega(z)\) is chosen, antisymmetry, non-degeneracy, and closedness \(d\omega=0\) must all be guaranteed simultaneously; learning only an antisymmetric matrix is not sufficient. A Poisson structure additionally needs the Jacobi identity. The first version prioritizes explicit canonical cotangent charts, to avoid stuffing extra unidentifiable degrees of freedom into the model.
 
-### 5.4 有界能量的充分条件及其边界
+### 5.4 Sufficient Conditions for Bounded Energy, and Their Limits
 
-可训练受控结构的候选为
+A candidate trainable, controlled structure is
 
 \[
 H_\theta(q,p)=\tfrac12 p^\top M^{-1}p+
@@ -288,16 +288,16 @@ H_\theta(q,p)=\tfrac12 p^\top M^{-1}p+
 \quad 0<m_-I\preceq M\preceq m_+I,\quad\alpha>0.
 \]
 
-固定 \(M\) 下这是可分离哈密顿量。连续、自治、无外力解满足
+With \(M\) fixed this is a separable Hamiltonian. A continuous, autonomous, unforced solution satisfies
 
 \[
 \frac{dH}{dt}=\nabla H^\top J\nabla H=0,\quad
 H\ge\frac{\|p\|^2}{2m_+}+\frac\alpha2\|q\|^2.
 \]
 
-因而在解存在且 \(H_0\) 有限时能界定 \(q,p\) 的范数。\(\alpha\) 与势能参数仍需真实轨迹拟合；过强锚定可能稳定地预测错误。反例 \(H=qp\) 给出 \(q=e^tq_0,p=e^{-t}p_0\)：能量守恒、体积守恒，但轨道可无界。
+So, when a solution exists and \(H_0\) is finite, the norms of \(q,p\) can be bounded. \(\alpha\) and the potential parameters still need to be fit to real trajectories; over-strong anchoring can stably predict the wrong thing. The counterexample \(H=qp\) gives \(q=e^tq_0,p=e^{-t}p_0\): energy is conserved, volume is conserved, but the orbit can be unbounded.
 
-常质量下使用 Verlet：
+For constant mass, use Verlet:
 
 \[
 p_{n+1/2}=p_n-\tfrac h2\nabla V(q_n),\quad
@@ -305,34 +305,34 @@ q_{n+1}=q_n+hM^{-1}p_{n+1/2},\quad
 p_{n+1}=p_{n+1/2}-\tfrac h2\nabla V(q_{n+1}).
 \]
 
-它保辛但一般不精确保 \(H\)。长时间近似保能量依赖光滑性、足够小步长、轨道控制等条件，不能从 `symplectic` 名称推出。[Gauckler–Hairer–Lubich，§2.4](https://www.unige.ch/~hairer/preprints/icm.pdf)
+It is symplectic but generally does not preserve \(H\) exactly. Approximate long-time energy preservation depends on smoothness, a sufficiently small step size, orbit control, and similar conditions; it cannot be inferred from the name `symplectic`. [Gauckler–Hairer–Lubich, §2.4](https://www.unige.ch/~hairer/preprints/icm.pdf)
 
-局部谐振子必要稳定检查为 \(h^2\lambda_{\max}(M^{-1/2}\nabla^2VM^{-1/2})<4\)；非线性系统中它只是局部诊断，不是全球稳定证书。当前 Rust `symplectic_dynamics.rs:76` 已对固定二次井执行 \(kh^2<4\)。若采用 \(M(q)=g(q)\) 的真正测地动能，\(H\) 不再可分离，必须用对应隐式/变分积分器并检查求解残差；不能继续套当前显式 Verlet。
+The necessary stability check for a local harmonic oscillator is \(h^2\lambda_{\max}(M^{-1/2}\nabla^2VM^{-1/2})<4\); in a nonlinear system this is only a local diagnostic, not a global stability certificate. The current Rust `symplectic_dynamics.rs:76` already enforces \(kh^2<4\) for a fixed quadratic well. If a genuine geodesic kinetic energy with \(M(q)=g(q)\) is adopted, \(H\) is no longer separable, and a corresponding implicit/variational integrator must be used with the solver residual checked; the current explicit Verlet cannot simply be reused.
 
-状态依赖自动调步通常破坏普通辛方法的保结构性质。第一版用训练期确定的固定步长；部署中越界明确终止。若未来引入自适应，需扩展相空间等专门方法和独立验证。[Hairer, Variable time step integration with symplectic methods](https://www.unige.ch/~hairer/preprints/varsymp.html)
+State-dependent adaptive step-sizing generally breaks the structure-preserving property of ordinary symplectic methods. The first version uses a fixed step size determined during training, and terminates explicitly on out-of-bounds during deployment. If adaptivity is introduced in the future, it needs extended-phase-space methods and independent verification. [Hairer, Variable time step integration with symplectic methods](https://www.unige.ch/~hairer/preprints/varsymp.html)
 
-### 5.5 控制、耗散与“防坍缩”的冲突
+### 5.5 The Conflict Between Control, Dissipation, and "Anti-Collapse"
 
-有外力与摩擦：
+With external force and friction:
 
 \[
 \dot q=M^{-1}p,\qquad \dot p=-\nabla V+B(q)u-\eta p,
 \qquad \dot H=\dot q^\top B(q)u-\eta p^\top M^{-1}p.
 \]
 
-控制做功必须进入能量账本；随动作切换的 \(H_a\) 不能直接比较成能量漂移。对固定动作切换，记录参数改变导致的 \(H_{a_{t+1}}(z)-H_{a_t}(z)\)；对连续外力记录功积分。bounded action 不自动推出长期能量有界，仍可能共振。
+Work done by the controller must enter the energy ledger; an \(H_a\) that switches with the action cannot be directly compared as energy drift. For a fixed action switch, record the change \(H_{a_{t+1}}(z)-H_{a_t}(z)\) caused by the parameter change; for continuous external force, record the work integral. Bounded action does not automatically imply bounded long-term energy; resonance can still occur.
 
-摩擦常数 \(\eta\) 时，\(\Phi_t^*\omega=e^{-\eta t}\omega\)、\(\det D\Phi_t=e^{-r\eta t}\)。仓库对外参数是 \(\eta=2\gamma\)，参见 `conformal_dynamics.rs:16`；所以服务的相体积因子为 \(e^{-2r\gamma h}\)，不能错用底层 ContactIntegrator 的参数名。
+With friction constant \(\eta\), \(\Phi_t^*\omega=e^{-\eta t}\omega\), \(\det D\Phi_t=e^{-r\eta t}\). The repository's external parameter is \(\eta=2\gamma\), see `conformal_dynamics.rs:16`; so the service's phase-volume factor is \(e^{-2r\gamma h}\), and the parameter name of the underlying ContactIntegrator must not be substituted in error.
 
-耗散允许收敛甚至坍缩，与严格保体积目标不同。严格辛也只禁止全体积坍缩，允许部分方向收缩且其他方向膨胀；不能保证每条语义方向不丢失。应在真实留出轨迹上监测表示协方差有效秩、近邻可分性和预测损失，而非强制每个向量保持旧模长。
+Dissipation permits convergence or even collapse, unlike a strict volume-preservation goal. Even strict symplecticity only forbids total-volume collapse; it allows contraction along some directions and expansion along others; it cannot guarantee that every semantic direction is preserved. Effective rank of representation covariance, near-neighbor separability, and prediction loss should be monitored on real held-out trajectories, rather than forcing every vector to keep its old norm.
 
-固定半径归一化的径向 Jacobian 有零特征值，不能是非退化辛微分同胚。一般的“缩回输入模长”映射同样没有保辛保证。保熵也要求对分布及其雅可比作定义，不能由单样本范数推断。
+A radial Jacobian from fixed-radius normalization has a zero eigenvalue, so it cannot be a non-degenerate symplectic diffeomorphism. A generic "shrink the input norm back" map likewise carries no symplectic guarantee. Entropy preservation also requires a definition over a distribution and its Jacobian; it cannot be inferred from a single-sample norm.
 
-接触流若带 gauge clamp，须记录 clamp 事件；`contact.rs:221` 的 s 限幅还会改变完整接触空间的可逆性。`conformal_dynamics.rs:23` 每步重新置 s=0，现有接口实际持久化的是 q/p 投影，不能称作完整接触态跨步保持。
+If a contact flow carries a gauge clamp, the clamp events must be recorded; the s-limiting in `contact.rs:221` also changes the invertibility of the full contact space. `conformal_dynamics.rs:23` resets s=0 at every step, so what the current interface actually persists across steps is the q/p projection; it cannot be called a full contact state preserved across steps.
 
-### 5.6 训练目标与无 token 的可证明边界
+### 5.6 Training Objectives and the Provable Limits of "Token-Free"
 
-未来训练损失至少包括真实多步预测、观测重建、动作响应、奖励及不确定性校准：
+A future training loss should include, at minimum, real multi-step prediction, observation reconstruction, action response, reward, and uncertainty calibration:
 
 \[
 \mathcal L=\sum_{t,k}\beta_k\|D_m(\Phi_{a_{t:t+k-1}}(z_t))-x^m_{t+k}\|^2
@@ -340,75 +340,75 @@ p_{n+1}=p_{n+1/2}-\tfrac h2\nabla V(q_{n+1}).
 +\lambda_r\ell(\widehat r_t,r_t)+\lambda_{\rm cal}\ell_{\rm cal}.
 \]
 
-若有可信时间导数，可增加 \(\|\dot z-J\nabla H\|^2\)；有限差分噪声须显式建模。不把能量守恒损失作为唯一训练目标，否则零场与无意义振子也会得高分。
+If credible time derivatives are available, \(\|\dot z-J\nabla H\|^2\) can be added; finite-difference noise must be modeled explicitly. Energy-conservation loss must not be the sole training objective, or a zero field and a meaningless oscillator would also score well.
 
-“无 token”只表示 rollout 内没有语言解码；观测编码仍有 tokenization 与 Dense 前向成本，训练轨迹生成也有成本。真实验收同时比较 0/1/4/16/64 步预测与决策损失、延迟、编码成本，且与不前瞻、线性动力学、同参数量非保结构模型比较。稳定但无收益就不能声明有效思考。
+"Token-free" only means there is no language decoding inside the rollout; observation encoding still has tokenization and Dense forward-pass cost, and generating training trajectories also has a cost. A genuine acceptance test must compare 0/1/4/16/64-step prediction against decision loss, latency, and encoding cost together, and against no-lookahead, linear-dynamics, and equal-parameter-count non-structure-preserving models. Being stable but not beneficial cannot be declared effective thinking.
 
-## 6. ETF 与决策头的衔接
+## 6. Connecting to ETF and the Decision Head
 
-数学上，K 个 simplex ETF 单位顶点满足 \(\langle e_i,e_j\rangle=-1/(K-1)\)，秩为 K−1；等角间隔只描述几何，不能决定哪个候选正确。`crates/gen-zero-core/src/etf.rs:17` 提供 frame 构造，但当前模型 head 已改为候选内容打分。
+Mathematically, the K unit vertices of a simplex ETF satisfy \(\langle e_i,e_j\rangle=-1/(K-1)\), with rank K−1; equiangular spacing only describes geometry, it does not determine which candidate is correct. `crates/gen-zero-core/src/etf.rs:17` provides the frame construction, but the current model head has already changed to candidate-content scoring.
 
-未来几何 head 可以在同一局部帧内比较 state/candidate，或使用 \(-d_g(q,c)^2/\tau\)，并在 chart 切换时保持得分等变/不变关系。候选表征、局部图册和任务标签都必须来自真实输入；禁止 ActionId 哈希指定语义顶点。若在训练出的类别原型上施加 ETF 正则，必须另证其样本外收益，不能用 label 顶点构造代替推理。
+A future geometric head could compare state/candidate within the same local frame, or use \(-d_g(q,c)^2/\tau\), while preserving the equivariance/invariance relation of the score across chart switches. Candidate representations, local atlases, and task labels must all come from real input; hashing an ActionId to designate a semantic vertex is prohibited. If ETF regularization is applied to trained class prototypes, its out-of-sample benefit must be separately proven; label-derived vertex construction cannot substitute for reasoning.
 
-已有温度常量明确是未校准值，见 `choice_head.rs:17`。新方法应在训练内验证集拟合温度，评价 NLL/Brier/ECE 与准确率、拒绝率的联合变化；降低温度穿过 entropy gate 不是能力提升。
+The existing temperature constant is explicitly an uncalibrated value; see `choice_head.rs:17`. A new method should fit the temperature on a train-internal validation set, and evaluate the joint change in NLL/Brier/ECE against accuracy and rejection rate; lowering the temperature to pass the entropy gate is not a capability improvement.
 
-## 7. 具体生产衔接与接口契约（全部为待实现设计）
+## 7. Concrete Production Integration and Interface Contract (All Design, Not Yet Implemented)
 
-### 7.1 接入图
+### 7.1 Integration Diagram
 
 ```mermaid
 flowchart LR
-  A[冻结 Dense 实际编码与元数据] --> B[严格配对与图册适配器]
-  B --> C[候选语义评分]
-  B --> D[有真实历史的相状态编码]
-  D --> E[训练所得辛或耗散动力学]
-  E --> F[现有 planner 与 PolicyGate]
+  A[Frozen Dense real encoding and metadata] --> B[Strict pairing and atlas adapter]
+  B --> C[Candidate semantic scoring]
+  B --> D[Phase-state encoding with real history]
+  D --> E[Trained symplectic or dissipative dynamics]
+  E --> F[Existing planner and PolicyGate]
   C --> F
-  F --> G[CLI / HTTP / MCP 响应及证据账本]
+  F --> G[CLI / HTTP / MCP response and evidence ledger]
 ```
 
-当前 NPZ→几何报告只是离线分析链，不是上述生产链的实现。
+The current NPZ-to-geometry report is only an offline analysis chain; it is not an implementation of the production chain above.
 
-| 现有接点 | 后续契约要求 |
+| Existing integration point | Follow-up contract requirement |
 |---|---|
-| `cross_model_manifold_alignment.py:101`、`:126`、`:265` | 扩展成 strict feature manifest 校验；训练/验证/测试职责分开，保留当前指标作基线，不能删除对照掩盖退化 |
-| `gpu_extract_qwen72b_13tasks.py:194` | manifest 增加模型文件与 tokenizer hash、backend revision、prompt/text hash、候选语义顺序、layer、token/pooling 位置、截断后输入 hash；轨迹另加 episode/time/action/dt |
-| `python/gen_zero/world_model/hamiltonian_dynamics.py:190`、`:228` | 不再以任意向量切半当语义编码；调用已训练 phase encoder；严格维数和 finite 检查；无 checkpoint 明确拒绝“trained”模式 |
-| `python/gen_zero/client.py:420`、`:471` | 现有可选 Hamiltonian 注入位置可装配真实 checkpoint，但加载成功、实际调用和决策使用三者都要有证据 |
-| `crates/gen-zero-core/src/types.rs:152` | `FullLatent=LatentState<1024>` 是硬边界。几何 rank r 通常小于 512，不能零填充后谎称 1024 维非退化 phase state |
-| `crates/gen-zero-core/src/traits.rs:40` | 当前 `step(FullLatent, ActionId)` 缺 chart/provenance；需要相状态结构及 metadata 容器，或先在 trait 外显式编码并验证其固定维语义。ActionId 必须索引真实版本化 action embedding |
-| `crates/gen-zero-service/src/worldsim.rs:240`、`:283` | 增加显式 trained 模式及工件加载，缺工件/秩错/域外/求解失败返回 Rejection；不能转 residual/contact 继续返回成功 |
-| `crates/gen-zero-service/src/zero.rs:1546`、`:2791` | simulate 与 planner 两条入口都必须调用新 dynamics；只接 simulate 不等于决策已生效 |
-| `crates/gen-zero-model/src/choice_head.rs:83`；`zero.rs:2542` | 新几何 score 必须从服务选择分支实际调用；候选维度、chart 与 adapter version 要一致 |
-| `crates/gen-zero-cli/src/main.rs:632`；`server.rs:891`、`:1755` | CLI simulate 和 HTTP `/v1/simulate` 进入共享 engine；MCP 亦用共享引擎。后续应验证三入口相同数值工件与错误语义 |
+| `cross_model_manifold_alignment.py:101`, `:126`, `:265` | Extend into a strict feature-manifest check; separate train/validation/test responsibilities, keep the current metrics as a baseline, and do not remove controls to mask regressions |
+| `gpu_extract_qwen72b_13tasks.py:194` | The manifest should add model-file and tokenizer hash, backend revision, prompt/text hash, candidate semantic order, layer, token/pooling position, and post-truncation input hash; trajectories additionally need episode/time/action/dt |
+| `python/gen_zero/world_model/hamiltonian_dynamics.py:190`, `:228` | Stop treating an arbitrary vector split as a semantic encoding; call a trained phase encoder; enforce strict dimension and finiteness checks; explicitly reject "trained" mode when there is no checkpoint |
+| `python/gen_zero/client.py:420`, `:471` | The existing optional Hamiltonian injection point can be wired to a real checkpoint, but successful loading, actual invocation, and use in the decision all need evidence |
+| `crates/gen-zero-core/src/types.rs:152` | `FullLatent=LatentState<1024>` is a hard boundary. The geometric rank r is usually smaller than 512; it must not be zero-padded and then falsely called a non-degenerate 1024-dimensional phase state |
+| `crates/gen-zero-core/src/traits.rs:40` | The current `step(FullLatent, ActionId)` lacks chart/provenance; a phase-state struct and a metadata container are needed, or the fixed-dimension semantics must be encoded and verified explicitly outside the trait first. ActionId must index a real, versioned action embedding |
+| `crates/gen-zero-service/src/worldsim.rs:240`, `:283` | Add an explicit trained mode and artifact loading; return Rejection on missing artifact/rank mismatch/out-of-domain/solve failure; must not fall back to residual/contact and still return success |
+| `crates/gen-zero-service/src/zero.rs:1546`, `:2791` | Both the simulate and planner entry points must call the new dynamics; wiring up simulate alone does not mean the decision path has taken effect |
+| `crates/gen-zero-model/src/choice_head.rs:83`; `zero.rs:2542` | The new geometric score must actually be called from the service's selection branch; candidate dimension, chart, and adapter version must be consistent |
+| `crates/gen-zero-cli/src/main.rs:632`; `server.rs:891`, `:1755` | CLI simulate and HTTP `/v1/simulate` must enter the shared engine; MCP must also use the shared engine. A follow-up should verify identical numeric artifacts and error semantics across all three entry points |
 
-第一期只上线观测几何适配/评分，不硬接尚未辨识的 phase dynamics。第二期若 r<512，应真实改造 phase-state/planner 接口，或训练并证实 512 对 canonical 坐标；不得伪装成 1024 维已满足要求。本文不替这一工程决策宣称已经兼容。
+Phase one should only ship the observational geometry adapter/scoring, without hard-wiring the not-yet-identified phase dynamics. In phase two, if r<512, the phase-state/planner interface should genuinely be changed, or 512 should be trained and proven equivalent to canonical coordinates; it must not be disguised as already meeting the requirement at 1024 dimensions. This document does not make that engineering decision on anyone's behalf, nor claim it already compatible.
 
-### 7.2 建议工件与运行返回值
+### 7.2 Proposed Artifacts and Run Return Values
 
-`GeometryArtifact`（拟议）至少包含：schema_version、模型/特征哈希、训练 ID 集哈希、度量定义、预处理统计、r、图册锚点及基底、合法图边、运输矩阵、跨模型映射、信赖半径、校准误差、适用任务/分布与工件 SHA256。
+`GeometryArtifact` (proposed) should include at minimum: schema_version, model/feature hash, train-ID-set hash, metric definition, preprocessing statistics, r, atlas anchors and basis, valid graph edges, transport matrices, cross-model mapping, trust radius, calibration error, applicable task/distribution, and artifact SHA256.
 
-`PhaseArtifact`（拟议）增加：encoder/dynamics/decoder/action vocabulary checkpoint 哈希、q/p 约定、质量矩阵、步长和适用区间、训练轨迹 manifest、奖励与安全标签来源、calibration split。
+`PhaseArtifact` (proposed) additionally adds: encoder/dynamics/decoder/action-vocabulary checkpoint hash, q/p convention, mass matrix, step size and applicable interval, training-trajectory manifest, reward and safety-label provenance, and calibration split.
 
-每次响应至少记录 `requested_mode`、`executed_mode`、artifact hash、chart/rank、数据来源、是否训练/校准、实际调用次数、超域与限幅事件、能量/功/耗散/数值残差。错误结果不能附一份看似成功的旧算法预测。安全 estimate 缺失仍沿现有 trait `:60` 的拒绝语义处理。
+Every response should at minimum record `requested_mode`, `executed_mode`, artifact hash, chart/rank, data provenance, whether trained/calibrated, actual invocation count, out-of-domain and clamping events, and energy/work/dissipation/numerical residual. An error result must not be accompanied by an old algorithm's prediction dressed up as success. A missing safety estimate should still be handled by the existing trait's rejection semantics at `:60`.
 
-### 7.3 如何防止 0 调用孤岛和旧实现残留
+### 7.3 Preventing Zero-Call Islands and Legacy-Implementation Residue
 
-后续替换的验收顺序应为：新工件加载与计算 → 共享服务调用 → planner 确实消费结果 → CLI/HTTP/MCP 集成证据 → 才能删除被替代的旧实现与兼容旁路。不能只以 import 或 `rg` 命中作为实际调用证据。
+The acceptance order for any future replacement should be: new artifact loading and computation → shared service invocation → the planner actually consuming the result → CLI/HTTP/MCP integration evidence → only then may the replaced legacy implementation and any compatibility bypass be removed. An import or `rg` hit alone must not be treated as evidence of actual invocation.
 
-验收须让两份由不同真实训练数据得到、均合法的工件在同一真实请求上产生可解释的不同中间预测，并验证 planner 消费这些预测；再删除工件确认请求失败。不是注入人为决策常量制造差异。
+Acceptance must show two legitimate artifacts, obtained from different real training data, producing distinguishable and explainable intermediate predictions on the same real request, with the planner verified to consume those predictions; then removing the artifact must be confirmed to fail the request. This is not the same as injecting an artificial decision constant to manufacture a difference.
 
-被替代旧符号、旧注册、旧配置路由、旧测试与活动文档必须有明确迁移清单并全仓检查 0 残留；历史审计证据如需保留应先界定保存位置和搜索范围，不能一边保留活动兼容符号一边声称物理删除。本次没有替换任何模块，因此没有执行删除。CKA/Procrustes 是保留的评价基线，并非待删除算法。
+Replaced legacy symbols, registrations, config routing, tests, and living documentation must have an explicit migration checklist and a whole-repo check for zero residue; if historical audit evidence needs to be kept, its storage location and search scope must be defined first: a living compatibility symbol cannot be kept while claiming physical deletion. This work replaced no module, so no deletion was performed. CKA/Procrustes are retained evaluation baselines, not algorithms pending deletion.
 
-## 8. 实验矩阵、统计与拒绝条件
+## 8. Experiment Matrix, Statistics, and Rejection Conditions
 
-### 8.1 现有 13-task 可立即做的验证
+### 8.1 Verifications That Can Be Done Immediately on the Existing 13 Tasks
 
-每个任务独立建立训练/验证切分；相同文档、premise/evidence family 必须成组切分。训练量不同：例如 boolq=9264、massive_de=11247，多数为 1000，pubmedqa=750；同时报告等训练预算对比和全量对比。
+Build an independent train/validation split for each task; the same document or premise/evidence family must be split as a group. Training set sizes differ, e.g. boolq=9264, massive_de=11247, most are 1000, pubmedqa=750; report both an equal-training-budget comparison and a full-data comparison.
 
-比较相同数据预算下：全局正交、ridge、局部正交、无联络正则局部模型、联络约束模型、混合曲率候选。局部模型需加同样样本数的随机邻域对照，避免把更多参数/不同样本量误称曲率优势。所有模型选参只用 train 内 validation。
+Compare, at the same data budget: global orthogonal, ridge, local orthogonal, local model without connection regularization, connection-constrained model, and mixed-curvature candidates. The local model needs a random-neighborhood control with the same sample count, to avoid mistakenly calling more parameters or a different sample size a curvature advantage. All model hyperparameter selection uses train-internal validation only.
 
-指标必须逐样本保存 ID 和误差，至少包括：
+Metrics must save per-sample ID and error, including at minimum:
 
 \[
 E_i=\frac{\|\widehat x_i^B-x_i^B\|^2}{s_B^2},\quad
@@ -416,62 +416,62 @@ E_i=\frac{\|\widehat x_i^B-x_i^B\|^2}{s_B^2},\quad
 s_B^2=\mathbb E_{\rm train}\|x^B-\mu_B\|^2;
 \]
 
-paired retrieval Recall@1/@10、邻域保持、相同候选上的决策正确性/NLL、拒绝覆盖率、P50/P95 延迟、图册存储和拟合成本。拒绝的样本不得从平均收益里悄悄移除，另报固定覆盖率下风险。
+paired retrieval Recall@1/@10, neighborhood preservation, decision correctness/NLL on the same candidates, rejection coverage, P50/P95 latency, and atlas storage and fitting cost. Rejected samples must not be quietly dropped from the average benefit; risk at a fixed coverage rate should be reported separately.
 
-联络残差
+The connection residual
 \(\|C_jP^A_{ij}-P^B_{ij}C_i\|_F/\sqrt r\)
-与 holonomy 的跨模型匹配只作为结构指标，不能代替下游任务收益。
+and cross-model holonomy matching serve only as structural indicators; they cannot substitute for downstream task benefit.
 
-统计采用 task 内按 family/episode 的 paired bootstrap，给出 \(\overline\Delta\) 的 95% CI；13-task 报 macro 与各 task 分布。配对置换检验使用真实样本误差交换/符号翻转，进行预声明的多重比较校正。10,000 次置换可作为计划预算；精确数量由统计功效和资源预注册。小样本 CI 跨 0 即“不足以证明改进”。
+Statistics should use within-task paired bootstrap by family/episode, giving a 95% CI for \(\overline\Delta\); report both the macro average and the per-task distribution across the 13 tasks. Paired permutation tests should use real sample-error swaps/sign flips, with pre-declared multiple-comparison correction. 10,000 permutations can serve as a planning budget; the exact number should be pre-registered based on statistical power and resources. A small-sample CI that crosses 0 means "not enough to prove improvement."
 
-对非配对 CKA null 也应报告经验 p 值 \((1+\#\{T_b\ge T_{obs}\})/(B+1)\)。现有默认仅 3 次置换、且只留均值和极值，不能支持精细显著性论断；不能把它包装成上述配对下游统计。
+For the unpaired CKA null, an empirical p-value \((1+\#\{T_b\ge T_{obs}\})/(B+1)\) should also be reported. The existing default of only 3 permutations, keeping only the mean and extremes, cannot support a fine-grained significance claim, and must not be repackaged as the paired downstream statistic above.
 
-真实任务标签不在 NPZ 的 `test_label` 中。应按 `test_ids` 与 `benchmarks/data/full_13/<task>.jsonl` 的 `ground_truth` 显式 join，并校验候选顺序、ID 覆盖与哈希；`grand_challenge_data.py:232` 是现有加载接口。不得按行号猜标签或读取题目格式作为答案。
+The real task labels are not in the NPZ `test_label`. They should be explicitly joined between `test_ids` and the `ground_truth` in `benchmarks/data/full_13/<task>.jsonl`, checking candidate order, ID coverage, and hash; `grand_challenge_data.py:232` is the existing loading interface. Labels must not be guessed by row number, nor read off the question format as the answer.
 
-### 8.2 必须新增数据才能做的验证
+### 8.2 Verifications That Require New Data First
 
-| 假设 | 必需数据 | 拒绝条件 |
+| Hypothesis | Data required | Rejection condition |
 |---|---|---|
-| 405B↔72B 的共享几何 | 405B 同 ID、同文本协议、真实配对特征 | 缺文件、模型 hash 未知、输入被不同截断且未分层分析 |
-| 层间曲率演变 | 同样本的多层 token/位置一致隐藏态 | 用最终层静态点代替层轨迹 |
-| q/p 可辨识 | 同 episode 的相邻观测、真实动作、时间间隔 | 把 train 样本顺序或两个模型差值当时间导数 |
-| 多步世界预测 | 可执行环境或真实轨迹 holdout、真实奖励 | 奖励来自振子能量下降却声称任务回报 |
-| 辛/耗散结构适合任务 | 同预算训练的非结构 baseline 与真实 rollout | 只展示谐振子稳定性或守恒误差 |
+| Shared geometry between 405B↔72B | Real paired features for 405B on the same ID, same text protocol | Missing file, unknown model hash, or inputs truncated differently without stratified analysis |
+| Curvature evolution across layers | Consistent hidden state across layers, same sample, same token/position | Substituting the final layer's static point for a layer trajectory |
+| q/p identifiability | Adjacent observations, real action, and time interval from the same episode | Treating the train-sample order, or the difference between two models, as a time derivative |
+| Multi-step world prediction | An executable environment, or real trajectory holdout with real reward | Reward from an oscillator's declining energy claimed as task return |
+| Symplectic/dissipative structure suits the task | A non-structured baseline trained on the same budget, and real rollouts | Showing only harmonic-oscillator stability or conservation error |
 
-episode 划分先于相邻窗口构造，避免相邻帧泄漏。若缺 action coverage，对未覆盖动作输出 OOD，不用 hash 生成动作效果。
+Episode splitting should precede adjacent-window construction, to avoid leakage between adjacent frames. If action coverage is missing, output OOD for uncovered actions rather than generating action effects from a hash.
 
-### 8.3 数值与集成验收
+### 8.3 Numerical and Integration Acceptance
 
-对真实编码得到的 phase state，报告
+For a phase state obtained from real encoding, report
 
 \[
 \epsilon_\omega=\frac{\|D\Phi^\top JD\Phi-J\|_F}{\|J\|_F},\quad
 \epsilon_{\rm vol}=|\log|\det D\Phi||,
 \]
 
-耗散模式分别将 J 改为 \(e^{-\eta h}J\)，将期望 logdet 改为 \(-r\eta h\)。报告 Jacobian 的计算方式；大维 JVP 抽样只是探针，不能称作全 Jacobian 证明。还测反向误差、步长减半阶数、能量减去控制功和耗散后的残差，以及真实预测误差/有效秩。
+In dissipative mode, replace J with \(e^{-\eta h}J\) and the expected logdet with \(-r\eta h\). Report how the Jacobian was computed; high-dimensional JVP sampling is only a probe, not proof of the full Jacobian. Also measure backward error, the order of convergence under step-size halving, the residual after subtracting control work and dissipation from the energy change, and real prediction error/effective rank.
 
-容差须按 dtype、维度、积分步长与真实数据噪声在 validation 上冻结，不能为通过测试临时调宽。保守模式、耗散模式、动作切换模式分开验收。
+Tolerances must be frozen on validation according to dtype, dimension, integration step size, and real data noise; they must not be loosened temporarily to pass a test. Conservative mode, dissipative mode, and action-switching mode must be accepted separately.
 
-故障注入包括缺工件、坏哈希、错维、NaN/Inf、秩不足、断图、图册外样本、求解不收敛、未训练 checkpoint。要求结构化错误、非成功状态、旧算法调用计数为零。HTTP/MCP 不能只看传输 200，必须核查业务错误 envelope；CLI 必须非零退出。
+Fault injection should cover a missing artifact, a bad hash, a wrong dimension, NaN/Inf, rank deficiency, a disconnected graph, an out-of-atlas sample, non-converging solve, and an untrained checkpoint. It requires a structured error, a non-success status, and a legacy-algorithm invocation count of zero. HTTP/MCP must not check only the transport-level 200; the business error envelope must be checked. CLI must exit non-zero.
 
-## 9. 可复验命令、原始退出码与证据
+## 9. Reproducible Commands, Raw Exit Codes, and Evidence
 
-### 9.1 本次实际运行
+### 9.1 What Was Actually Run This Time
 
-证据目录就是本报告所在目录。`*.command.json` 保存完整 argv（包括只读 Python `-c` 内容），`*.exit` 保存原始子进程退出码，日志未用管道截断；下述只是尾部展示。
+The evidence directory is the directory this report is in. `*.command.json` saves the full argv (including read-only Python `-c` content); `*.exit` saves the raw subprocess exit code; the logs are not pipe-truncated, and what follows is only a displayed tail.
 
-| 实验 | 命令记录 | 原始退出码 | 输出尾部 |
+| Experiment | Command record | Raw exit code | Output tail |
 |---|---|---:|---|
-| 既有对齐测试 | `alignment-tests.command.json`：`python -m pytest benchmarks/tests/test_cross_model_alignment.py -q -p no:cacheprovider` | 0 | `30 passed in 3.22s` |
-| 13-task 实测 | `feature-audit.command.json`：完整 inline 程序；读取真实 NPZ、调用现有 loader/Procrustes、Gram CKA 与谱统计 | 0 | `PASS 13 real feature pairs; historical test metrics reproduced; no curvature or dynamics claim` |
-| 错配拒绝 | `negative-id.command.json`：仅在内存中 roll 真实 massive_en 的 test_ids，然后调用现有 verifier | **1（预期拒绝）** | `ValueError: test_ids: not identical ... (350 of 350 positions differ)` |
-| VDM 正文核查 | `vdm.command.json`：Firecrawl research read-paper | 0 | 正文摘录含局部 PCA 与正交帧对齐 |
-| HNN 正文核查 | `hnn.command.json`：Firecrawl research read-paper | 0 | 正文摘录含导数训练与相邻帧速度可观测性 |
+| Existing alignment tests | `alignment-tests.command.json`: `python -m pytest benchmarks/tests/test_cross_model_alignment.py -q -p no:cacheprovider` | 0 | `30 passed in 3.22s` |
+| 13-task real measurement | `feature-audit.command.json`: full inline program; reads real NPZ, calls the existing loader/Procrustes, Gram CKA, and spectral statistics | 0 | `PASS 13 real feature pairs; historical test metrics reproduced; no curvature or dynamics claim` |
+| Mismatch rejection | `negative-id.command.json`: only rolls real massive_en test_ids in memory, then calls the existing verifier | **1 (expected rejection)** | `ValueError: test_ids: not identical ... (350 of 350 positions differ)` |
+| VDM body-text check | `vdm.command.json`: Firecrawl research read-paper | 0 | Body-text excerpt includes local PCA and orthogonal frame alignment |
+| HNN body-text check | `hnn.command.json`: Firecrawl research read-paper | 0 | Body-text excerpt includes derivative training and adjacent-frame velocity observability |
 
-pytest 的部分既有测试使用合成数组检验数值恒等式与拒绝契约；**它们不是实际模型能力证据**。能力相关实测只来自 26 个真实 NPZ；本次没有伪造训练样本或 mock 生产输出。
+Some of pytest's existing tests use synthetic arrays to check numerical identities and rejection contracts; **they are not evidence of actual model capability**. Capability-relevant measurements come only from the 26 real NPZ files; this work did not fabricate training samples or mock production output.
 
-复跑已记录的任一 argv（以下默认复跑只读特征审计；会重写本证据目录对应 JSON 结果，建议先另存已有证据）：
+To rerun any recorded argv (the default below reruns the read-only feature audit; it will overwrite the corresponding JSON result in this evidence directory, so save a copy of existing evidence first):
 
 ```bash
 cd /ebs/pj/gen-zero
@@ -484,11 +484,11 @@ raise SystemExit(subprocess.run(json.loads(p.read_text())).returncode)
 PY
 ```
 
-预期 0；若真实文件改变、配对不符或历史数值不匹配则非零。要复验拒绝实验，将文件名改成 `negative-id.command.json`，预期原始退出码 1，不能把它误计为成功的正常输入推理。
+Expect 0; expect non-zero if the real files change, the pairing no longer matches, or the historical values no longer match. To re-verify the rejection experiment, change the filename to `negative-id.command.json`; the expected raw exit code is 1, and this must not be miscounted as a successful normal-input inference.
 
-原始逐任务数据在 `feature-audit.json`；每个模型含完整路径、SHA256、shape、metadata、重复与交集计数、PR/CV。17 个关键源码有编号快照及 `source-hashes.json`，便于共享树变化后复核本报告的 path:line。
+The raw per-task data is in `feature-audit.json`; each model entry includes the full path, SHA256, shape, metadata, duplicate and intersection counts, and PR/CV. The 17 key source files have numbered snapshots and `source-hashes.json`, to make it easier to recheck this report's `path:line` references after the shared tree changes.
 
-### 9.2 现有 CLI 的完整基线命令（本次未执行）
+### 9.2 Full Baseline Command for the Existing CLI (Not Executed This Time)
 
 ```bash
 python benchmarks/suites/cross_model_manifold_alignment.py \
@@ -500,46 +500,46 @@ python benchmarks/suites/cross_model_manifold_alignment.py \
   --out-md /tmp/b0927c-t1-baseline.md
 ```
 
-现有参数见 `cross_model_manifold_alignment.py:329`。正常完成预期 0；缺文件或错 ID 抛异常通常退出 1；参数不完整 argparse 退出 2。这个退出 0 **仅说明计算完成**，不说明局部几何优于线性、也不说明有世界模型能力。
+The existing parameters are at `cross_model_manifold_alignment.py:329`. Normal completion is expected to exit 0; a missing file or wrong ID usually raises and exits 1; incomplete arguments make argparse exit 2. This exit-0 **only means the computation finished**; it does not mean local geometry beats a linear model, and it does not mean world-model capability exists.
 
-该命令默认重算 train/test，boolq 和 massive_de 的大矩阵会很重；本次没有运行这个全量复算。未来应按用户规范远端执行：先记录 CPU 1m/15m 相对核心数、可用内存≥8GB、磁盘≥10GB，并按实际内存估算再加门槛；复制有哈希 manifest 的无 `.git` 沙箱；记录源数据/源码哈希、命令、原始退出码、完整日志；校验后拉回结果；清理专属临时目录。编译才用 `CARGO_BUILD_JOBS=$(nproc)`，BLAS 不应与多任务并发造成线程乘法超载。
+This command recomputes train/test by default; boolq and massive_de's large matrices are heavy. This work did not run this full recomputation. In the future this should be run remotely per the user's standard: first record CPU 1m/15m load relative to core count, available RAM ≥8GB, disk ≥10GB, and add a threshold based on the actual memory estimate; copy into a `.git`-free sandbox with a hash manifest; record source-data/source-code hash, the command, the raw exit code, and the full log; pull results back after verification; clean up the dedicated temp directory. Only compilation should use `CARGO_BUILD_JOBS=$(nproc)`; BLAS should not create thread multiplication overload alongside concurrent tasks.
 
-本次本机健康观测为 24 核、1m/15m load 约 30.90/18.52、available RAM 50GB、磁盘 available 72GB，故没有启动全仓编译、多模型抽取或重型全量实验；只执行单 BLAS 线程、逐任务测试块诊断。无远端沙箱或临时调试文件需要回收。保留的日志是本任务审计证据，不作临时垃圾删除。
+This machine's health observation for this work was 24 cores, 1m/15m load about 30.90/18.52, 50GB RAM available, 72GB disk available; so no full-repo compile, multi-model extraction, or heavy full-scale experiment was started: only single-BLAS-thread, per-task test-block diagnostics were run. There is no remote sandbox or temp debug file to reclaim. The logs kept here are audit evidence for this task, not temporary clutter to delete.
 
-### 9.3 新方案的验收命令契约（未实现，不可当现有 CLI）
+### 9.3 Acceptance Command Contract for the New Design (Not Implemented; Do Not Treat as an Existing CLI)
 
-后续实现应提供 `validate-manifest`、`fit-atlas`、`evaluate-paired`、`evaluate-phase-rollout` 四项明确入口；本文不写一条不存在的 `python ...geometry.py` 冒充可以运行。
+A future implementation should provide four explicit entry points: `validate-manifest`, `fit-atlas`, `evaluate-paired`, `evaluate-phase-rollout`; this document does not write a non-existent `python ...geometry.py` command and pretend it can be run.
 
-命令输入契约依次是 feature manifest + 全任务列表、训练/验证 ID manifests、冻结 artifact + 测试 ID/标签、真实 episode manifest + phase checkpoint；输出契约是逐样本 JSONL、聚合统计、工件哈希、实际调用 trace 与退出码。
+The command input contracts are, in order: a feature manifest plus the full task list; train/validation ID manifests; a frozen artifact plus test IDs/labels; a real episode manifest plus a phase checkpoint. The output contract is per-sample JSONL, aggregate statistics, artifact hash, actual invocation trace, and exit code.
 
-建议统一返回：0=所有契约及预声明验收通过；2=参数错误；3=数据/配对/provenance 错误；4=不可辨识/数值失败；5=拟合或统计验收未通过。此映射是**提案**，与现有 Python CLI 的 1/2 语义分开。新入口落地前，只能报告“未实现/未运行”。
+The suggested unified return codes: 0 = all contracts and pre-declared acceptance passed; 2 = argument error; 3 = data/pairing/provenance error; 4 = unidentifiable/numerical failure; 5 = fit or statistical acceptance failed. This mapping is a **proposal**, separate from the existing Python CLI's 1/2 semantics. Before the new entry points land, only "not implemented / not run" may be reported.
 
-## 10. 分阶段决策与最终状态
+## 10. Staged Decisions and Final Status
 
-**阶段 A：数据契约。** 补原始输入/候选/tokenizer/model hash，纳入量化和 pooling 因素；取回后三款模型的真实产物，未齐不得输出五模型总表。
+**Stage A: Data contract.** Add raw input/candidate/tokenizer/model hash, incorporating quantization and pooling factors; obtain real artifacts for the remaining three models; do not output a five-model summary table until all are available.
 
-**阶段 B：静态几何。** 在现有 13-task 训练特征上做多尺度切空间、噪声校准、held-out 全局/局部/联络对照；先回答局部几何是否值得复杂度。曲率估计失败则记录失败，不以混合曲率名词替代实证。
+**Stage B: Static geometry.** Do multiscale tangent-space fitting, noise calibration, and held-out global/local/connection controls on the existing 13-task train features; first answer whether local geometry is worth the added complexity. If curvature estimation fails, record the failure; do not substitute mixed-curvature terminology for empirical results.
 
-**阶段 C：只把胜出的静态适配器接入实际决策。** 必须包含共享引擎调用、真实候选、工件失效拒绝、延迟与下游收益；这一步仍不声称世界模型。
+**Stage C: Wire only the winning static adapter into the actual decision path.** This must include the shared-engine call, real candidates, rejection on artifact failure, and latency and downstream benefit; this step still does not claim a world model.
 
-**阶段 D：真实轨迹辨识与 phase 编码训练。** 冻结 Dense 权重可以，但 adapter/Hamiltonian 的训练和数据消耗要如实记录。比较保守、耗散和非结构动力学，接受任务可能根本不适合 Hamiltonian 先验。
+**Stage D: Real trajectory identification and phase-encoder training.** Freezing the Dense weights is fine, but the training and data consumption of the adapter/Hamiltonian must be recorded truthfully. Compare conservative, dissipative, and non-structured dynamics; accept that the task may not suit a Hamiltonian prior at all.
 
-**阶段 E：多步生产验收与旧路径删除。** 按实际调用与同请求故障拒绝证据判断接入；按逐样本配对统计判断收益；按迁移清单判断被替代旧符号是否确实清零。没有真实训练与执行证据，永远不升级为“已具备”。
+**Stage E: Multi-step production acceptance and removal of legacy paths.** Judge integration by actual-invocation and same-request failure-rejection evidence; judge benefit by per-sample paired statistics; judge whether replaced legacy symbols are truly gone by the migration checklist. Without real training and execution evidence, never upgrade the status to "already have this capability."
 
-最终分类：
+Final classification:
 
-- **已实现／已验证：** 本研究报告、源码审计、真实 13-task 配对与历史测试指标复现、30 项对齐测试、错配 fail-closed 实验；详见第 9 节命令/退出码/日志及第 1、7 节 path:line。
-- **未验证：** 五模型完整资产、原始文本级跨模型一致性、历史 null 本次复算、当前服务 live acceptance、几何新方案收益。源码存在与数学推导分别只证明存在与条件性结论。
-- **未完成：** 新算法实现/生产挂载、phase 训练、长期真实前瞻及旧路径迁移；本任务明确只要求研究报告且禁止改代码，同时当前静态数据缺乏动力学可辨识信息。
+- **Implemented/Verified:** this research report, the source-code audit, the real 13-task pairing and reproduction of the historical test metrics, the 30 existing alignment tests, and the mismatch fail-closed experiment; see the commands/exit codes/logs in Section 9 and the `path:line` references in Sections 1 and 7.
+- **Unverified:** the full five-model assets, raw-text-level cross-model consistency, a recomputation of the historical null in this work, current service live acceptance, and the benefit of the new geometric design. Source-code existence and mathematical derivation only prove, respectively, existence and a conditional conclusion.
+- **Not completed:** new algorithm implementation/production mounting, phase training, genuine long-horizon lookahead, and legacy-path migration; this task explicitly required only a research report and prohibited code changes, and the current static data in any case lacks dynamics-identifying information.
 
-## 文献与核查范围
+## Literature and Verification Scope
 
-- [Kornblith et al., Similarity of Neural Network Representations Revisited](https://arxiv.org/abs/1905.00414)：CKA 与表征比较；本次检索元数据，不将其作为非线性几何或因果等价证明。
-- [Singer & Wu, Vector Diffusion Maps and the Connection Laplacian](https://arxiv.org/abs/1102.0075)：本次核查局部 PCA、polar 对齐及采样假设；正文证据 `vdm.log`。
-- [Thunberg et al., Distributed methods for synchronization of orthogonal matrices over graphs](https://arxiv.org/abs/1701.07248)：相关文献检索结果；群同步与有曲率联络不可混为平坦全局一致化。
-- [Greydanus et al., Hamiltonian Neural Networks](https://arxiv.org/abs/1906.01563)：本次核查训练损失、轨迹与相邻帧观测；正文证据 `hnn.log`。物理实验不能外推为 LLM 意图动力学。
-- [Meinrenken, Symplectic Geometry](https://www.math.utoronto.ca/mein/teaching/LectureNotes/symplectic.pdf)：余切提升与 canonical 结构的数学依据。
-- [Gauckler, Hairer & Lubich, Dynamics, Numerical Analysis, and Some Geometry](https://www.unige.ch/~hairer/preprints/icm.pdf)：后向误差分析及长时能量界的条件。
-- [Hairer, Variable time step integration with symplectic methods](https://www.unige.ch/~hairer/preprints/varsymp.html)：普通可变步长对保结构性质的风险。
+- [Kornblith et al., Similarity of Neural Network Representations Revisited](https://arxiv.org/abs/1905.00414): CKA and representation comparison; metadata was retrieved this time, and it is not used as evidence for nonlinear geometry or causal equivalence.
+- [Singer & Wu, Vector Diffusion Maps and the Connection Laplacian](https://arxiv.org/abs/1102.0075): this work checked local PCA, polar alignment, and the sampling assumptions; body-text evidence in `vdm.log`.
+- [Thunberg et al., Distributed methods for synchronization of orthogonal matrices over graphs](https://arxiv.org/abs/1701.07248): a related literature-search result; group synchronization must not be conflated with a curved connection reaching a flat global consensus.
+- [Greydanus et al., Hamiltonian Neural Networks](https://arxiv.org/abs/1906.01563): this work checked the training loss, trajectories, and adjacent-frame observation; body-text evidence in `hnn.log`. The physics experiments cannot be extrapolated to LLM intent dynamics.
+- [Meinrenken, Symplectic Geometry](https://www.math.utoronto.ca/mein/teaching/LectureNotes/symplectic.pdf): the mathematical basis for the cotangent lift and canonical structure.
+- [Gauckler, Hairer & Lubich, Dynamics, Numerical Analysis, and Some Geometry](https://www.unige.ch/~hairer/preprints/icm.pdf): backward error analysis and the conditions for long-time energy bounds.
+- [Hairer, Variable time step integration with symplectic methods](https://www.unige.ch/~hairer/preprints/varsymp.html): the risk that ordinary variable-step integration poses to the structure-preserving property.
 
-文献发现使用 firecrawl-research-index / firecrawl-research-papers；另用官方大学原文补充数学核查。相关检索返回的无关重尾协方差论文已排除。OpenReview 浏览器验证页未被当作成功读取论文。
+Literature discovery used firecrawl-research-index / firecrawl-research-papers; official university source text was also used to supplement the mathematical checks. Unrelated heavy-tailed-covariance papers returned by related searches were excluded. The OpenReview browser-verification page was not treated as a successful paper read.

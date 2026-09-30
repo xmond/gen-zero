@@ -142,7 +142,7 @@ class TiltedDoubleWellPotential:
     barrier of height 1 at s=0 (V(0)=1, V(+-1)=0). `tilt` breaks the symmetry:
     V(+1)=tilt, V(-1)=-tilt. For tilt>0 the s=-1 well is strictly deeper
     (the global minimum) and s=+1 is a shallow local minimum -- this is the
-    concrete, honest instance of "浅层局部极小" the task asks the engine to
+    concrete, honest instance of "shallow local minimum" the task asks the engine to
     escape, since the codebase's other potentials have none. `kappa` confines
     q to the axis line with a constant-Hessian quadratic (off-axis directions
     are strongly convex, so the whole construction is coercive/dissipative --
@@ -153,7 +153,7 @@ class TiltedDoubleWellPotential:
 
     `dim=2` gives the classic textbook double well (axis = e0, one confined
     coordinate). Any `dim` works identically -- passing `dim=256` is the
-    "高维非凸" (high-dimensional non-convex) instance the task also asks for,
+    "high-dimensional non-convex" instance the task also asks for,
     using the same formula, not a separate mechanism.
     """
 

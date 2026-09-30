@@ -7,7 +7,7 @@ actual returned model identity; a routing alias is not a fixed model guarantee.
 
 The host sends only the task instruction and sandbox repository observations to
 the explicitly configured Proposer. Credentials stay in a host environment
-variable. No Claude/Codex worker or reviewer is launched. The agent container
+variable. No external worker or reviewer is launched. The agent container
 retains the official no-network configuration. The model cannot issue shell
 commands, inspect the host task directory, or access the hidden verifier.
 

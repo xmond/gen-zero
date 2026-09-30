@@ -135,7 +135,7 @@ fn at(stage: &'static str) -> impl Fn(Reject) -> Rejection {
 
 // ---------------------------------------------------------------- assets
 
-/// Gate contract sealed in the mount (§5.1 "版本化步长合同").
+/// Gate contract sealed in the mount (§5.1 "versioned step-size contract").
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct GatePolicy {

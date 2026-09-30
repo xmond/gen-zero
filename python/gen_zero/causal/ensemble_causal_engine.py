@@ -5,8 +5,8 @@ space and its own independently trained RNNSetAdapterRuntime (own in_dim, own
 adapter_dim, own weights). Nothing here shares a projection, concatenates
 features, or trains a joint head across models: every model scores the same
 K candidates in its own space, and only the *outputs* (logits / probabilities)
-are combined. That is what "分开,不合在一起" (kept separate, not merged)
-means at the code level -- see score_ensemble's per-model loop, which never
+are combined. That is what "kept separate, not merged" means at the code
+level -- see score_ensemble's per-model loop, which never
 touches another model's arrays.
 
 Fusion strategies, given per-model logits L_m over K candidates:

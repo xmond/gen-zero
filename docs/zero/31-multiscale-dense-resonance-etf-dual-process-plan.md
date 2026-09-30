@@ -1,270 +1,270 @@
-# Spec 31：多尺度 Dense 模型流形干涉、广义 ETF 与双进程协同方案（b0927c-t3-multi）
+# Spec 31: Multiscale Dense Model Manifold Interference, Generalized ETF, and Dual-Process Coordination Plan (b0927c-t3-multi)
 
-- 日期：2026-09-27（JST）
-- 源码基线：`acb2c0ccf3f30a708cd9a4f638248973c4709188`，工作目录 `/ebs/pj/gen-zero`
-- 证据目录：`docs/zero/evidence/b0927c-t3-multi/`（命令、退出码、日志、输出 JSON 见 `commands.txt`）
-- 本文只新增设计文档与一组只读分析证据（脚本、日志、JSON、命令记录），不修改任何既有代码文件，不提交。
+- Date: 2026-09-27 (JST)
+- Source baseline: `acb2c0ccf3f30a708cd9a4f638248973c4709188`, working directory `/ebs/pj/gen-zero`
+- Evidence directory: `docs/zero/evidence/b0927c-t3-multi/` (commands, exit codes, logs, output JSON in `commands.txt`)
+- This document only adds the design document and a set of read-only analysis evidence (scripts, logs, JSON, command records); it does not modify any existing code file, and nothing is committed.
 
-## 0. 结论先行，三类分开
+## 0. Conclusions up front, split into three categories
 
-**已实现（有证据）**
+**Implemented (with evidence)**
 
-1. **现场盘点。** 五个 Dense 模型里，只有 Llama-3.1-70B 与 Qwen2.5-72B 有 13 任务特征（`/ebs/data/extracted_features/llama70b/`、`.../qwen72b/features/`）。Mistral-123B 的 Q3_K_M 权重看起来已下载完：ai 上两个分片共 59,102,779,264 B，15:30 写完，与下载器预期的约 59 GB 一致；**未做 sha256 校验**。它**没有抽过特征**。Falcon-180B 与 Llama-405B 的权重**不在 ai 上**。证据：`commands.txt` §2。
-2. **一次只用训练集的 OOF 预分析（70B+72B）。** 13 任务、5 折、与基线同一投影与 ridge 头，没有读取任何测试标签。命令退出码 0，耗时 2 分 23 秒。关键数字（13 任务宏平均）：最好单模型 81.47%，两模型概率平均 82.45%，「任一模型答对」上界 86.64%，两模型同时答错 13.36%。**两模型分歧度（互信息）预测错误的 AUROC 为 0.655，总熵为 0.794；13 个任务里分歧度 13 个全输。** 证据：`oof_complementarity_probe.{py,log,json}`。
-3. **五处任务前提与现场不符**，逐条带 `path:line`，见 §2。
-4. **一处现存缺陷**：405B 启动器默认路径指向一个下载器不会产生的文件，见 §2.5。
+1. **On-site inventory.** Of the five Dense models, only Llama-3.1-70B and Qwen2.5-72B have the full 13-task features (`/ebs/data/extracted_features/llama70b/`, `.../qwen72b/features/`). Mistral-123B's Q3_K_M weights appear fully downloaded: on `ai`, two shards totaling 59,102,779,264 bytes finished writing at 15:30, matching the downloader's expected ~59 GB; **no sha256 check was performed**. It has **not had features extracted**. Falcon-180B and Llama-405B weights are **not on `ai`**. Evidence: `commands.txt` §2.
+2. **A one-shot, training-set-only OOF pre-analysis (70B+72B).** 13 tasks, 5 folds, the same projection and ridge head as the baseline, with no test labels read at all. Command exit code 0, elapsed 2 minutes 23 seconds. Key numbers (13-task macro average): best single model 81.47%, two-model probability average 82.45%, "either model correct" upper bound 86.64%, both models wrong 13.36%. **The AUROC of two-model disagreement (mutual information) predicting error is 0.655, versus 0.794 for total entropy; disagreement loses on all 13 of 13 tasks.** Evidence: `oof_complementarity_probe.{py,log,json}`.
+3. **Five task premises that do not match the on-site facts**, each with a `path:line` citation, in §2.
+4. **One existing defect**: the 405B launcher's default path points at a file the downloader never produces, see §2.5.
 
-**未验证（做了设计，没有数据证明它对）**
+**Unverified (designed, but with no data proving it correct)**
 
-- §4 流形干涉算子、§5 曲率自适应广义 ETF、§6 双进程级联：全部是设计与可证伪假说。§7 给出判定它们成败的实验和脚本规格。
-- 「72B 偏指令结构、123B 偏长程推理、405B 偏世界常识」：**纯假设**，现有数据既不支持也不否定。§7 的 H2 专门检验它。
+- §4's manifold interference operator, §5's curvature-adaptive generalized ETF, and §6's dual-process cascade: all are design and falsifiable hypotheses. §7 gives the experiments and script specifications that will decide their success or failure.
+- "72B leans toward instruction structure, 123B toward long-range reasoning, 405B toward world knowledge": **pure hypothesis**, neither supported nor refuted by current data. H2 in §7 is specifically designed to test it.
 
-**未完成（没做，说明原因）**
+**Not done (not attempted, with the reason)**
 
-- 123B/180B/405B 的任何几何数值、任何级联收益：没有特征。123B 缺抽取运行（预计约 6 小时 A100，估算见 §3.3）；180B、405B 缺权重下载，405B Q2_K 约 141 GB（`queue_dense_fleet_downloads.py:4`），超出 80 GB 显存，需要约 61 GB 主机内存卸载，吞吐未测。
-- 任何「突破」或「涌现」结论：本文不做。没有逐样本配对统计之前，不声称任何提升。
-- 生产接入（服务端接收多模型特征）：本文只给挂载点与规格（§6.5），不改生产代码。
+- Any geometric numbers or cascade gains for 123B/180B/405B: no features exist. 123B is missing an extraction run (estimated ~6 hours on an A100, estimate in §3.3); 180B and 405B are missing weight downloads, with 405B Q2_K at about 141 GB (`queue_dense_fleet_downloads.py:4`), exceeding 80 GB of VRAM and requiring roughly 61 GB of host-memory offload, with throughput untested.
+- Any "breakthrough" or "emergence" conclusion: not made in this document. No improvement is claimed before per-sample paired statistics exist.
+- Production integration (the server side accepting multi-model features): this document only gives the mounting point and specification (§6.5); it does not modify production code.
 
-## 1. 现场事实表
+## 1. On-site fact table
 
-| 模型 | 隐层维度 | 量化 | 特征状态 | 抽取实测成本 |
+| Model | Hidden dim | Quantization | Feature status | Measured extraction cost |
 |---|---:|---|---|---|
-| Llama-3.1-70B | 8192 | Q4_K_M | 13 任务齐全 | 35,211 行 / 12,746 s = **0.362 s/行**，469 tok/s |
-| Qwen2.5-72B | 8192 | Q4_K_M | 13 任务齐全 | 35,211 行 / 17,139 s = **0.487 s/行**，353 tok/s |
-| Mistral-Large-2 123B | 12288 | Q3_K_M | 权重在 ai，**无特征** | 未测 |
-| Falcon-180B | 14848 | Q2_K（下载器） | **无权重** | 未测 |
-| Llama-3.1-405B | 16384 | Q2_K（下载器） | **无权重** | 未测 |
+| Llama-3.1-70B | 8192 | Q4_K_M | all 13 tasks complete | 35,211 rows / 12,746 s = **0.362 s/row**, 469 tok/s |
+| Qwen2.5-72B | 8192 | Q4_K_M | all 13 tasks complete | 35,211 rows / 17,139 s = **0.487 s/row**, 353 tok/s |
+| Mistral-Large-2 123B | 12288 | Q3_K_M | weights on `ai`, **no features** | not measured |
+| Falcon-180B | 14848 | Q2_K (downloader) | **no weights** | not measured |
+| Llama-3.1-405B | 16384 | Q2_K (downloader) | **no weights** | not measured |
 
-- 量化来源：70B/72B 取自 npz 的 `info_json.encoder`；123B 见 `benchmarks/suites/run_mistral123b_extract.bat:35`；180B/405B 见 `benchmarks/suites/queue_dense_fleet_downloads.py:90`、`:118`。
-- 特征形式：每条记录一个向量，`llama-server --embedding --pooling last`，末层 post-norm、最后一个 token、原始尺度（`benchmarks/suites/gpu_extract_qwen72b_13tasks.py:17-18`）。不是多层特征。
-- 候选：每个任务的 `cands` 是 K 个标签文本的嵌入，形状 `(K, dim)`，**整个任务共用一套**（例：massive_en `cands` 为 `(18, 8192)`）。
-- 硬件：ai 为单卡 A100 80GB、主机内存 127.6 GB、D 盘剩余 938 GB（`commands.txt` §2）。
-- 测试集：`benchmarks/data/full_13/*.jsonl` 共 3,880 条；每任务 144 到 599 条；K 从 2 到 18。civil_comments 多数类占 89.3%，summeval_consistency 占 84.0%，这两个任务只看准确率会误导。
+- Quantization source: 70B/72B taken from the npz's `info_json.encoder`; 123B from `benchmarks/suites/run_mistral123b_extract.bat:35`; 180B/405B from `benchmarks/suites/queue_dense_fleet_downloads.py:90`, `:118`.
+- Feature form: one vector per record, `llama-server --embedding --pooling last`, the final post-norm state of the last token, at its native scale (`benchmarks/suites/gpu_extract_qwen72b_13tasks.py:17-18`). Not multi-layer features.
+- Candidates: each task's `cands` is the embedding of K label texts, shape `(K, dim)`, **shared across the whole task** (e.g. massive_en's `cands` is `(18, 8192)`).
+- Hardware: `ai` is a single A100 80GB GPU, 127.6 GB host RAM, 938 GB free on the D: drive (`commands.txt` §2).
+- Test set: `benchmarks/data/full_13/*.jsonl`, 3,880 rows total; 144 to 599 rows per task; K ranges from 2 to 18. civil_comments' majority class is 89.3%, summeval_consistency's is 84.0%; for these two tasks, accuracy alone is misleading.
 
-基线成绩（`benchmarks/results/spec21_dual_70b_72b_advanced_ensemble_report.md`）：宏准确率 qwen_best 76.14、llama_best 76.23、selected 77.21，提升 +0.98 pp。**但 selected 在 7 个任务上低于两个单模型中较好者**（差值，pp）：summeval_consistency −5.56、summeval_relevance −4.58、civil_comments −3.33、helpsteer2 −2.01、boolq −1.67、squad2 −0.67、massive_de −0.29；另有 2 个任务持平，只有 4 个任务变好。宏平均 +0.98 pp 主要来自 vitaminc（+4.34）一个任务。数据取自同名 `.json` 的逐任务 metrics。原因：OOF 搜索空间为 2×18 单头加 18×18×3 融合组合（`benchmarks/suites/evaluate_dual_70b_72b_advanced_ensemble.py:96-103`），在每任务 750 到 11,247 行训练集上对选择过拟合。**任何新方案都必须先打赢这个对选择过拟合的问题，而不是往搜索空间里再加选项。**
+Baseline results (`benchmarks/results/spec21_dual_70b_72b_advanced_ensemble_report.md`): macro accuracy qwen_best 76.14, llama_best 76.23, selected 77.21, a gain of +0.98 pp. **But `selected` is below the better of the two single models on 7 tasks** (difference, pp): summeval_consistency -5.56, summeval_relevance -4.58, civil_comments -3.33, helpsteer2 -2.01, boolq -1.67, squad2 -0.67, massive_de -0.29; 2 more tasks are tied, and only 4 tasks improve. The +0.98 pp macro average comes mostly from a single task, vitaminc (+4.34). Data taken from the per-task metrics in the same-named `.json`. Reason: the OOF search space is 2x18 single-head plus 18x18x3 fusion combinations (`benchmarks/suites/evaluate_dual_70b_72b_advanced_ensemble.py:96-103`), overfitting to selection on a training set of 750 to 11,247 rows per task. **Any new plan must first beat this selection-overfitting problem, rather than adding more options to the search space.**
 
-## 2. 前提纠正（先改地基，再谈设计）
+## 2. Correcting the premises (fix the foundation before discussing design)
 
-### 2.1 「现有 ETF choice head 把 K 个候选投影到 K-1 维正单形」：生产路径上已不成立
+### 2.1 "The existing ETF choice head projects K candidates onto a K-1-dimensional regular simplex": no longer true in the production path
 
-- 生产 Rust 头 `crates/gen-zero-model/src/choice_head.rs:7-11` 写明：单纯形 ETF 绑定**已被移除**。原因是固定顶点几何在 T=1 时让归一化熵对每个 K≥3 都高于 PolicyGate 的 0.65 阈值，于是所有 3 选以上的决策都被升级。现在的头是 `cos(state, candidate_rep) / T`，默认 T=0.25（`:25`）。服务端回归测试见 `crates/gen-zero-service/src/zero.rs:4504`。
-- `SimplexEtfFrame`（`crates/gen-zero-core/src/etf.rs`）在生产 crate 中只剩 `crates/gen-zero-nanocore/src/core_type.rs:108` 一处调用。Python 侧 `python/gen_zero/model/choice_head.py:20-25` 仍然转导出 `FastSimplexETFProjection`。
-- 13 任务基线的头（ridge / LW-LDA / logistic / BBP）**根本不用 `cands`**，也不用 ETF。
-- **结论：** 「广义 ETF」如果做，必须挂在 Rust `ActionETFChoiceHead` 的 `candidate_reps` 输入上，或者作为 13 任务评测里的一个新头与现有六头同台对比。挂在 nanocore 的旧 Helmert 帧上，等于造孤岛。
+- The production Rust head, `crates/gen-zero-model/src/choice_head.rs:7-11`, states explicitly: the simplex-ETF binding **has been removed**. The reason: with fixed-vertex geometry, at T=1 normalized entropy exceeds PolicyGate's 0.65 threshold for every K>=3, escalating every decision with 3 or more choices. The current head is `cos(state, candidate_rep) / T`, with a default T=0.25 (`:25`). The server-side regression test is at `crates/gen-zero-service/src/zero.rs:4504`.
+- `SimplexEtfFrame` (`crates/gen-zero-core/src/etf.rs`) has only one remaining call site in a production crate, `crates/gen-zero-nanocore/src/core_type.rs:108`. On the Python side, `python/gen_zero/model/choice_head.py:20-25` still re-exports `FastSimplexETFProjection`.
+- The 13-task baseline heads (ridge / LW-LDA / logistic / BBP) **do not use `cands`** at all, nor do they use ETF.
+- **Conclusion:** if a "generalized ETF" is built, it must be mounted on the Rust `ActionETFChoiceHead`'s `candidate_reps` input, or added as a new head compared head-to-head with the existing six heads in the 13-task evaluation. Mounting it on nanocore's old Helmert frame would just be building another island.
 
-### 2.2 「System 1 亚毫秒」：只对打分头成立
+### 2.2 "System 1 is sub-millisecond": true only for the scoring head
 
-70B 抽一条特征实测 0.36 s，72B 0.49 s（§1）。亚毫秒只可能是「缓存特征上的头」这一步。所以双进程的成本必须写成两个数：**特征成本**（秒级，已测）加 **头成本**（亚毫秒，待测）。System 2 的 405B 特征成本目前是空白，不能填估算值冒充。
+Measured: extracting one feature takes 0.36 s for 70B and 0.49 s for 72B (§1). Sub-millisecond can only apply to "the head applied to an already-cached feature." So the dual-process cost must be written as two numbers: **feature cost** (seconds, measured) plus **head cost** (sub-millisecond, to be measured). System 2's 405B feature cost is currently blank and must not be filled with an estimate passed off as a measurement.
 
-### 2.3 「System 2 触发 MCTS 剪枝与连续世界模型演化」：在 13 任务上没有位置
+### 2.3 "System 2 triggers MCTS pruning and continuous world-model evolution": has no place on the 13 tasks
 
-13 个任务全是单步、固定 K 的分类，没有状态转移，也没有可搜索的动作序列。MCTS 与世界模型在这里无物可搜。本方案在 13 任务上把 System 2 定义为：**更大模型的特征 + 更重的头 + 必要时弃权**。MCTS/世界模型的双进程应放到有多步环境的 DeepSWE / 终端任务线（见 `docs/architecture/gen_zero_capability_audit_20260927.md`），不进入 13 任务的任何结论。
+All 13 tasks are single-step, fixed-K classification, with no state transitions and no searchable action sequence. There is nothing for MCTS or a world model to search over here. This plan defines System 2, on the 13 tasks, as: **a larger model's features + a heavier head + abstention when necessary.** The MCTS/world-model dual process belongs in the multi-step-environment DeepSWE / terminal-task line (see `docs/architecture/gen_zero_capability_audit_20260927.md`), and does not enter any conclusion for the 13 tasks.
 
-### 2.4 「尺度分层」无法和量化、家族、上下文分开
+### 2.4 "Scale layering" cannot be separated from quantization, model family, and context length
 
-模型阶梯同时改变了四个变量：参数量、量化（Q4 → Q3 → Q2）、模型家族与训练数据、上下文长度（Falcon 启动器 `CTX=2048`，`benchmarks/suites/run_falcon180b_extract.bat:38`）。任何「405B 比 70B 多学到了 X」的读数，都是这四者的混合。**必须加同量化对照**：用 Q2_K 的 Llama-3.1-70B 重抽一次特征，与 Q4_K_M 版对比。只有 405B-Q2 对 70B-Q2 的差异才可近似归因于尺度（同家族、同量化、同 tokenizer）。Mistral 与 Falcon 与 Llama 的比较永远混有家族效应，只能叫「异构专家」，不能叫「尺度层级」。
+The model ladder changes four variables at once: parameter count, quantization (Q4 -> Q3 -> Q2), model family and training data, and context length (the Falcon launcher uses `CTX=2048`, `benchmarks/suites/run_falcon180b_extract.bat:38`). Any reading of "405B learned more than 70B" is a mixture of all four. **A same-quantization control must be added**: re-extract features for Llama-3.1-70B at Q2_K and compare against the Q4_K_M version. Only the 405B-Q2 vs. 70B-Q2 difference can be approximately attributed to scale (same family, same quantization, same tokenizer). Comparisons among Mistral, Falcon, and Llama are always confounded by family effects, and can only be called "heterogeneous experts," not "scale tiers."
 
-### 2.5 现存缺陷：405B 启动器默认模型路径指向不存在的文件
+### 2.5 Existing defect: the 405B launcher's default model path points to a nonexistent file
 
-- B18 修复后 launcher 必须显式提供 MODEL 和 MODEL_PROFILE（full/slice），不再使用机器固定路径。
-- `benchmarks/suites/queue_dense_fleet_downloads.py:118` 下载并合并的是 `Meta-Llama-3.1-405B-Instruct-Q2_K.gguf`。
-- 两者不一致。按默认值启动时 llama-server 找不到模型。启动器自己的注释也写明 Q3 权重需要跨显存与内存的数百 GB（`run_llama405b_extract.bat:3-4`），而 ai 只有 80 GB 显存加 127.6 GB 内存。本文不修复，只报告。
+- After the B18 fix, the launcher must explicitly supply MODEL and MODEL_PROFILE (full/slice), and no longer use a machine-fixed path.
+- `benchmarks/suites/queue_dense_fleet_downloads.py:118` downloads and merges `Meta-Llama-3.1-405B-Instruct-Q2_K.gguf`.
+- The two do not match. Starting with the default value, llama-server cannot find the model. The launcher's own comment even states that the Q3 weights need several hundred GB spanning VRAM and host memory (`run_llama405b_extract.bat:3-4`), while `ai` only has 80 GB VRAM plus 127.6 GB RAM. This document does not fix it, only reports it.
 
-## 3. 预分析：70B+72B 现在就能告诉我们什么
+## 3. Pre-analysis: what 70B+72B can already tell us
 
-数据：`docs/zero/evidence/b0927c-t3-multi/oof_complementarity_probe.json`。协议：训练集 5 折 OOF，基线同款 256 维高斯随机投影（`benchmarks/suites/evaluate_dual_70b_72b_ensemble.py:62`）与 ridge（`:70`，α=100），温度用训练折预测的标准差归一。**只用训练标签。**
+Data: `docs/zero/evidence/b0927c-t3-multi/oof_complementarity_probe.json`. Protocol: 5-fold OOF on the training set, the baseline's own 256-dimensional Gaussian random projection (`benchmarks/suites/evaluate_dual_70b_72b_ensemble.py:62`) and ridge regression (`:70`, alpha=100), temperature normalized by the standard deviation of the training-fold predictions. **Training labels only.**
 
-| 任务 | 72B | 70B | 平均 | 任一对（上界） | 两者皆错 | AUROC 分歧→错 | AUROC 总熵→错 |
+| Task | 72B | 70B | Average | Either correct (upper bound) | Both wrong | AUROC disagreement->error | AUROC total entropy->error |
 |---|---:|---:|---:|---:|---:|---:|---:|
 | multinli | 87.2 | 79.3 | 87.1 | 91.4 | 8.6 | 0.612 | 0.763 |
 | pubmedqa | 78.3 | 77.6 | 80.3 | 85.2 | 14.8 | 0.601 | 0.742 |
 | paws | 89.2 | 87.0 | 89.6 | 94.3 | 5.7 | 0.617 | 0.881 |
 | helpsteer2 | 40.1 | 39.7 | 42.2 | 55.3 | 44.7 | 0.533 | 0.610 |
 | summeval_relevance | 55.2 | 55.2 | 56.2 | 65.8 | 34.2 | 0.515 | 0.593 |
-| **13 任务平均** | | | **82.45** | **86.64** | **13.36** | **0.655** | **0.794** |
+| **13-task average** | | | **82.45** | **86.64** | **13.36** | **0.655** | **0.794** |
 
-（完整 13 行见 `oof_complementarity_probe.log`。最好单模型平均 81.47。）
+(The full 13 rows are in `oof_complementarity_probe.log`. Best single-model average: 81.47.)
 
-四个读数，按对设计的影响排序：
+Four findings, ordered by impact on the design:
 
-**3.1 分歧度是比总熵更差的升级信号。** 这直接否定了「用跨模型分歧作为认知不确定性去触发 System 2」的朴素版本。在 70B+72B 上，两个模型的错误高度相关：平均融合的错误率为 17.55%，而两者皆错已占 13.36%。它们常常「一起自信地错」，分歧看不到这类错误。含义：分歧只有在加入**训练数据、架构差异更大的模型**后才可能有用，这正是 H3 要检验的，而不是可以默认的。
+**3.1 Disagreement is a worse escalation signal than total entropy.** This directly refutes the naive version of "use cross-model disagreement as cognitive uncertainty to trigger System 2." On 70B+72B, the two models' errors are highly correlated: the average-fusion error rate is 17.55%, while both-wrong already accounts for 13.36%. They frequently "confidently agree and are wrong together," which disagreement cannot see. Implication: disagreement may only become useful after adding **models with more different training data and architecture**, which is exactly what H3 is designed to test, not something that can be assumed by default.
 
-**3.2 融合的上界不高。** 完美路由（每条选对的那个模型）也只到 86.64%，而平均已经 82.45%。两模型之间可挖的余量约 4 pp；另外 13.36% 的样本两个都错，**在两模型答案之间路由的方案救不回来**；概率融合在 K≥3 时理论上能救回少数，但平均融合只比上界低 4.19 pp，余量有限。System 2 的全部价值只能来自这 13.36%：大模型必须在这些样本上答对才算数。这给 H4 定了一个可测的目标变量。
+**3.2 The fusion upper bound is not high.** Even perfect routing (always picking the correct model per row) only reaches 86.64%, while the average is already 82.45%. The headroom to be gained between the two models is about 4 pp; another 13.36% of samples have both models wrong, and **no scheme that routes between the two models' answers can recover them**; probability fusion can in theory recover a small number when K>=3, but average fusion is only 4.19 pp below the upper bound, so the headroom is limited. All of System 2's value can only come from that 13.36%: the larger model must get these samples right for it to count. This sets a measurable target variable for H4.
 
-**3.3 序数任务是另一个问题。** helpsteer2 与 summeval_relevance 两者皆错 44.7% 与 34.2%，分歧度 AUROC 接近 0.5。这两个任务的瓶颈可能不在「哪个模型」，而在「末层单 token 向量是否携带打分信息」与标签噪声（假设，未检验）。给它们加 ETF 更没有道理，见 §5.4。
+**3.3 Ordinal tasks are a separate problem.** helpsteer2 and summeval_relevance have both-wrong rates of 44.7% and 34.2%, with disagreement AUROC near 0.5. The bottleneck for these two tasks may not be "which model," but rather "whether the final-layer single-token vector even carries scoring information" and label noise (a hypothesis, untested). Adding ETF to them makes even less sense; see §5.4.
 
-**3.4 共享子空间真实存在，但只在前几维。** 在 64 维切片上做 CCA（前半训练集拟合、后半测评），首个典型相关平均 0.858，第 8 个降到 0.453。解释：两个 70B 级模型有少量强共享方向（大概率是任务/主题），其余方向各自为政。这支持 §4 的「共享 + 残差」分解，但样本外相关衰减很快，共享子空间的秩要用留出集选，不能拍定。
+**3.4 A shared subspace genuinely exists, but only in the first few dimensions.** Running CCA on a 64-dimensional slice (fit on the first half of the training set, evaluated on the second half), the first canonical correlation averages 0.858, dropping to 0.453 by the 8th. Interpretation: the two 70B-class models have a small number of strongly shared directions (most likely task/topic), with the remaining directions going their own way. This supports the "shared + residual" decomposition in §4, but the out-of-sample correlation decays quickly, so the rank of the shared subspace must be chosen on a held-out set, not fixed by fiat.
 
-**成本估算（估算，不是测量）。** 70B Q4 实测 469 tok/s。13 任务全量约 598 万 token；按默认 1000 行上限截断 boolq 与 massive_de 后约 380 万 token；仅测试集约 78 万 token。若 123B Q3 全部上 GPU，按参数量线性缩放约 270 tok/s，全量约 6 小时。405B Q2_K 需要主机卸载，吞吐可能低一个数量级，全量可能要数天。**这是计划的承重不确定性**，§7.4 的执行顺序据此安排。
+**Cost estimate (an estimate, not a measurement).** 70B Q4 measured at 469 tok/s. The full 13-task set is about 5.98 million tokens; truncated at the default 1000-row cap for boolq and massive_de, about 3.8 million tokens; the test set alone is about 780,000 tokens. If 123B Q3 runs entirely on GPU, scaling roughly linearly with parameter count gives about 270 tok/s, so the full set would take about 6 hours. 405B Q2_K needs host offload, and throughput could be an order of magnitude lower, so the full set could take several days. **This is a load-bearing uncertainty for the plan**, and §7.4's execution order is arranged accordingly.
 
-## 4. 流形干涉算子（Manifold Interference Operator, MIO）
+## 4. Manifold Interference Operator (MIO)
 
-把「相长 / 相消干涉」落成可计算、可证伪的线性代数。不引入任何无法在现有 npz 上计算的量。
+Turning "constructive/destructive interference" into computable, falsifiable linear algebra. No quantity is introduced that cannot be computed on the existing npz files.
 
-### 4.1 输入与预处理
+### 4.1 Input and preprocessing
 
-对模型 m ∈ {70B, 72B, 123B, 180B, 405B}，训练块 X_m ∈ R^{n×d_m}（行已按 `train_ids` 对齐，对齐检查复用 `evaluate_dual_70b_72b_ensemble.py` 的 `load` 失败即抛）。
+For model m in {70B, 72B, 123B, 180B, 405B}, training block X_m in R^{n x d_m} (rows already aligned by `train_ids`; the alignment check reuses `evaluate_dual_70b_72b_ensemble.py`'s `load`, which raises on failure).
 
-1. 逐维 z-score（仅用训练折统计量）。原因：末层原始状态有少数超大幅值维度，`cross_model_manifold_alignment.py` 的文档已记录这一点。
-2. 降到 r 维：**随机化 SVD（PCA）**，不用高斯随机投影。理由：d_m 最高 16384，n 最小 750，n ≪ d。PCA 保留方差最大的方向；随机投影 256 维对 405B 丢掉 98% 的维度且无选择。r 从 {64, 128, 256} 中按 OOF 选，r < n/4 以保证 CCA 条件良好。
-3. 结果 U_m ∈ R^{n×r}。
+1. Per-dimension z-score (using training-fold statistics only). Reason: the raw final-layer state has a small number of extreme-magnitude dimensions, as already documented in `cross_model_manifold_alignment.py`.
+2. Reduce to r dimensions: **randomized SVD (PCA)**, not Gaussian random projection. Rationale: d_m is up to 16384, n is as low as 750, n << d. PCA keeps the directions of maximum variance; a 256-dimensional random projection for 405B discards 98% of dimensions with no selection. r is chosen by OOF from {64, 128, 256}, with r < n/4 to keep CCA well-conditioned.
+3. Result: U_m in R^{n x r}.
 
-### 4.2 相长干涉：广义 CCA 共享子空间
+### 4.2 Constructive interference: generalized CCA shared subspace
 
-对 M 个模型做 MAXVAR 广义 CCA：求 G ∈ R^{n×s}（GᵀG = I）与投影 W_m，最小化 Σ_m ‖G − U_m W_m‖²。闭式解：G 取 Σ_m P_m 的前 s 个特征向量，P_m = U_m (U_mᵀU_m + λI)⁻¹ U_mᵀ 为带岭的投影阵。
+Perform MAXVAR generalized CCA over M models: find G in R^{n x s} (G^T G = I) and projections W_m, minimizing Sum_m ||G - U_m W_m||^2. Closed-form solution: G is the top s eigenvectors of Sum_m P_m, where P_m = U_m (U_m^T U_m + lambda I)^{-1} U_m^T is a ridge-regularized projection matrix.
 
-- **不变量（invariant）**：S_m = U_m W_m，即各模型在共享坐标系下的像。M 个像的平均 S̄ 是共识表征。
-- **共振强度**：第 j 个典型方向的**留出**相关 ρ_j（拟合与测评分开，§3.4 的做法）。只保留 ρ_j 在行置换零分布 95% 分位之上的方向。零分布用 `cross_model_manifold_alignment.py` 已有的行置换控制。
-- s 与 λ 按 OOF 选。
+- **Invariant**: S_m = U_m W_m, i.e. each model's image in the shared coordinate system. The average S_bar of the M images is the consensus representation.
+- **Resonance strength**: the **held-out** correlation rho_j of the j-th canonical direction (fitting and evaluation kept separate, as in §3.4). Only directions where rho_j is above the 95th percentile of a row-permutation null distribution are kept. The null distribution reuses the row-permutation control already in `cross_model_manifold_alignment.py`.
+- s and lambda are chosen by OOF.
 
-### 4.3 相消干涉：模型特有残差
+### 4.3 Destructive interference: model-specific residual
 
-R_m = U_m − S_m W_m⁺（U_m 中不能被共享坐标解释的部分）。它承载模型独有的信息，也承载噪声。是否有用，只由下游 OOF 分数判定。
+R_m = U_m - S_m W_m^+ (the part of U_m that cannot be explained by the shared coordinates). It carries information unique to that model, and also carries noise. Whether it is useful is decided only by the downstream OOF score.
 
-### 4.4 分歧度（认知不确定性）
+### 4.4 Disagreement (cognitive uncertainty)
 
-在每个模型上各自拟合头，得到预测分布 p_m(y|x)。令 p̄ = 平均：
+Fit a head on each model separately, obtaining prediction distributions p_m(y|x). Let p_bar = the average:
 
-- 总熵 H[p̄] = 偶然项 E_m H[p_m] + 认知项 I（互信息，即广义 Jensen-Shannon 散度）。
-- §3.1 已测：在 70B+72B 上 I 比 H[p̄] 差。所以 **I 只作为 H[p̄] 之外的第二特征进入升级判据，且必须证明它带来条件增益**（H3）。
+- Total entropy H[p_bar] = the aleatoric term E_m H[p_m] plus the epistemic term I (mutual information, i.e. a generalized Jensen-Shannon divergence).
+- §3.1 has already measured: on 70B+72B, I performs worse than H[p_bar]. So **I only enters the escalation criterion as a second feature alongside H[p_bar], and its conditional gain must be proven** (H3).
 
-### 4.5 MIO 输出进入哪里
+### 4.5 Where MIO's output goes
 
-MIO 输出三种候选表征：共识 S̄、拼接 [S̄ ; R_1 ; … ; R_M]、全拼接 [U_1 ; … ; U_M]（对照）。三者都喂给**现有六种头**（`evaluate_dual_70b_72b_advanced_ensemble.py:16`），走同一 OOF 协议。这样 MIO 的任何收益都与头的选择解耦。
+MIO produces three candidate representations: the consensus S_bar, the concatenation [S_bar ; R_1 ; ... ; R_M], and the full concatenation [U_1 ; ... ; U_M] (a control). All three are fed to the **existing six heads** (`evaluate_dual_70b_72b_advanced_ensemble.py:16`), going through the same OOF protocol. This decouples any gain from MIO from the choice of head.
 
-## 5. 曲率自适应广义 ETF
+## 5. Curvature-adaptive generalized ETF
 
-### 5.1 为什么原始 ETF 失败，新方案必须避开什么
+### 5.1 Why the original ETF failed, and what the new plan must avoid
 
-固定等角顶点 + 固定温度，会让熵的下界由 K 决定，而不是由数据决定（§2.1）。所以：**顶点几何必须来自数据，温度必须标定，熵门阈值必须与 K 解耦。**
+Fixed equiangular vertices plus a fixed temperature make the entropy floor determined by K rather than by the data (§2.1). Therefore: **vertex geometry must come from the data, the temperature must be calibrated, and the entropy-gate threshold must be decoupled from K.**
 
-### 5.2 可计算定义
+### 5.2 Computable definition
 
-在 §4 的共享坐标或单模型 PCA 坐标 z 上：
+On the shared coordinates from §4, or on single-model PCA coordinates z:
 
-1. **度量（「曲率」）**：Ledoit-Wolf 收缩的类内协方差 Σ̂，定义马氏度量 d(z, μ) = (z − μ)ᵀ Σ̂⁻¹ (z − μ)。这就是 `lw_lda` 头已经在用的度量；本方案把它显式化为「每个模型、每个尺度各自的局部度量」。在 r ≤ 256 维上做，避免 16384 维的 O(d³)。
-2. **原型**：μ_k 初值为白化后的类均值。
-3. **ETF 正则**：令 M = [μ_1 … μ_K] 在白化空间中心化、归一，Gram 阵 G = MᵀM。惩罚 λ‖G − G_ETF‖_F²，G_ETF = (K/(K−1)) I − (1/(K−1)) 11ᵀ。λ = 0 退化为 LW-LDA，λ → ∞ 退化为硬 ETF。**λ 由 OOF 选**，所以「ETF 到底有没有用」由数据回答，而不是由设计者假定。
-4. **打分**：logit_k = −d(z, μ_k) / T，T 在训练折上标定（最小化 NLL）。
-5. **置换等变**：原型按候选内容索引，Gram 惩罚对行列同时置换不变，所以分数对候选呈现顺序严格等变。这与 Rust 头的不变量一致（`crates/gen-zero-model/src/choice_head.rs` 第 76 行起的注释）。
+1. **Metric ("curvature")**: the Ledoit-Wolf-shrunk within-class covariance Sigma_hat, defining the Mahalanobis metric d(z, mu) = (z - mu)^T Sigma_hat^{-1} (z - mu). This is the same metric the `lw_lda` head already uses; this plan makes it explicit as "a local metric specific to each model and each scale." Computed on r <= 256 dimensions to avoid O(d^3) on 16384 dimensions.
+2. **Prototypes**: mu_k initialized as the whitened class mean.
+3. **ETF regularizer**: let M = [mu_1 ... mu_K], centered and normalized in whitened space, with Gram matrix G = M^T M. Penalize lambda*||G - G_ETF||_F^2, where G_ETF = (K/(K-1)) I - (1/(K-1)) 11^T. lambda = 0 degenerates to LW-LDA, lambda -> infinity degenerates to a hard ETF. **lambda is chosen by OOF**, so whether ETF is useful at all is answered by the data, not assumed by the designer.
+4. **Scoring**: logit_k = -d(z, mu_k) / T, with T calibrated on the training fold (minimizing NLL).
+5. **Permutation equivariance**: prototypes are indexed by candidate content, and the Gram penalty is invariant to simultaneous row/column permutation, so the score is strictly equivariant to the order in which candidates are presented. This is consistent with the invariant in the Rust head (the comment starting at `crates/gen-zero-model/src/choice_head.rs` line 76).
 
-### 5.3 「降低熵崩塌与过拟合」改写成可测指标
+### 5.3 Rewriting "reduced entropy collapse and overfitting" as measurable metrics
 
-「熵崩塌」在本文定义为**过度自信**：ECE（15 桶）与 NLL 偏高、置信度直方图堆在 1 附近而准确率不配。「过拟合」定义为 OOF 分数与测试分数之差。「紧支撑几何度量」在原题中没有可操作定义；可以测的近亲是 **sparsemax 输出的支撑集大小**（非零概率的候选数），作为一个可选头加入对比，不作为主张。
+"Entropy collapse" is defined here as **overconfidence**: elevated ECE (15 bins) and NLL, with the confidence histogram piled near 1 while accuracy does not match. "Overfitting" is defined as the gap between the OOF score and the test score. "Tight-support geometric metric" has no operational definition in the original task description; the closest measurable proxy is the **size of the support set of a sparsemax output** (the number of candidates with nonzero probability), added as an optional head for comparison, not as a claim.
 
-### 5.4 不适用的任务
+### 5.4 Tasks where this does not apply
 
-helpsteer2、summeval_relevance、summeval_consistency 的标签是 1 到 5 的有序分数。ETF 让所有类两两等距，否定 |1−2| < |1−5|。这三个任务**不用 ETF**，用已有的 `OrdinalCumulativeHead`（`python/gen_zero/model/choice_head.py:67`）作为候选头。
+helpsteer2, summeval_relevance, and summeval_consistency have ordinal labels from 1 to 5. ETF makes all classes pairwise equidistant, contradicting |1-2| < |1-5|. These three tasks **do not use ETF**; they use the existing `OrdinalCumulativeHead` (`python/gen_zero/model/choice_head.py:67`) as the candidate head.
 
-## 6. 双进程协同拓扑
+## 6. Dual-process coordination topology
 
-### 6.1 状态机
+### 6.1 State machine
 
 ```mermaid
 stateDiagram-v2
-    [*] --> S1_Feat : 输入 x
-    S1_Feat --> S1_Head : 70B+72B 特征（实测 0.36+0.49 s/行）
+    [*] --> S1_Feat : input x
+    S1_Feat --> S1_Head : 70B+72B features (measured 0.36+0.49 s/row)
     S1_Head --> Commit : g1(x)=0
-    S1_Head --> S2a_Feat : g1(x)=1（升级）
-    S2a_Feat --> S2a_Head : 123B 特征（成本待测）
+    S1_Head --> S2a_Feat : g1(x)=1 (escalate)
+    S2a_Feat --> S2a_Head : 123B features (cost to be measured)
     S2a_Head --> Commit : g2(x)=0
     S2a_Head --> S2b_Feat : g2(x)=1
-    S2b_Feat --> S2b_Head : 405B 特征（成本待测）
+    S2b_Feat --> S2b_Head : 405B features (cost to be measured)
     S2b_Head --> Commit : g3(x)=0
     S2b_Head --> Abstain : g3(x)=1
-    S1_Feat --> Fail : 特征非有限 / 维度不符 / 服务不可达
+    S1_Feat --> Fail : feature non-finite / dimension mismatch / service unreachable
     S2a_Feat --> Fail
     S2b_Feat --> Fail
     Commit --> [*]
-    Abstain --> [*] : Tier2Escalate，不放行
-    Fail --> [*] : 报错，不降级到 S1 答案
+    Abstain --> [*] : Tier2Escalate, does not proceed
+    Fail --> [*] : raise an error, do not degrade to the S1 answer
 ```
 
-180B 默认不进主干阶梯：它与 70B/405B 不同家族，与 405B 同为 Q2，额外成本高，是否值得加入由 H5 的边际增益决定。
+180B is not on the main ladder by default: it is a different family from both 70B and 405B, shares Q2 quantization with 405B, and carries a high extra cost; whether it is worth adding is decided by H5's marginal-gain result.
 
-### 6.2 升级判据（「奇异点」的可操作定义）
+### 6.2 Escalation criterion (an operational definition of the "singularity")
 
-原题的「几何曲率奇异点」没有可计算定义。本方案用两种有统计保证的量替代，并以 PolicyGate 现行门作对照：
+The original task's "geometric curvature singularity" has no computable definition. This plan substitutes two quantities with statistical guarantees, with the existing PolicyGate gate as a control:
 
-1. **分裂共形预测集大小**（主判据）。在校准折上用 APS 非一致性分数，得到阈值 q̂_α；预测集 C_α(x) = {k : score_k(x) ≤ q̂_α}。**g(x) = 1 当且仅当 |C_α(x)| ≥ 2**。保证：在可交换假设下 P(y ∈ C_α(x)) ≥ 1 − α。这正是「决策边界附近」的有覆盖保证的版本。**前提是校准行与测试行可交换，本文没有证实这一点**：训练池取自各数据集另一公开分区（`benchmarks/suites/grand_challenge_data.py` 模块文档），且 summeval_consistency 训练 OOF 准确率 88.4% 明显高于测试多数类比例 84.0%，提示存在分布偏移。所以每份级联报告必须在名义 1 − α 旁打印**测试集实测覆盖率**，两者的差距作为发现报告，不当噪声处理。
-2. **总熵门**：g(x) = 1[H[p̄(x)] > τ_H]，τ_H 由 OOF 选，使升级率等于预算 β。§3.1 显示它比分歧度强。
-3. **对照**：PolicyGate 现行 0.65 归一化熵阈值（`crates/gen-zero-gate/src/policy.rs:47`）与 planner 路由阈值 0.20 / 0.70（`crates/gen-zero-planner/src/router.rs:43-44`）。这两组阈值没有在 13 任务上标定过，作为「不标定」基线。
-4. 分歧度 I 只在 H3 成立时作为附加项：g(x) = 1[H > τ_H ∨ I > τ_I]。
+1. **Split-conformal prediction-set size** (the primary criterion). On the calibration fold, use the APS nonconformity score to obtain a threshold q_hat_alpha; the prediction set is C_alpha(x) = {k : score_k(x) <= q_hat_alpha}. **g(x) = 1 if and only if |C_alpha(x)| >= 2.** Guarantee: under the exchangeability assumption, P(y in C_alpha(x)) >= 1 - alpha. This is exactly a version of "near the decision boundary" with a coverage guarantee. **The precondition is that the calibration rows and test rows are exchangeable, which this document has not verified**: the training pool is drawn from a separate public split of each dataset (per the `benchmarks/suites/grand_challenge_data.py` module documentation), and summeval_consistency's training OOF accuracy of 88.4% is noticeably higher than the test majority-class proportion of 84.0%, suggesting a possible distribution shift. So every cascade report must print the **measured test-set coverage rate** alongside the nominal 1 - alpha, and report any gap between the two as a finding, not dismiss it as noise.
+2. **Total-entropy gate**: g(x) = 1[H[p_bar(x)] > tau_H], with tau_H chosen by OOF so the escalation rate equals a budget beta. §3.1 shows this is stronger than disagreement.
+3. **Control**: PolicyGate's current 0.65 normalized-entropy threshold (`crates/gen-zero-gate/src/policy.rs:47`) and the planner's routing thresholds of 0.20 / 0.70 (`crates/gen-zero-planner/src/router.rs:43-44`). Neither set of thresholds has ever been calibrated on the 13 tasks, so they serve as an "uncalibrated" baseline.
+4. Disagreement I only enters as an additional term if H3 holds: g(x) = 1[H > tau_H OR I > tau_I].
 
-### 6.3 最终决策公式
+### 6.3 Final decision formula
 
-在第 t 级（t = 1, 2, 3）接受时：ŷ = argmax_k p̂_t(k|x)，其中 p̂_t 是 §4.5 选出的表征加 §5 或现有头在「前 t 级全部模型」上的 OOF 选定融合。弃权：第 3 级仍有 |C_α| ≥ 2 时输出 Abstain。安全类任务（aegis_safety）弃权沿用 `benchmarks/suites/conformal_margin_gate.py:1-15` 的语义：弃权永不放行。
+When accepted at tier t (t = 1, 2, 3): y_hat = argmax_k p_hat_t(k|x), where p_hat_t is the OOF-selected fusion of the representation chosen in §4.5 with the head from §5 or an existing head, using "all models through tier t." Abstention: if |C_alpha| >= 2 still holds at tier 3, output Abstain. For safety-class tasks (aegis_safety), abstention follows the semantics already in `benchmarks/suites/conformal_margin_gate.py:1-15`: an abstention never proceeds.
 
-### 6.4 成本公式
+### 6.4 Cost formula
 
-E[cost(x)] = c₁ + P(g1=1)·c₂ + P(g1=1, g2=1)·c₃。c₁ = 0.85 s/行（实测全量平均，70B+72B 串行合计；两模型并行部署时取较大者 0.49 s/行），c₂、c₃ 待测。报告必须给出 **准确率对期望成本** 的整条曲线（β 从 0 扫到 1），不是单点。
+E[cost(x)] = c1 + P(g1=1)*c2 + P(g1=1, g2=1)*c3. c1 = 0.85 s/row (measured average over the full set, 70B+72B combined serially; take the larger value, 0.49 s/row, when the two models are deployed in parallel), c2 and c3 to be measured. The report must present the **full accuracy-vs-expected-cost curve** (beta swept from 0 to 1), not a single point.
 
-### 6.5 生产挂载点（防孤岛）
+### 6.5 Production mounting point (anti-island)
 
-- 离线评测：新脚本直接读 `benchmarks/data/full_13` 与 npz，与现有 spec21 报告同目录输出，可与基线逐行比较。
-- 服务端：`decide` 操作的 `auto` 模式已经走 `DynamicKMoERouter`（`crates/gen-zero-planner/src/pipeline.rs:895-904`，服务入口 `crates/gen-zero-service/src/pipeline_verb.rs:178-199`，MCP 工具枚举 `crates/gen-zero-service/src/server.rs:674`），它按熵阈值分 K1/K2/K3（`router.rs:123`）。**本方案的升级门若被 H4 证实，挂载点是该 router 的熵输入与阈值来源**，而不是另建一个平行路由器。能迁移的是**标定协议**（按目标升级率在 OOF 上选 τ、以共形预测集大小作触发）；**不能迁移的是数值**：13 任务上标定的 τ 来自 LLM 特征头的熵分布，router 的熵来自 planner 在世界模型隐状态与 `LocalActionFrame` 上的头，分布不同。τ 必须在生产头自己的熵分布上重新标定后写入 `PlannerConfig` 的 `router_entropy_threshold_low/high`。旧的未标定默认值 0.20 / 0.70 随之删除，不保留并行默认值。
-- Rust choice head：§5 的原型头若胜出，以「每候选一个表征」的形式经已有的 `candidate_reps` 输入进入（`crates/gen-zero-service/src/zero.rs:258` 一带的参数校验），不复活 `SimplexEtfFrame`。若 H6 否定 ETF 正则，`crates/gen-zero-core/src/etf.rs` 与其唯一调用点应一并评估删除。
-- 以上接入是**未完成**项，需要单独派单与评审，本文不做。
+- Offline evaluation: the new script reads directly from `benchmarks/data/full_13` and the npz files, writing output into the same directory as the existing spec21 report, so it can be compared row by row against the baseline.
+- Server side: the `decide` operation's `auto` mode already goes through `DynamicKMoERouter` (`crates/gen-zero-planner/src/pipeline.rs:895-904`, service entry point `crates/gen-zero-service/src/pipeline_verb.rs:178-199`, MCP tool enum `crates/gen-zero-service/src/server.rs:674`), which splits into K1/K2/K3 by an entropy threshold (`router.rs:123`). **If this plan's escalation gate is confirmed by H4, the mounting point is that router's entropy input and threshold source**, not a new parallel router. What can be transferred is the **calibration protocol** (choosing tau on OOF to hit a target escalation rate, using conformal-prediction-set size as the trigger); **what cannot be transferred is the numbers**: the tau calibrated on the 13 tasks comes from the LLM feature head's entropy distribution, while the router's entropy comes from the planner's head over the world-model hidden state and `LocalActionFrame`, a different distribution. tau must be recalibrated on the production head's own entropy distribution before being written into `PlannerConfig`'s `router_entropy_threshold_low/high`. The old, uncalibrated defaults of 0.20 / 0.70 are then removed, with no parallel default kept.
+- Rust choice head: if §5's prototype head wins, it enters via the existing `candidate_reps` input in the form of "one representation per candidate" (the parameter validation around `crates/gen-zero-service/src/zero.rs:258`), without reviving `SimplexEtfFrame`. If H6 refutes the ETF regularizer, `crates/gen-zero-core/src/etf.rs` and its one call site should be evaluated for removal together.
+- The integration above is a **not-done** item, requiring a separate work assignment and review; this document does not do it.
 
-## 7. 实验设计与判据
+## 7. Experiment design and criteria
 
-### 7.1 统一协议（与基线可比）
+### 7.1 Unified protocol (comparable to the baseline)
 
-- 5 折分层 OOF，只用训练标签选一切（头、融合权重、s、r、λ、τ、α）；测试标签在选择结束后才加载，沿用 `evaluate_dual_70b_72b_advanced_ensemble.py` 的做法。
-- 每任务指标：准确率、平衡准确率、宏 F1、ECE、NLL、升级率、每行 GPU 秒。
-- **统计**：3,880 条测试样本逐样本配对。宏指标用分层配对 bootstrap（按任务分层，10,000 次）给 95% 区间；每任务 McNemar 精确检验；13 个任务的 p 值做 Holm 校正。只有 bootstrap 区间不含 0 **且** 不在超过 3 个任务上显著变差，才能写「提升」。
-- **搜索预算上限**：每个新方案在 OOF 上评估的候选配置数不超过基线（2×18 + 18×18×3 = 1,008）。超过即视为选择过拟合风险，必须在报告中写明配置数。
-- **本方案的配置账**（逐项说明是网格搜索还是规则固定）：
-  - 网格搜索：PCA 维数 r ∈ {64, 128, 256}（3）；表征 ∈ {S̄, [S̄;R], [U_1;…;U_M]}（3）；头 = 现有 6 种 × logit 调整 τ 3 档（18），加广义 ETF 头 × λ ∈ {0, 0.1, 1, 10} × τ 3 档（12）。合计 3 × 3 × (18 + 12) = **270 ≤ 1,008**。
-  - 规则固定，不参与选择：GCCA 共享维数 s（行置换零分布 95% 分位决定，§4.2）；GCCA 岭 λ_cca = 1e-3；共形水平 α = 0.1（预先登记）；熵门 τ_H 由升级预算 β 决定，β 扫描只用于画成本曲线，不用于挑点；温度 T 由训练折 NLL 闭式标定。
-  - 序数任务上 ETF 头不参与（§5.4），配置数更少。
+- 5-fold stratified OOF, using only training labels to select everything (head, fusion weights, s, r, lambda, tau, alpha); test labels are loaded only after selection is finished, following the practice of `evaluate_dual_70b_72b_advanced_ensemble.py`.
+- Per-task metrics: accuracy, balanced accuracy, macro F1, ECE, NLL, escalation rate, GPU-seconds per row.
+- **Statistics**: paired per-sample analysis over all 3,880 test samples. Macro metrics use a stratified paired bootstrap (stratified by task, 10,000 resamples) for a 95% interval; an exact McNemar test per task; Holm correction on the p-values across the 13 tasks. "Improvement" can only be claimed if the bootstrap interval excludes 0 **and** there is no significant degradation on more than 3 tasks.
+- **Search-budget ceiling**: the number of candidate configurations evaluated on OOF for any new plan must not exceed the baseline (2x18 + 18x18x3 = 1,008). Exceeding it is treated as a selection-overfitting risk, and the configuration count must be stated in the report.
+- **This plan's configuration accounting** (stating item by item whether it is grid-searched or rule-fixed):
+  - Grid search: PCA dimension r in {64, 128, 256} (3); representation in {S_bar, [S_bar;R], [U_1;...;U_M]} (3); head = the existing 6 types x 3 logit-adjustment temperature tiers (18), plus the generalized ETF head x lambda in {0, 0.1, 1, 10} x 3 temperature tiers (12). Total: 3 x 3 x (18 + 12) = **270 <= 1,008**.
+  - Rule-fixed, not part of the selection: the GCCA shared dimension s (determined by the 95th percentile of the row-permutation null distribution, §4.2); the GCCA ridge lambda_cca = 1e-3; conformal level alpha = 0.1 (pre-registered); the entropy gate tau_H, determined by the escalation budget beta (the beta sweep is used only to draw the cost curve, not to cherry-pick a point); temperature T, calibrated in closed form from the training-fold NLL.
+  - The ETF head does not participate on ordinal tasks (§5.4), so the configuration count is smaller there.
 
-### 7.2 假说（每条写明证伪条件）
+### 7.2 Hypotheses (each with a stated falsification condition)
 
-| 编号 | 假说 | 证伪条件 | 依赖 |
+| ID | Hypothesis | Falsification condition | Dependency |
 |---|---|---|---|
-| H1 | MIO 共识 + 残差 [S̄;R] 比全拼接 [U_1;U_2] 宏准确率更高 | 70B+72B 上配对 bootstrap 区间含 0 或为负 | 现在可跑 |
-| H2 | 不同尺度捕获不同信息：加入 123B 后，GCCA 显著共享方向数不增加，但残差 R_123B 带来 OOF 增益 | R_123B 的增益 ≤ 同维度随机高斯特征的增益 | 123B 特征 |
-| H3 | 分歧度 I 在控制总熵后仍预测错误 | 以 H 为协变量的逻辑回归中 I 的系数 95% 区间含 0。**70B+72B 上的 AUROC 已预示可能被证伪** | 现在可跑（70B+72B），123B 后复测 |
-| H4 | 级联在相同期望成本下优于「全员总是参与」 | 准确率对成本曲线处处不高于全员融合 | 123B 特征 |
-| H4b | 大模型能修复 S1 两者皆错的样本 | 在 S1 两者皆错的测试行上，123B 的准确率 ≤ 该任务多数类比例 | 123B 特征 |
-| H5 | 405B-Q2 对 70B-Q2（同家族同量化）有尺度收益 | 配对 bootstrap 区间含 0 | 405B 与 70B-Q2 特征 |
-| H6 | ETF 正则（λ>0）降低 ECE/NLL 且不降准确率 | OOF 选出的 λ 在多数任务上为 0，或测试 ECE 不降 | 现在可跑 |
+| H1 | MIO consensus + residual [S_bar;R] has higher macro accuracy than the full concatenation [U_1;U_2] | On 70B+72B, the paired bootstrap interval contains 0 or is negative | Runnable now |
+| H2 | Different scales capture different information: after adding 123B, the number of significant GCCA shared directions does not increase, but the residual R_123B brings an OOF gain | R_123B's gain <= the gain from a same-dimensional random Gaussian feature | 123B features |
+| H3 | Disagreement I still predicts error after controlling for total entropy | The 95% interval of I's coefficient in a logistic regression with H as a covariate contains 0. **The AUROC on 70B+72B already hints this may be falsified** | Runnable now (70B+72B), retested after 123B |
+| H4 | The cascade beats "everyone always participates" at the same expected cost | The accuracy-vs-cost curve is nowhere above the full-ensemble fusion | 123B features |
+| H4b | The larger model can fix samples where S1 has both models wrong | On the test rows where S1 has both models wrong, 123B's accuracy <= that task's majority-class proportion | 123B features |
+| H5 | 405B-Q2 has a scale benefit over 70B-Q2 (same family, same quantization) | The paired bootstrap interval contains 0 | 405B and 70B-Q2 features |
+| H6 | The ETF regularizer (lambda>0) lowers ECE/NLL without lowering accuracy | The OOF-selected lambda is 0 on most tasks, or test ECE does not decrease | Runnable now |
 
-### 7.3 脚本规格（尚未编写，写完才算数）
+### 7.3 Script specifications (not yet written; only counts once written)
 
-| 脚本（拟） | 输入 | 输出 | 失败即停的检查 |
+| Script (planned) | Input | Output | Fail-fast checks |
 |---|---|---|---|
-| `benchmarks/suites/evaluate_multiscale_mio_13tasks.py` | 任意 M ≥ 2 个特征目录 | `benchmarks/results/spec31_mio_report.{json,md}` | 行 id 与标签逐一相等；维度与 info_json 一致；非有限值即抛；某模型缺任一任务即抛，不跳过 |
-| `benchmarks/suites/evaluate_dual_process_cascade_13tasks.py` | 有序模型列表 + 各模型每行实测秒数 | `spec31_cascade_report.{json,md}`（整条成本曲线） | 缺成本数据即抛，禁止用估算值填充 |
-| `benchmarks/suites/generalized_etf_head.py` + 在 `spec21_advanced_heads.py` 注册 | 训练特征与标签 | 作为第 7 种头进入同一 OOF 池 | 序数任务调用即抛；Σ̂ 不正定即抛 |
-| 单元测试 `benchmarks/suites/test_spec31_*.py` | 合成数据 | pytest | 置换等变（逐位相等）；λ=0 与 LW-LDA 输出一致；GCCA 在两块相同输入时 ρ₁=1 |
+| `benchmarks/suites/evaluate_multiscale_mio_13tasks.py` | any M >= 2 feature directories | `benchmarks/results/spec31_mio_report.{json,md}` | row ids and labels match one to one; dimensions match `info_json`; raises on any non-finite value; raises if any model is missing any task, no skipping |
+| `benchmarks/suites/evaluate_dual_process_cascade_13tasks.py` | ordered model list + measured per-row seconds for each model | `spec31_cascade_report.{json,md}` (the full cost curve) | raises if cost data is missing; estimated values are never allowed as a substitute |
+| `benchmarks/suites/generalized_etf_head.py`, registered in `spec21_advanced_heads.py` | training features and labels | enters the same OOF pool as the 7th head | raises if called on an ordinal task; raises if Sigma_hat is not positive definite |
+| Unit tests `benchmarks/suites/test_spec31_*.py` | synthetic data | pytest | permutation equivariance (elementwise equal); lambda=0 output matches LW-LDA; GCCA gives rho_1=1 when both blocks are identical |
 
-每个脚本的报告必须写入：输入 npz 的 sha256、测试集 sha256、全部 OOF 选择、配置总数、命令行、退出状态。沿用 `evaluate_dual_70b_72b_advanced_ensemble.py` 的报告字段。
+Every script's report must record: the sha256 of the input npz files, the sha256 of the test set, all OOF selections, the total configuration count, the command line, and the exit status. This follows the report fields already used by `evaluate_dual_70b_72b_advanced_ensemble.py`.
 
-### 7.4 执行顺序（按「不依赖新特征」优先）
+### 7.4 Execution order (prioritizing steps that do not depend on new features)
 
-1. **现在（70B+72B）**：H1、H3、H6。只需要 CPU，几分钟到一小时。若 H1 与 H6 均被证伪，停止 MIO 与 ETF 线，把资源全给大模型特征。
-2. **123B 抽取**：第一步先对两个分片做 sha256，与 HF 仓库公布值比对；不一致即停。然后用 3 个短上下文任务冒烟，实测 s/行，再决定全量或 1000 行上限。抽完跑 H2、H4、H4b。
-3. **70B-Q2 重抽**：为 H5 准备同量化对照，成本约同 70B 一次。
-4. **405B 下载与抽取**：先修 §2.5 的路径不一致；先在测试集 3,880 条与 `cands` 上测吞吐（约 78 万 token），吞吐可接受再做训练集。405B 的训练集可以用更小的上限，但必须与 70B-Q2 用同一行集合，否则 H5 不可比。
-5. **180B**：只在 H4 显示第二级有正收益、且 405B 成本不可接受时考虑作为替代第二级。
+1. **Now (70B+72B)**: H1, H3, H6. CPU only, minutes to an hour. If both H1 and H6 are falsified, stop the MIO and ETF lines and put all resources into large-model features.
+2. **123B extraction**: first sha256 both shards and compare against the values published in the HF repo; stop if they do not match. Then smoke-test with 3 short-context tasks, measure s/row, and only then decide between the full set or a 1000-row cap. After extraction, run H2, H4, H4b.
+3. **70B-Q2 re-extraction**: prepares the same-quantization control for H5, at roughly the same cost as one 70B run.
+4. **405B download and extraction**: first fix the path mismatch in §2.5; first measure throughput on the 3,880-row test set plus `cands` (about 780,000 tokens), and only proceed to the training set if throughput is acceptable. 405B's training set can use a smaller cap, but it must use the same set of rows as 70B-Q2, or H5 is not comparable.
+5. **180B**: consider only as a substitute second tier if H4 shows a positive gain at the second tier and 405B's cost proves unacceptable.
 
-## 8. 防腐自查（对应评审四项）
+## 8. Anti-rot self-check (corresponding to the four review items)
 
-1. **孤岛**：本文不新增生产代码。§6.5 指定了唯一挂载点（`decide`/`auto` → `DynamicKMoERouter` 的阈值来源；Rust 头的 `candidate_reps`），明确不另建平行路由器、不复活 `SimplexEtfFrame`。
-2. **静默降级**：§6.1 状态机中任何特征失败直接进 Fail，不回落到 S1 答案；§7.3 每个脚本列了失败即抛条件；成本数据缺失即抛，禁止估算值填充。
-3. **假设当成果**：§0 三类分开；所有 123B+ 内容标为未完成；「尺度分层」「奇异点」「紧支撑」三个原题概念均标为无操作定义或纯假设，并给出可测替代物。§3 的预分析数字只来自训练集 OOF，不是测试成绩。
-4. **新旧替换**：若 H4 证实，旧的未标定路由阈值（0.20 / 0.70）应被标定值取代而非并存；若 H6 证伪，`etf.rs` 及其唯一调用点列入删除评估。
+1. **Islands**: this document adds no production code. §6.5 designates the single mounting point (the threshold source for `decide`/`auto` -> `DynamicKMoERouter`; the Rust head's `candidate_reps`), explicitly ruling out building a parallel router or reviving `SimplexEtfFrame`.
+2. **Silent degradation**: in the §6.1 state machine, any feature failure goes directly to Fail, with no fallback to the S1 answer; §7.3 lists fail-fast conditions for every script; missing cost data raises an error, with estimated values never allowed as a substitute.
+3. **Hypotheses passed off as results**: §0 separates the three categories; all 123B+ content is marked not done; the three original-task concepts "scale layering," "singularity," and "tight support" are each marked as having no operational definition or being pure hypothesis, with a measurable substitute given for each. The pre-analysis numbers in §3 come only from training-set OOF, not test-set scores.
+4. **Old-for-new replacement**: if H4 is confirmed, the old uncalibrated routing thresholds (0.20 / 0.70) should be replaced by the calibrated values rather than kept alongside them; if H6 is refuted, `etf.rs` and its one call site are listed for removal evaluation.
 
-## 9. 证据索引
+## 9. Evidence index
 
-| 主张 | 证据 |
+| Claim | Evidence |
 |---|---|
-| 预分析全部数字 | `docs/zero/evidence/b0927c-t3-multi/oof_complementarity_probe.{py,log,json}`，EXIT=0 |
-| ai 上权重（仅文件大小，无 sha256）、显存、内存、磁盘 | `docs/zero/evidence/b0927c-t3-multi/commands.txt` §2 |
-| 70B/72B 抽取成本 | 同上 §3 |
-| router 在生产路径被调用 | 同上 §4；`crates/gen-zero-planner/src/pipeline.rs:895-904`；`crates/gen-zero-service/src/pipeline_verb.rs:178-199` |
-| ETF 绑定已移除 | `crates/gen-zero-model/src/choice_head.rs:7-11` |
-| 405B 路径不一致 | `benchmarks/suites/run_llama405b_extract.bat:8`；`benchmarks/suites/queue_dense_fleet_downloads.py:118` |
-| 基线选择过拟合 | `benchmarks/results/spec21_dual_70b_72b_advanced_ensemble_report.md` 任务表 |
+| All pre-analysis numbers | `docs/zero/evidence/b0927c-t3-multi/oof_complementarity_probe.{py,log,json}`, EXIT=0 |
+| Weights on `ai` (file size only, no sha256), VRAM, RAM, disk | `docs/zero/evidence/b0927c-t3-multi/commands.txt` §2 |
+| 70B/72B extraction cost | same as above, §3 |
+| Router invoked on the production path | same as above, §4; `crates/gen-zero-planner/src/pipeline.rs:895-904`; `crates/gen-zero-service/src/pipeline_verb.rs:178-199` |
+| ETF binding already removed | `crates/gen-zero-model/src/choice_head.rs:7-11` |
+| 405B path mismatch | `benchmarks/suites/run_llama405b_extract.bat:8`; `benchmarks/suites/queue_dense_fleet_downloads.py:118` |
+| Baseline selection overfitting | task table in `benchmarks/results/spec21_dual_70b_72b_advanced_ensemble_report.md` |

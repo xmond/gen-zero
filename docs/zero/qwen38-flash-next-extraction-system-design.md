@@ -1,138 +1,138 @@
-# Qwen3.8-Flash-Next 物理提取与系统工程实现案
+# Qwen3.8-Flash-Next Physical Extraction and Systems-Engineering Implementation Plan
 
-日期：2026-09-27。性质：设计交付，不是已实现、已加载或已上线声明。
-代码基线：`fa6cddb656f49d9ae01bf417e476514962e03a34`。未改动现有生产代码。
+Date: 2026-09-27. Nature: a design deliverable, not a claim of implementation, deployment, or production status.
+Code baseline: `fa6cddb656f49d9ae01bf417e476514962e03a34`. No existing production code was modified.
 
-## 1. 决策与事实边界
+## 1. Decisions and the boundary of what is established fact
 
-建议采用两条明确隔离的路径：**Transformers/PyTorch 的模型内提取路径作为表征基准；vLLM 或 SGLang 作为后续吞吐优化路径，须增加 worker 内提取适配器并通过逐样本一致性验收**。HTTP 文本生成成功不能证明中间表征提取成功。现有 llama-server 最终 pooled embedding 不能替代指定中间层。
+Recommendation: adopt two clearly isolated paths: **an in-model extraction path via Transformers/PyTorch as the representation baseline; vLLM or SGLang as a subsequent throughput-optimization path, which requires adding an in-worker extraction adapter and passing a per-sample consistency check.** Successful HTTP text generation does not prove that intermediate-representation extraction has succeeded. The existing llama-server's final pooled embedding cannot substitute for a specified intermediate layer.
 
-官方模型卡确认：125B 主模型、每 token 激活 6B，另有 51B N-gram embedding 和 4B MTP；隐藏宽度 2560、48 层、4 个 gated-residual 分支、512 专家、10 routed + 1 shared；N-gram 在 layer 2，表规模约 20,000,000；注意力为 GDN/QSA 混合。不能用旧 Qwen3-Next、Qwen3.5 或普通 decoder 的模块名/张量布局猜测加载器。
+Confirmed by the official model card: a 125B main model with 6B active per token, plus a separate 51B N-gram embedding and 4B MTP; hidden width 2560, 48 layers, 4 gated-residual branches, 512 experts (10 routed + 1 shared); N-gram at layer 2, table size roughly 20,000,000; attention is a GDN/QSA hybrid. The loader must not be guessed from the module names or tensor layout of the old Qwen3-Next, Qwen3.5, or a generic decoder.
 
-来源：[官方模型卡](https://huggingface.co/Qwen/Qwen3.8-Flash-Next)、[官方仓库](https://github.com/QwenLM/Qwen3.8-Flash-Next)。网页抓取存于 `.firecrawl/qwen38-official.md`、`qwen38-github.md`；文件摘要在本报告 evidence 的 `commands.json`。模型配置与权重索引尚未下载核验，实际字节数、模块路径、dtype 和 loader 版本仍须以固定 revision 的文件为准。
+Sources: the [official model card](https://huggingface.co/Qwen/Qwen3.8-Flash-Next), the [official repository](https://github.com/QwenLM/Qwen3.8-Flash-Next). Web scrapes are saved at `.firecrawl/qwen38-official.md`, `qwen38-github.md`; the file summary is in this report's evidence, `commands.json`. The model config and weight index have not yet been downloaded and verified; the actual byte counts, module paths, dtype, and loader version must still be confirmed against files at a fixed revision.
 
-最重要的禁止事项：
+The most important prohibitions:
 
-- **6B active 不是 6B resident**。路由未选中的专家也必须有完整 backing storage；预填充 batch 的专家并集可能覆盖大量专家。
-- **90GB RAM 放不下 51B BF16 表**。不能以 mmap 成功或 swap 尚未报错宣布 host offload 可用。
-- **2560 hidden size 不代表每个 hook 都返回 `[B,T,2560]`**。4 分支 residual 必须区分 gated read、完整 branch state、final norm；不得静默 flatten/mean/select branch。
-- “可运行生成”与“可提取指定层”是两个验收项；网页支持声明也不是本机实测。
-- 几何表征、PCA、CKA、稳定矩阵都不能自动被称为因果能力、相变或推理突破。
+- **6B active does not mean 6B resident.** Experts not selected by the router must still have full backing storage; the union of experts across a prefill batch can cover a large number of experts.
+- **90GB of RAM cannot hold the 51B BF16 table.** A successful mmap or the absence of a swap error so far must not be used to declare host offload viable.
+- **A 2560 hidden size does not mean every hook returns `[B,T,2560]`.** The 4-branch residual must distinguish the gated read, the full branch state, and the final norm; silently flattening/averaging/selecting a branch is not allowed.
+- "Can run generation" and "can extract a specified layer" are two separate acceptance items; a webpage's claim of support is not a local measurement either.
+- Geometric representations, PCA, CKA, and stability matrices must never be automatically labeled a causal capability, a phase transition, or a reasoning breakthrough.
 
-## 2. 现有代码最致命的问题
+## 2. The most critical problems in the existing code
 
-| 位置（仓库相对 path:line） | 已核查的行为 | 新方案要求 |
+| Location (repo-relative path:line) | Verified behavior | New-plan requirement |
 |---|---|---|
-| `benchmarks/suites/run_universal_extraction_a100.py:27` | Windows 路径、固定旧模型 | 参数化路径、固定模型 revision/hash，不能静默替代模型 |
-| 同文件 `:34`, `:44`, `:60` | 任意 JSONL 扫描，猜字段，异常直接 continue | 复用 13-task schema，文件/行号报错，缺任务失败 |
-| 同文件 `:97`, `:115` | 固定 4096 维；开启全部 hidden states | 从已验证适配器得到维度；只捕获目标位置 |
-| 同文件 `:99`, `:124`, `:147` | 保留样本列表和差分列表 | 固定队列/分块落盘；不得以 accumulator 的 O(d²) 代表全管线 |
-| 同文件 `:131` | 通过 sentence 字段/正则生成所谓 counterfactual | 格式解析不是反事实干预；无预先定义配对实验时禁用此能力声明 |
-| 同文件 `:158`, `:170`, `:175`, `:202` | 全量 eigh 被叫 online SVD；CKA 即宣布相变；不相关样本次序被当轨迹 | 改正术语；不生成未定义的因果/动力学产物 |
-| `python/gen_zero/causal/universal_manifold_extractor.py:83`, `:102` | 用原始二阶矩相减计算协方差 | 改成中心矩合并，并测试大偏置、小方差 |
-| 同文件 `:115`, `:121` | eigh 产生额外工作区；memory_bytes 只统计持久状态 | 内存预算覆盖矩阵副本、临时项、BLAS 工作区、队列 |
-| 同文件 `:481` | sha256 只覆盖拼接数组字节，不覆盖名称/shape/dtype/metadata；直接写目标 | 完整文件摘要、严格 schema、原子发布及 manifest 链 |
-| `benchmarks/suites/gpu_extract_qwen72b_13tasks.py:100` | 以 basename 核查模型；缺路径时返回未验证 | 新路径要求 revision 与分片哈希，路径未知即拒绝 |
-| 同文件 `:123` | token budget 可采用带来源标记的 fallback | 严格运行 manifest 要求完整预算；不可仅沿用默认数值 |
-| `benchmarks/suites/cpu_extract_gte7b_13tasks.py:83` | 模型专属末尾 token 处理 | 复用数据契约，不能复制 GTE token 特例到新模型 |
+| `benchmarks/suites/run_universal_extraction_a100.py:27` | Windows path, hardcoded to an old model | Parameterized path, pinned model revision/hash; the model must never be silently substituted |
+| same file `:34`, `:44`, `:60` | Scans arbitrary JSONL, guesses fields, `continue`s straight through exceptions | Reuse the 13-task schema; raise with file/line number; fail on a missing task |
+| same file `:97`, `:115` | Fixed 4096-dim; enables all hidden states | Derive the dimension from a verified adapter; capture only the target position |
+| same file `:99`, `:124`, `:147` | Keeps sample lists and diff lists | Fixed queue/chunked persistence; an accumulator's O(d^2) must not stand in for the whole pipeline |
+| same file `:131` | Generates so-called counterfactuals via a sentence field / regex | Format parsing is not a counterfactual intervention; this capability must not be claimed without a predefined paired experiment |
+| same file `:158`, `:170`, `:175`, `:202` | Calls a full eigh an "online SVD"; declares a phase transition from CKA alone; treats unrelated sample order as a trajectory | Correct the terminology; do not produce undefined causal/dynamical artifacts |
+| `python/gen_zero/causal/universal_manifold_extractor.py:83`, `:102` | Computes covariance by subtracting raw second moments | Switch to merged central moments, and test with large bias / small variance |
+| same file `:115`, `:121` | eigh produces extra workspace; `memory_bytes` only counts persistent state | The memory budget must cover matrix copies, temporaries, BLAS workspace, and the queue |
+| same file `:481` | sha256 covers only the concatenated array bytes, not names/shape/dtype/metadata; writes to the destination directly | A full file digest, strict schema, atomic publish, and a manifest chain |
+| `benchmarks/suites/gpu_extract_qwen72b_13tasks.py:100` | Verifies the model by basename; returns unverified when the path is missing | The new path must require revision and shard hashes; reject if the path is unknown |
+| same file `:123` | Token budget can fall back to a value with a provenance flag | A strict run manifest must require the full budget; a default number must not simply be carried over |
+| `benchmarks/suites/cpu_extract_gte7b_13tasks.py:83` | Model-specific trailing-token handling | Reuse the data contract; do not copy GTE's token special-case onto the new model |
 
-数值问题已经用真实类复现，但输入是数学诊断样本，不是模型激活：`1e8 + arange(32).reshape(16,2)` 分四批，现实现得到 `[[86,86],[86,84]]`，先中心化的参考得到 `[[85,85],[85,85]]`，最大绝对误差 1.0。命令原始退出码为 0，代表诊断执行成功，不代表数值正确。见 `evidence/qwen38-extraction-design/numerics.log` 和 `commands.json`。
+The numerical problem has already been reproduced with the real class, but the input is a mathematical diagnostic sample, not model activations: `1e8 + arange(32).reshape(16,2)` split into four batches; the current implementation gets `[[86,86],[86,84]]`, while the centered-first reference gets `[[85,85],[85,85]]`, a maximum absolute error of 1.0. The command's raw exit code of 0 indicates the diagnostic ran successfully, not that the numerics are correct. See `evidence/qwen38-extraction-design/numerics.log` and `commands.json`.
 
-调用搜索发现 accumulator 被 `gepa_daemon.py:39,66,82` 调用，不能宣称整个模块零引用；但本次搜索没有发现 Rust 调用 `load_codebook` 的证据。搜索范围/命令见 evidence；它不是对所有动态加载路径的证明。必须新增真实生产入口验收，不能把 benchmark 单独跑通当上线。
+A call-site search found the accumulator is invoked by `gepa_daemon.py:39,66,82`, so the module as a whole cannot be claimed to have zero references; but this search found no evidence of Rust calling `load_codebook`. The search scope/command is in the evidence; it is not proof covering every dynamic-loading path. A real production entry point must be added and verified; getting a benchmark to run standalone must not be treated as going live.
 
-## 3. 容量账本与硬件部署
+## 3. Capacity ledger and hardware deployment
 
-以下为十进制 GB 裸参数下界，不含量化 scales、padding、视觉模块、加载峰值、缓存和工作区；GB 与 GiB 不混用。
+The following are decimal-GB bare-parameter lower bounds, excluding quantization scales, padding, the vision module, loading peaks, caches, and workspace; GB and GiB are not mixed.
 
-| 精度假设 | 125B 主模型 | 51B 表 | 4B MTP | 合计下界 |
+| Precision assumption | 125B main model | 51B table | 4B MTP | Total lower bound |
 |---|---:|---:|---:|---:|
-| BF16，2 bytes/param | 250 | 102 | 8 | 360 |
-| 全部 8-bit，1 byte/param | 125 | 51 | 4 | 180 |
-| 全部 4-bit，0.5 byte/param | 62.5 | 25.5 | 2 | 90 |
+| BF16, 2 bytes/param | 250 | 102 | 8 | 360 |
+| All 8-bit, 1 byte/param | 125 | 51 | 4 | 180 |
+| All 4-bit, 0.5 byte/param | 62.5 | 25.5 | 2 | 90 |
 
-“全部 4-bit”只是算术下界，绝不表示存在对应内核或该 checkpoint。实际混合量化可能远大于此值。抓取时 vLLM recipe 面板列出 BF16 423GB、FP8 250GB、NVFP4 130GB；SGLang 文档的某 NVFP4 变体为约 126GiB，其中 FP8 表约 47.7GiB。这些不是统一 checkpoint 的可互换精确大小，进一步证明必须读取目标仓库文件清单，不能只用参数乘字节预留磁盘。
+"All 4-bit" is only an arithmetic lower bound; it does not imply a corresponding kernel or checkpoint actually exists. Real mixed quantization may be substantially larger than this figure. At scrape time, the vLLM recipe panel listed BF16 423GB, FP8 250GB, NVFP4 130GB; one NVFP4 variant in the SGLang documentation was about 126GiB, of which the FP8 table was about 47.7GiB. These are not interchangeable exact sizes for one unified checkpoint, which further shows that the target repository's file manifest must be read directly; disk cannot be reserved just by multiplying parameter count by bytes.
 
-来源：[vLLM 官方 recipe](https://recipes.vllm.ai/Qwen/Qwen3.8-Flash-Next)、[SGLang 官方 cookbook](https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.8-Flash-Next)。其中 vLLM 概述对“125B 是否含表”的文字与官方卡有歧义，本报告使用官方模型卡的加法口径。
+Sources: the [official vLLM recipe](https://recipes.vllm.ai/Qwen/Qwen3.8-Flash-Next), the [official SGLang cookbook](https://docs.sglang.io/cookbook/autoregressive/Qwen/Qwen3.8-Flash-Next). The vLLM overview's wording on "whether the 125B figure includes the table" is ambiguous relative to the official card; this report uses the official model card's additive accounting.
 
-| 节点方案 | 设计判断与限制 |
+| Node plan | Design judgment and constraints |
 |---|---|
-| dev：64 CPU / 90GB RAM / 316GB 空闲盘 | 适合调度、manifest、协方差和产物校验。不接纳整套 BF16 下载/转换；不接纳 BF16 全表 host 常驻。CPU-only 的 4-bit 90GB 裸下界已无运行余量，不能作为保底方案。 |
-| 1×A100/H100 80GB + 90GB host | BF16 主干无解。特定已验证混合量化 + FP8/INT8 表 host 驻留可能有容量机会，但须实测内核支持及峰值；不作为首次完整提取承诺。 |
-| 2×80GB + 90GB host | 对某些量化主干 + host 表可能够；不能按激活参数保证。模型并行布局、工作区、GPU 间带宽需单独验收。 |
-| 4×80GB + ≥192GB host | BF16 主干约 250GB 放 GPU、102GB 表放 host 的优先候选；192GB 是否足够需含加载峰值核算，256GB 更宽裕。建议另配 ≥1TB 空闲高速存储保存固定 checkpoint 与转换临时数据。 |
-| 4×80GB + 90GB host | 如固定变体与内核支持，FP8 表或表按 CPU/GPU 分片可探索；不采用 BF16 全表 host。H100 的 FP8 路径和 A100 的兼容内核要分开验证。 |
-| 8×80GB | BF16 全驻 GPU 是正确性基准候选，仍要检查逐卡可用空间、分片约束和加载磁盘，不等于已跑通。 |
+| dev: 64 CPU / 90GB RAM / 316GB free disk | Suitable for scheduling, manifest handling, covariance, and artifact validation. Cannot accept a full BF16 download/conversion; cannot keep the full BF16 table resident on host. The CPU-only 4-bit 90GB bare lower bound already leaves no runtime headroom, and cannot serve as a fallback plan. |
+| 1xA100/H100 80GB + 90GB host | No solution for a BF16 backbone. Specific verified mixed quantization + an FP8/INT8 table resident on host may have a capacity opportunity, but kernel support and peaks must be measured; not committed as the first full-extraction attempt. |
+| 2x80GB + 90GB host | May be enough for certain quantized backbones + a host table; cannot be guaranteed from active-parameter count alone. Model-parallel layout, workspace, and inter-GPU bandwidth need separate verification. |
+| 4x80GB + >=192GB host | The leading candidate for a ~250GB BF16 backbone on GPU with a 102GB table on host; whether 192GB is enough needs accounting that includes the loading peak, and 256GB gives more headroom. Recommend also provisioning >=1TB of free fast storage for the pinned checkpoint and conversion temporaries. |
+| 4x80GB + 90GB host | Worth exploring an FP8 table, or a table sharded across CPU/GPU, if a fixed variant and kernel support exist; a full BF16 table on host is not adopted. H100's FP8 path and A100's compatible kernels must be verified separately. |
+| 8x80GB | A fully GPU-resident BF16 candidate for a correctness baseline; per-GPU available space, sharding constraints, and loading disk still need checking, and this does not mean it has already been run. |
 
-A100 不应被当作具备 H100 的原生 FP8 路径；A100/H100 均不能照搬 B200/Blackwell 的 NVFP4 recipe。要用该 GPU、该 checkpoint、该 kernel 的组合矩阵验收，不能自动转 dtype、换量化格式、退回 CPU。
+A100 must not be treated as having H100's native FP8 path; neither A100 nor H100 can simply reuse B200/Blackwell's NVFP4 recipe. Acceptance must use the actual matrix of GPU, checkpoint, and kernel combination in use; dtype must not be auto-converted, the quantization format must not be swapped, and there must be no silent fallback to CPU.
 
-加载前输出逐设备 memory plan：tensor 所有者、storage dtype、compute dtype、bytes、CPU/GPU 位置、复制数、预填充工作区、GDN state、QSA/indexer/cache、hook staging、临时加载空间。以 **可用** RAM/VRAM 而非总量准入。总体预算为 `weights + states + activations + workspace + staging + safety_margin`；从 batch=1 和任务最长输入验证，再确定 token budget。
+Before loading, output a per-device memory plan: tensor owner, storage dtype, compute dtype, bytes, CPU/GPU location, copy count, prefill workspace, GDN state, QSA/indexer/cache, hook staging, and temporary loading space. Admission is based on **available** RAM/VRAM, not total. The overall budget is `weights + states + activations + workspace + staging + safety_margin`; verify at batch=1 and the task's longest input before deciding the token budget.
 
-本次未 SSH 探测 dev/stg/ai-wsl，也未发现用户提供的实际 GPU 数量/互联信息；以上是条件化选型。执行期先采集 `uptime`、`/proc/loadavg`、`free -b`、`df -B1`、`nproc`、`nvidia-smi`、`nvidia-smi topo -m`。1m/15m load 按核数归一化，准入阈值写入 manifest；≥8GB RAM 和 ≥10GB 磁盘只是用户要求的基础门槛，不能替代模型预算。任一节点不满足即记录拒绝原因，不启动任务。
+No SSH probing of dev/stg/ai-wsl was done this time, and no user-provided actual GPU count/interconnect information was found; the above is conditional sizing. At execution time, first collect `uptime`, `/proc/loadavg`, `free -b`, `df -B1`, `nproc`, `nvidia-smi`, `nvidia-smi topo -m`. Normalize 1m/15m load by core count, and write the admission threshold into the manifest; >=8GB RAM and >=10GB disk are only the user's baseline requirement and cannot substitute for the model's own budget. If any node fails to meet the bar, record the rejection reason and do not start the task.
 
-## 4. 引擎选择与 offloading 实现
+## 4. Engine choice and offloading implementation
 
-| 引擎 | 用途 | 必须满足的条件 |
+| Engine | Purpose | Required conditions |
 |---|---|---|
-| Transformers + PyTorch | 首个可审计提取基准，直接 hook | 固定支持此架构的 commit，验证 AutoClass、4 分支语义、官方算子、精度和 checkpoint。不能沿用旧脚本的 AutoModelForCausalLM 假定。 |
-| vLLM | 后续吞吐型 worker | 官方已有模型 recipe，抓取页面标注 0.29.0+；固定版本和容器 digest。提取逻辑必须进入实际 model worker，处理 packed tokens、TP 和 CUDA graph。生成 API 不提供所需证据。 |
-| SGLang | 优先评估现成 PLE offload 工程实现 | cookbook 有 PLE offload 和分支特定 file backend；固定真实支持版本。仍需 worker 内中间表征适配，不能靠 API 猜张量。 |
-| llama.cpp / GGUF | 经验证后的 CPU/GPU 混合部署或最终 embedding 对照 | 本次未核实具体支持 commit/转换器；Qwen2.5 的现有脚本不证明新架构支持。指定层需要 C++ graph 提取实现，不支持 PyTorch hook。 |
-| Ollama | 用户交互封装候选 | 不作为本项目指定层物理提取首选；现有 API 输出不能代替中间层。具体后端和硬件支持未在本次实测。 |
+| Transformers + PyTorch | First auditable extraction baseline, direct hooking | Pin a commit that supports this architecture; verify the AutoClass, the 4-branch semantics, the official operators, precision, and checkpoint. Must not carry over an old script's `AutoModelForCausalLM` assumption. |
+| vLLM | Subsequent high-throughput worker | Has an official model recipe; the scraped page notes 0.29.0+; pin the version and container digest. The extraction logic must enter the actual model worker, handling packed tokens, TP, and CUDA graphs. The generation API alone does not provide the required evidence. |
+| SGLang | First priority: evaluate the existing PLE-offload engineering implementation | The cookbook has PLE offload and a branch-specific file backend; pin the version actually verified to support it. Still needs an in-worker intermediate-representation adapter; tensors cannot be guessed from the API. |
+| llama.cpp / GGUF | A verified CPU/GPU hybrid deployment, or a final-embedding control | The specific supported commit/converter has not been verified this time; the existing Qwen2.5 script does not prove support for the new architecture. A specified layer requires a C++ graph-extraction implementation; PyTorch hooks are not supported. |
+| Ollama | A candidate wrapper for user interaction | Not the preferred choice for this project's specified-layer physical extraction; the existing API output cannot substitute for an intermediate layer. The specific backend and hardware support have not been measured here. |
 
-### 4.1 N-gram 表
+### 4.1 The N-gram table
 
-优先顺序是全 GPU 基准 → 官方/经验证的 host row-gather → 显式 file-backed 实验路径，顺序不是允许自动 fallback。
+Priority order: full-GPU baseline -> official/verified host row-gather -> an explicit file-backed experimental path. This order is not permission for an automatic fallback.
 
-1. 从固定模型实现获得真实 n-gram ID 算法、边界 token 处理和索引范围；保留 bigram/trigram 历史。禁止自己按文本模式猜 ID，禁止改变 hash、collision 或 padding 语义。
-2. 全 prompt token 已知时，可提前生成查表请求；按实际 ID 去重 gather，再按 inverse index 恢复原顺序。prefetch 只依赖已知 token；若实现索引还依赖 hidden state，则不得提前虚构计算。
-3. host 保留真实表或经批准的量化存储；CPU gather 后只传命中行。不要把 102GB 表全部 pin；使用有上限的 pinned 双缓冲，量化按行反量化，记录 scale/zero-point 和误差。
-4. 拷贝 stream 记录 CUDA event；layer 2 使用前显式 wait，不能读尚未完成的数据。缓存 miss 应正常读取真实 backing table，不是算法降级；backend 不可用、I/O 错误、校验失败必须报错，绝不能以零向量或普通 embedding 代替。
-5. TP 下按真实表布局选择共享只读 host 存储或分片；禁止每 rank 悄悄复制整表到 RAM。共享页也要测进程 PSS 和节点 MemAvailable，不能简单求 RSS。
-6. mmap/file backend 必须独立配置并记录 page fault、page-cache/RSS、I/O 延迟与队列压力；不把 mmap 当作没有内存成本。普通 PCIe 节点不得套用统一内存设备的性能结论。
+1. Obtain the real n-gram ID algorithm, boundary-token handling, and index range from the pinned model implementation; preserve bigram/trigram history. Guessing IDs from text patterns is forbidden, and changing the hash, collision, or padding semantics is forbidden.
+2. When all prompt tokens are known, lookup requests can be generated ahead of time; gather by deduplicated real IDs, then restore the original order via an inverse index. Prefetch depends only on known tokens; if the real implementation's index also depends on a hidden state, computation must not be fabricated ahead of time.
+3. Host keeps the real table or an approved quantized storage; after CPU gather, transfer only the hit rows. Do not pin the entire 102GB table; use a bounded pinned double buffer, dequantize per row for quantized storage, and record the scale/zero-point and error.
+4. The copy stream records a CUDA event; layer 2 must explicitly wait before use, and must not read data that is not yet complete. A cache miss should read the real backing table normally, not degrade the algorithm; a backend being unavailable, an I/O error, or a checksum failure must raise, and must never be replaced with a zero vector or an ordinary embedding.
+5. Under TP, choose shared read-only host storage or sharding according to the real table layout; silently copying the whole table into RAM per rank is forbidden. Shared pages must also be measured via process PSS and node MemAvailable, not simply via RSS.
+6. An mmap/file backend must be configured independently and must record page faults, page-cache/RSS, I/O latency, and queue pressure; mmap must not be treated as having no memory cost. Performance conclusions from a unified-memory device must not be applied to an ordinary PCIe node.
 
-一般 Accelerate CPU/disk offload 会在执行时移动模块权重，不能假定它天然实现 N-gram **按行** gather。必须检查并禁用会将整个 embedding 模块搬入 GPU 的通用 hook，为表实现经过验证的专用适配器。[Accelerate 文档](https://huggingface.co/docs/accelerate/concept_guides/big_model_inference)
+Generic Accelerate CPU/disk offload moves module weights at execution time, and it cannot be assumed to naturally implement **row-wise** N-gram gather. The generic hook that would move the entire embedding module to GPU must be checked and disabled, and a verified dedicated adapter must be implemented for the table. [Accelerate documentation](https://huggingface.co/docs/accelerate/concept_guides/big_model_inference)
 
-### 4.2 MoE 专家
+### 4.2 MoE experts
 
-第一阶段让全体专家在多 GPU 上常驻，按层 device-map 或经过验证的 TP/EP 分布；dispatch 由真实 router 选择专家。容量不足时才能选择独立实验配置的 expert paging/CPU 计算。
+In the first phase, keep all experts resident across multiple GPUs, via a per-layer device map or a verified TP/EP distribution; dispatch is decided by the real router's expert selection. Expert paging/CPU computation in an independently designed experiment should only be chosen when capacity is insufficient.
 
-专家选择依赖当前层 hidden state，不能像已知 token 的 N-gram 表一样把所有未来访问准确预取。若实现 paging：完整 backing weights + 按 layer/expert 键管理的缓存 + CUDA event + 有界请求队列；缺专家必须等待或失败，禁止 top-k 裁剪、热门专家替代、零输出。统计 per-layer 命中率、搬运字节和等待时间；冷启动与热缓存分别测量。prefill 往往扩大专家并集，不能拿 decode 的“6B active”推算提取吞吐。
+Expert selection depends on the current layer's hidden state, so, unlike the N-gram table with known tokens, all future accesses cannot be accurately prefetched. If paging is implemented: full backing weights + a cache keyed by layer/expert + CUDA events + a bounded request queue; a missing expert must wait or fail -- top-k truncation, substituting a popular expert, or zero output are all forbidden. Measure per-layer hit rate, bytes moved, and wait time; measure cold start and warm cache separately. Prefill typically expands the union of experts touched, so the decode-time "6B active" figure must not be used to estimate extraction throughput.
 
-## 5. 四层端到端管线
+## 5. The four-layer end-to-end pipeline
 
-### Layer 1：数据、prompt 调度与批处理
+### Layer 1: data, prompt scheduling, and batching
 
-复用 `grand_challenge_data.py:49` 的 13 tasks：massive_en、massive_de、multinli、pubmedqa、vitaminc、boolq、squad2、paws、civil_comments、aegis_safety、helpsteer2、summeval_relevance、summeval_consistency。
+Reuse the 13 tasks from `grand_challenge_data.py:49`: massive_en, massive_de, multinli, pubmedqa, vitaminc, boolq, squad2, paws, civil_comments, aegis_safety, helpsteer2, summeval_relevance, summeval_consistency.
 
-复用 `gd.load_test` / `gd.build_train` 的 leakage gate 与 `gpu_extract_qwen72b_13tasks.py:184` 的对齐契约：train/test IDs、顺序、标签、candidate 顺序逐项验证。原始 prompt 为 `context + '\n\n' + instruction`；若为新模型使用 chat template，必须建立不同 representation ID，不能伪装与 raw prompt 同协议。
+Reuse the leakage gate from `gd.load_test` / `gd.build_train` and the alignment contract from `gpu_extract_qwen72b_13tasks.py:184`: verify train/test IDs, order, labels, and candidate order item by item. The raw prompt is `context + '\n\n' + instruction`; if a chat template is used for the new model, a distinct representation ID must be established, and it must not be disguised as using the same protocol as the raw prompt.
 
-manifest 固定 dataset 文件 SHA256、ID 顺序、seed、split、候选列表、tokenizer revision、special tokens、template、每任务 max/head token budget、截断策略。不同 tokenizer 下相同 token budget 不保证保留相同文本；记录 raw/kept token 长度及实际 token-ID hash，比较结果须披露此差别。
+The manifest pins the dataset file SHA256, ID order, seed, split, candidate list, tokenizer revision, special tokens, template, per-task max/head token budget, and truncation strategy. The same token budget does not guarantee the same retained text under a different tokenizer; record both the raw/kept token length and the actual token-ID hash, and disclose this difference wherever results are compared.
 
-用磁盘 manifest 固定 row_index，长度分桶只改变执行顺序；输出按 row_index 恢复。队列按**字节与 token 数**设上限，不能只限制条目数。初始 batch=1，小规模逐级提升，允许的 batch 缩小只在显式配置的重试协议内执行并记录 attempt；不得自动截短输入、换模型、跳样本。
+Use an on-disk manifest to pin `row_index`; length-bucketing only changes execution order, and output is restored by `row_index`. The queue caps by **both bytes and token count**, not by entry count alone. Start with batch=1 and scale up incrementally; any allowed batch shrink is only performed within an explicitly configured retry protocol, with the attempt recorded; automatically truncating input, switching models, or skipping samples is forbidden.
 
-PCA/basis 只用 train split。test 与 candidates 只做变换，不参与均值/协方差、层选择、量化参数选择。多任务统计须声明按样本加权或固定 task 权重；默认按样本加权，不能偷偷均衡类别。标签不进入 model prompt 或特征提取决策。
+PCA/basis fitting uses the train split only. Test data and candidates are only transformed, and never participate in the mean/covariance, layer selection, or quantization-parameter selection. Multi-task statistics must state whether they are sample-weighted or use fixed task weights; the default is sample-weighted, and class balancing must never be done silently. Labels never enter the model prompt or the feature-extraction decision.
 
-已有数据构建器可能物化整个 task；大任务时先一次性构建、校验并落盘 manifest，再由 worker 流读。不能宣称原构建器本身已实现 O(1) 流式内存。
+The existing data builder may materialize an entire task in memory. For large tasks, build once, validate, and persist to a manifest first, then have workers stream-read it. The original builder itself must not be claimed to already implement O(1) streaming memory.
 
-### Layer 2：目标 hook 与张量寿命
+### Layer 2: target hooks and tensor lifetime
 
-`Qwen38Adapter` 的职责：匹配 architecture/revision；定位文本 backbone、最终 norm、目标层的 gated read 或完整 residual；声明张量 layout 和维度；关闭 MTP、视觉输入、KV cache（在实现允许的范围内）及全量 hidden states；避开不必要的 `[B,T,vocab]` logits 计算。不能为了省内存删除参与文本 forward 的必要模块。
+`Qwen38Adapter`'s responsibilities: match architecture/revision; locate the text backbone, the final norm, and the target layer's gated read or full residual; declare the tensor layout and dimensions; disable MTP, vision input, KV cache (to the extent the implementation allows), and full hidden-state output; avoid unnecessary `[B,T,vocab]` logits computation. Modules necessary for the text forward pass must not be removed just to save memory.
 
-建议第一版输出 final post-norm 的 2560-D 表征；中间层明确指定 index 与读出位置，未确认 layout 前不写死 L24 路径。若保留四分支，则显式声明 `branches=4`、维度/轴顺序，必要时展平为 10240-D 的**新协议**；不得把它当 2560-D，也不得平均后假称原始表征。
+Recommendation: have the first version output the final post-norm 2560-D representation; for intermediate layers, explicitly specify the index and readout position, and do not hardcode an L24 path before the layout is confirmed. If the four branches are kept, explicitly declare `branches=4`, the dimension/axis order, and, if flattened, treat the resulting 10240-D as a **new protocol**; it must not be treated as 2560-D, nor averaged and then passed off as the original representation.
 
-PyTorch eager + `eval()` + `inference_mode()` 起步，禁用 graph capture/compile；用真实短输入把 hook 输出与模型官方对应输出逐样本核对后再开启优化。forward hook 只能避免额外保留全层张量，不能消除当前层 forward 自身的激活峰值。
+Start with PyTorch eager + `eval()` + `inference_mode()`, with graph capture/compile disabled; use a real short input to cross-check the hook output against the model's official corresponding output sample by sample before enabling optimizations. A forward hook can only avoid retaining unnecessary full-layer tensors; it cannot eliminate the current layer's own forward-pass activation peak.
 
-- 在 GPU 上先选目标 token，再 detach/copy 到有界 CPU buffer；不得先 `.cpu()` 整个 `[B,T,d]`。
-- 最后有效 token 位置采用 `max(where(attention_mask != 0, positions, -1))`，对左右 padding 均正确；空序列失败。`sum(mask)-1` 只适用于右 padding，`-1` 只在已验证布局下成立。
-- 捕获 batch nonce、sample IDs、layer name、命中次数、tensor shape；每个目标应命中预期次数。漏 hook、多 hook、维度漂移、非有限值均终止。
-- callback 返回 None，不修改 forward 输出；不保留原 output、计算图或跨 batch closure 引用。句柄在 finally 中移除；处理完即释放当前 batch。
-- 异步 D2H 要等待 event 后才读 CPU tensor，缓冲用完才能复用；首版同步 copy 更易审计。
-- TP 输出若按 hidden 维分片，在正确维度 gather；若复制则只写唯一 owner；若 PP 则由该层 owner 发送带 ID 的特征。不得把 rank 数误计成样本数。
-- vLLM/SGLang 的 packed/chunked prefill 必须以 request ID 和 position 映射最后 token，状态跨 chunk 保持一致；prefix cache 可能跳过 hook，提取基准阶段应明确关闭，否则缓存必须同时保存可验证的目标表征。
+- On GPU, select the target token first, then detach/copy into a bounded CPU buffer; never `.cpu()` the entire `[B,T,d]` first.
+- Take the last valid token position as `max(where(attention_mask != 0, positions, -1))`, which is correct for both left and right padding; fail on an empty sequence. `sum(mask)-1` only works for right padding, and `-1` only holds under a verified layout.
+- Capture the batch nonce, sample IDs, layer name, and hit count; every target should be hit exactly the expected number of times. A missed hook, a duplicate hook, dimension drift, or a non-finite value must all terminate the run.
+- The callback returns `None` and does not modify the forward output; it does not retain the original output, the computation graph, or a cross-batch closure reference. The handle is removed in a `finally` block, and each batch's resources are released as soon as it is processed.
+- For an asynchronous D2H copy, wait for the event before reading the CPU tensor, and only reuse the buffer once it is free; a synchronous copy in the first version is easier to audit.
+- If the TP output is sharded along the hidden dimension, gather on the correct dimension; if it is replicated, write from only the single owner; under PP, the layer's owner sends the feature with an ID attached. The rank count must not be mistaken for the sample count.
+- For vLLM/SGLang's packed/chunked prefill, the last token must be mapped by request ID and position, with state kept consistent across chunks; a prefix cache may skip the hook and should be explicitly disabled during the extraction-baseline phase, or the cache must also store a verifiable target representation alongside it.
 
-### Layer 3：稳定的 StreamingCovarianceAccumulator
+### Layer 3: a numerically stable StreamingCovarianceAccumulator
 
-保留现有 public class/API，原地替换二阶矩算法，避免出现新 accumulator 无调用。持久状态使用 FP64 的 `(n, mean, M2)`；对 batch 的 `(m, mean_b, M2_b)`：
+Keep the existing public class/API, replacing the second-moment algorithm in place, to avoid ending up with a new, uncalled accumulator. Persistent state uses FP64 `(n, mean, M2)`; for a batch's `(m, mean_b, M2_b)`:
 
 ```text
 delta = mean_b - mean
@@ -142,42 +142,42 @@ M2_new = M2 + M2_b + outer(delta, delta) * n*m/n_new
 covariance = M2/n             # population, ddof=0
 ```
 
-空 batch、维度不符、非有限输入、累积溢出报错；先形成且检查候选状态，成功后提交，失败不得留半更新状态。第一批独立初始化，n=0/1 无 covariance；求 rank-k 必须满足 `k <= min(d,n-1)`，并检查数值秩，不能只有 `n>=k`。禁止 NaN 转零或失败后 identity basis。
+Raise on an empty batch, a dimension mismatch, a non-finite input, or accumulation overflow; form and check a candidate state first, commit only on success, and never leave a half-updated state on failure. The first batch is initialized independently, with no covariance at n=0/1; computing rank-k requires `k <= min(d,n-1)` and checking the numerical rank, not merely `n>=k`. Converting NaN to zero, or falling back to an identity basis on failure, is forbidden.
 
-状态约 `8d²+8d` bytes，d=2560 约 50MiB，d=10240 约 800MiB；每个目标层、每个 task 同时累积都会倍增。默认 task 顺序处理，仅保持必要层数；全局统计可按固定次序 merge task 统计。
+State is about `8d^2+8d` bytes: roughly 50MiB at d=2560, roughly 800MiB at d=10240; accumulating simultaneously for every target layer and every task multiplies this. By default, process tasks sequentially, keeping only the necessary number of layers resident; global statistics can be merged across tasks in a fixed order.
 
-整个峰值应预算多份 d² 临时矩阵、`B*d` 的 FP64 batch、eigh 工作区、读取/写出缓存；`memory_bytes()` 不能作为进程峰值证明。用 RSS/PSS 和 GPU peak allocated/reserved 实测随 N 增长是否平台化。固定 batch、层数、队列后为 O(d²+Bd)，不是对任意模型/序列长度的绝对常量。
+The overall peak must budget for multiple d^2 temporary matrices, an FP64 batch of `B*d`, eigh workspace, and read/write buffers; `memory_bytes()` cannot serve as proof of the process peak. Measure RSS/PSS and GPU peak allocated/reserved empirically to see whether they plateau as N grows. With batch size, layer count, and queue fixed, this is O(d^2+Bd), not an absolute constant for arbitrary model/sequence length.
 
-求解前对称化并记录修正量；检查 PSD 误差尺度，显著负特征值失败。只允许对阈值内舍入级负值显式裁零并记录数量/幅度。完整 eigh 为 O(d³)，不是 online SVD；若选迭代 top-k，需固定容差、检查残差和收敛，不收敛即失败。比较子空间投影矩阵，不能要求退化特征空间的基向量逐元素相同。
+Symmetrize before solving and record the correction magnitude; check the scale of PSD violation, and fail on significantly negative eigenvalues. Only rounding-scale negative values within a threshold may be explicitly clipped to zero, with the count/magnitude recorded. A full eigh is O(d^3), not an online SVD; if an iterative top-k method is chosen, fix the tolerance and check the residual and convergence, failing if it does not converge. Compare subspace projection matrices; do not require basis vectors of a degenerate eigenspace to match elementwise.
 
-basis 在训练结束后才能确定：第一遍将固定大小 raw-feature shards 落盘，同时更新统计；第二遍流读投影为 Z。若不要 raw features，则需重新 forward，代价明确记录。禁止保留全部 X 等待 basis。跨模型低维几何相似度只是观测量，突破需固定 test IDs 的逐样本配对统计。
+The basis can only be finalized after training completes: on the first pass, persist fixed-size raw-feature shards to disk while updating the statistics; on the second pass, stream-read and project into Z. If raw features are not kept, a re-forward pass is needed, and its cost must be explicitly recorded. Retaining all of X while waiting for the basis is forbidden. Cross-model low-dimensional geometric similarity is only an observation; a breakthrough claim requires per-sample paired statistics on fixed test IDs.
 
-### Layer 4：产物与校验链
+### Layer 4: artifacts and the validation chain
 
-建议目录：`run/<run_id>/{manifest.json,events.jsonl,features/,statistics/,basis/,checkpoints/}`。大数据采用分块 NPZ；NPZ 不是可靠的直接 mmap 容器，不允许用 `np.load(...,mmap_mode=...)` 宣称其 zip member 零拷贝。
+Recommended directory layout: `run/<run_id>/{manifest.json,events.jsonl,features/,statistics/,basis/,checkpoints/}`. Large data uses chunked NPZ; NPZ is not a reliable direct-mmap container, and `np.load(...,mmap_mode=...)` must not be used to claim zero-copy access to its zip members.
 
-| 文件 | 必需字段 |
+| File | Required fields |
 |---|---|
-| raw feature shard | `X` FP32 `[n,d]`、`row_index` int64、`sample_ids` 无 object dtype、`token_count`、`info_json`；每 shard 固定最大字节 |
-| statistics checkpoint | `n` int64、`mean` FP64 `[d]`、`M2` FP64 `[d,d]`、已提交 shard 前缀与输入 cursor、配置摘要 |
-| basis.npz | `U_k`、`mean`、`eigenvalues`、`n_samples`、`info_json`；保留 FP64 审计版，部署 FP32 另产物/另 hash |
-| benchmark 兼容导出 | `train_full,test_full,cands,train_label,train_ids,test_ids,info_json`，与当前 consumer 契约一致；representation ID 明确维度和 pooling |
+| raw feature shard | `X` FP32 `[n,d]`, `row_index` int64, `sample_ids` with no object dtype, `token_count`, `info_json`; each shard has a fixed maximum byte size |
+| statistics checkpoint | `n` int64, `mean` FP64 `[d]`, `M2` FP64 `[d,d]`, the prefix of committed shards and the input cursor, a configuration digest |
+| basis.npz | `U_k`, `mean`, `eigenvalues`, `n_samples`, `info_json`; keep an FP64 audit version, with a separate FP32 deployment artifact and hash |
+| benchmark-compatible export | `train_full,test_full,cands,train_label,train_ids,test_ids,info_json`, consistent with the current consumer contract; the representation ID explicitly states dimension and pooling |
 
-大规模 consumer 应直接迭代 shards。若必须生成单文件 task NPZ，使用有界写出/磁盘中间数组，并确认读取端不会把所有 task 同时加载；超过事先预算就拒绝兼容导出，不能破坏内存约束。
+Large-scale consumers should iterate shards directly. If a single-file per-task NPZ must be generated, use bounded write-out / on-disk intermediate arrays, and confirm the reader does not load every task simultaneously; refuse the compatible export once it exceeds the pre-set budget rather than breaking the memory constraint.
 
-metadata 至少包含：schema/version、run_id、代码 HEAD 与工作树差异摘要、model/tokenizer revision、所有权重分片 sha256、engine/kernel/container 版本、dtype/quant 配置、设备拓扑与 offload 策略、hook 完整模块路径/语义、任务及数据摘要、split、token 策略、训练统计范围、shape/dtype、样本数量、资源峰值、失败/重试事件摘要。没有完成的验证写 `not_verified`，不得填 true。
+Metadata must include at least: schema/version, run_id, the code HEAD and a summary of the working-tree diff, model/tokenizer revision, sha256 of every weight shard, engine/kernel/container versions, dtype/quantization configuration, device topology and offload strategy, the hook's full module path/semantics, task and data summary, split, token strategy, the range of the training statistics, shape/dtype, sample count, resource peaks, and a summary of failure/retry events. Any check that was not completed is written as `not_verified`, and must not be filled in as `true`.
 
-按同目录临时文件写入 → flush/fsync → `allow_pickle=False` 重读验 shape/dtype/有限值/IDs → 对最终文件字节流式 SHA256 → 原子 rename。最后写 manifest，再发布 COMMITTED 标记；读者必须以已提交 manifest 为根。文件哈希放外部 manifest，避免自引用；manifest 自身 hash 放独立 commit marker，外部报告固定该 hash。数组级语义 hash 要包含字段名、shape、dtype、规范字节序及数据，不能只拼裸 bytes。SHA256 证明完整性，不证明真实性或模型正确。
+Write to a temp file in the same directory -> flush/fsync -> reopen with `allow_pickle=False` to verify shape/dtype/finiteness/IDs -> stream SHA256 over the final file's bytes -> atomic rename. Write the manifest last, then publish a COMMITTED marker; readers must treat the committed manifest as the root of trust. File hashes live in an external manifest to avoid self-reference; the manifest's own hash lives in a separate commit marker, and external reports pin that hash. An array-level semantic hash must include the field name, shape, dtype, canonical byte order, and the data, not just concatenated raw bytes. SHA256 proves integrity, not authenticity or model correctness.
 
-checkpoint 的统计和 shard cursor 必须属于同一个提交代次；恢复验证全部输入/模型/配置哈希和 shard 前缀。未提交的 orphan 文件隔离或显式清理；不以“文件存在”跳过。写满盘、hash 不符、重复 ID、缺行均非零退出，绝不能发布成功 manifest。
+A checkpoint's statistics and its shard cursor must belong to the same commit generation; recovery verifies all input/model/configuration hashes and the shard prefix. Orphaned, uncommitted files are isolated or explicitly cleaned up, never skipped just because "the file exists." Disk full, a hash mismatch, a duplicate ID, or a missing row must all produce a non-zero exit, and a successful manifest must never be published in those cases.
 
-## 6. Python 脚本框架与生产接线
+## 6. Python script framework and production wiring
 
-以下是**接口设计伪代码，不是可执行实现**，不制造一个带 TODO/NotImplemented 却被称为已完成的脚本。
+The following is **interface-design pseudocode, not an executable implementation**; it must not be turned into a script with TODOs/NotImplemented that is then called complete.
 
 ```python
 def run(config):
-    # 全部依赖通过显式 config 构造，无默认替代模型/引擎。
+    # Every dependency is constructed from an explicit config; no default fallback model/engine.
     manifest = validate_and_freeze_inputs(config)
     plan = preflight_resources_and_checkpoint(manifest)
     adapter = load_verified_qwen38_adapter(plan)
@@ -192,7 +192,7 @@ def run(config):
                 with torch.inference_mode():
                     adapter.forward_text_backbone(batch, use_cache=False,
                                                   output_hidden_states=False)
-                x = capture.take_exactly_once()  # event、维度、数量、有限值校验
+                x = capture.take_exactly_once()  # event, dimension, count, finiteness checks
                 writer.stage_features(batch, x)
                 if batch.split == "train":
                     stats.update(x)
@@ -207,41 +207,41 @@ def run(config):
         adapter.close()
 ```
 
-实际实现必须保证构造期失败也被 CLI 顶层记录；日志故障输出 stderr 并保留原异常，清理异常不能覆盖首要失败。进程被 SIGKILL 时由父进程记录 signal/exit status，并依赖事务恢复，不能依赖 finally 必然执行。磁盘/统计事务应有独立一致性实现，以上方法名不是已经存在的函数。
+The actual implementation must ensure that even a construction-time failure is recorded by the top-level CLI; a logging failure must be written to stderr while preserving the original exception, and a cleanup-time exception must not overwrite the primary failure. If the process is SIGKILLed, the parent process must record the signal/exit status, and recovery must rely on the transaction, not on the `finally` block necessarily running. Disk/statistics transactions should have an independent consistency implementation; the method names above are not existing functions.
 
-建议职责落点：
+Recommended ownership breakdown:
 
-- 改造 `benchmarks/suites/run_universal_extraction_a100.py` 为薄入口，调用公共 orchestrator，移除硬编码路径/维度、全层保留、猜字段、假反事实/相变/轨迹逻辑；不保留新旧执行分支供自动回退。
-- `python/gen_zero/causal/universal_manifold_extractor.py` 原地更新 accumulator 和严格产物 API；审查 `GepaEvolutionDaemon` 等全部现有调用，迁移旧状态/checkpoint 时显式版本拒绝或离线转换。
-- 公共 `qwen38_extraction` 模块分为 `manifest`, `adapter`, `capture`, `scheduler`, `artifact`, `runner`；只有被 runner 与实际入口调用才计已实现。
-- 为 `crates/gen-zero-cli/src/main.rs` 的 Commands 增加明确提取子命令（拟议名称 `extract-manifold`），以 argv 方式启动固定 Python worker，保留原始退出码/信号、转发中断、限定产物目录、验证完成 manifest。不得用 shell 拼接配置，不在 Rust 内复制数值算法。
-- 若目标包括在线消费，再实现独立 mount 适配：schema/hash/dim/representation 校验通过后，真实请求进入同一 encoder 与投影路径。只注册文件或打印“loaded”不算生效。当前 `serve --mount-assets` 接受的是 cognitive-assets JSON，不能直接把 NPZ 塞进去假装兼容。
+- Refactor `benchmarks/suites/run_universal_extraction_a100.py` into a thin entry point that calls a shared orchestrator, removing the hardcoded path/dimensions, retention of all layers, field guessing, and fake counterfactual/phase-transition/trajectory logic; do not keep an old-and-new execution branch for automatic fallback.
+- Update `python/gen_zero/causal/universal_manifold_extractor.py`'s accumulator and strict-artifact API in place; audit every existing call site including `GepaEvolutionDaemon`, and use an explicit version rejection or an offline conversion when migrating old state/checkpoints.
+- Split the shared `qwen38_extraction` module into `manifest`, `adapter`, `capture`, `scheduler`, `artifact`, `runner`; count it implemented only once it is actually called by the runner and a real entry point.
+- Add an explicit extraction subcommand (proposed name `extract-manifold`) to `crates/gen-zero-cli/src/main.rs`'s Commands, launching a pinned Python worker via argv, preserving the raw exit code/signal, forwarding interrupts, restricting the artifact directory, and verifying the completed manifest. Do not assemble configuration via shell string concatenation, and do not duplicate the numerical algorithm inside Rust.
+- If online consumption is in scope, implement a separate mount adapter: once schema/hash/dim/representation validation passes, real requests enter the same encoder and projection path. Merely registering a file or printing "loaded" does not count as effective. The `serve --mount-assets` command currently accepts a cognitive-assets JSON; an NPZ must not simply be stuffed in and passed off as compatible.
 
-最小实际调用链必须是 `Rust CLI → Python runner → adapter.forward → hook → accumulator → committed artifact`。在线能力另需 `HTTP/MCP request → validated mounted projection → observable result`。二者各自独立验收，前者成功不能冒充后者。
+The minimum real call chain must be `Rust CLI -> Python runner -> adapter.forward -> hook -> accumulator -> committed artifact`. Online capability separately requires `HTTP/MCP request -> validated mounted projection -> observable result`. The two are accepted independently; success on the former must not be passed off as success on the latter.
 
-旧逻辑清除验收应针对被替换实现/符号列清单，`rg` 检查 executable source 0 残留，并更新旧测试与文档；本设计文档中的历史证据不是可执行 fallback。本次是方案任务，未删除旧模块，也未声称已完成接线。
+Old-logic removal acceptance should list the replaced implementations/symbols, use `rg` to check for 0 residue in executable source, and update the old tests and documentation; the historical evidence in this design document is not an executable fallback. This round is a planning task: no old module was removed, and no wiring is claimed to be complete.
 
-## 7. 验收顺序、失败策略与远端闭环
+## 7. Acceptance order, failure strategy, and the remote closed loop
 
-1. 固定官方 model/config/tokenizer/weight-index 的 revision 和 hash，核查 architecture、tensor bytes 与模块图；来源或支持组合不明，状态 BLOCKED，不下载完整巨型权重试运气。
-2. 健康检查 + 逐卡/host/磁盘峰值预算通过，远端无 .git 的 sandbox 仅同步源代码与配置；保留文件清单/hash，实际编辑只在本地。禁止自动卸载到另一未验环境。
-3. 真模型最小 prefill：hook 对照官方读出；同一真实样本的单条/batch、左右 padding、长短序列、不同 shard owner 逐样本误差与 cosine；对量化与 offload 另外做 matched-pair 报告。阈值先写 manifest，不能看结果后调阈值宣布通过。
-4. CPU 数值验证：分批/merge 与中心化参考、巨大偏置/低方差、溢出拒绝、n/k 约束、PSD/特征残差。测试使用人工数值样本是数值单测，不是模型能力证据。
-5. 有界内存验证：固定 d、batch/token cap、层数，对不同 N 跑相同链路，记录 RSS/PSS、GPU peak、queue bytes 与磁盘增长。至少测短输入与任务最长输入；不拿几条短 prompt 宣称不会 OOM。
-6. 故障注入：真实 hook 漏触发、数据坏行、缺权重分片、磁盘耗尽、摘要篡改、worker 杀死、恢复重放。预期非零退出，无成功 marker、无跳样本、无 fallback，恢复后 ID 集合精确一次。
-7. 完整 13 tasks：训练/测试泄漏检查、原始/候选 ID 对齐、产物 schema 校验，先报告提取完整性。下游性能需要与基线共享测试 IDs 的逐样本输出、配对 bootstrap 或适当配对检验、seed/置信区间；没有这些不称突破。
-8. Rust CLI 的真实验收包含有效配置成功产物、无效配置非零退出、日志能追到 hook 样本数；若增加 mount，须执行一次真实在线请求和破坏 artifact 的拒绝用例。记录线上 acceptance 单独状态。
+1. Pin the revision and hash of the official model/config/tokenizer/weight-index, and check the architecture, tensor bytes, and module graph; if the source or the supported combination is unclear, the status is BLOCKED, and the full giant weights are not downloaded on a gamble.
+2. Pass the health check plus per-GPU/host/disk peak budget; a remote sandbox with no `.git` syncs only source code and configuration, keeping a file manifest/hash, with actual edits only ever made locally. Automatic offload to another unverified environment is forbidden.
+3. A minimal real-model prefill: cross-check the hook against the official readout; for the same real sample, compare single/batch, left/right padding, long/short sequences, and different shard owners with per-sample error and cosine similarity; produce a separate matched-pair report for quantization and offload. The threshold is written into the manifest beforehand; it must not be tuned after seeing the results and then declared passing.
+4. CPU numerical verification: batched/merged vs. a centered reference, extreme bias / low variance, overflow rejection, the n/k constraint, PSD/eigen-residual. A test using an artificial numerical sample is a numerical unit test, not evidence of model capability.
+5. Bounded-memory verification: with d, batch/token cap, and layer count fixed, run the same chain for different N, recording RSS/PSS, GPU peak, queue bytes, and disk growth. Test at least the shortest input and the task's longest input; a lack of OOM on a few short prompts is not proof of no OOM in general.
+6. Fault injection: a real hook missing its trigger, a bad data row, a missing weight shard, disk exhaustion, a tampered digest, a killed worker, and recovery replay. Expect a non-zero exit, with no success marker, no skipped sample, and no fallback; after recovery, the ID set is covered exactly once.
+7. The full 13 tasks: a train/test leakage check, raw/candidate ID alignment, and artifact schema validation, reporting extraction completeness first. Downstream performance requires per-sample output sharing the baseline's test IDs, a paired bootstrap or an appropriate paired test, and a seed/confidence interval; without these, it is not called a breakthrough.
+8. Real acceptance of the Rust CLI includes: a successful artifact from a valid configuration, a non-zero exit from an invalid configuration, and logs that can be traced back to the hook's sample count; if a mount is added, a real online request and a rejection test case with a corrupted artifact must both be run. Record online acceptance as a separately tracked status.
 
-每个 run 保存 argv、环境版本、原始退出码/信号、stdout/stderr 完整日志、尾部摘要、输入/输出 hash、资源曲线。父任务失败不得被 `tee/head/tail` 的成功码覆盖。重型编译按节点健康状况使用 `CARGO_BUILD_JOBS=$(nproc)`；提取/BLAS 不能也无条件占满所有线程而挤掉加载与 I/O。跨节点优先分配独立 task/split，前提是不重复加载超出容量；同模型 TP 优先同机高速互联，禁止“全力齐发”变成三个不足容量的重复失败任务。
+Every run saves: argv, environment versions, the raw exit code/signal, the full stdout/stderr log, a tail summary, input/output hashes, and resource curves. A parent task's failure must not be masked by the success code of `tee/head/tail`. Heavy compilation uses `CARGO_BUILD_JOBS=$(nproc)` according to node health; extraction/BLAS must not unconditionally saturate every thread and crowd out loading and I/O either. Across nodes, prefer allocating independent tasks/splits, provided this does not duplicate loading beyond capacity; for the same model, TP prefers a single machine with fast interconnect -- "go all out on every node" must not turn into three redundant, under-capacity failing tasks.
 
-远端只保留可复用且授权的缓存；临时调试文件在验收后按 run_id 清理。原始验证日志先归档并拉回核验 hash，不能为“零残留”删掉证据。源码不从远端覆盖本地；生成文件按 manifest provenance 拉回。此方案任务不提交、不推送；后续实现的 commit/push 需任务明确授权。
+The remote side keeps only reusable, authorized caches; temporary debug files are cleaned up by run_id after acceptance. Raw verification logs are archived first and their hashes checked on pull-back; evidence must never be deleted just to achieve "zero residue." Source code is never overwritten locally from the remote; generated files are pulled back according to manifest provenance. This planning task does not commit or push; any commit/push from a later implementation needs explicit task authorization.
 
-## 8. 本次交付分类与复核入口
+## 8. Classification of this delivery and the review entry point
 
-**已实现（本次交付）**：本设计文档、只读代码审计、官方资料核对、现有 accumulator 数值诊断及本地 evidence。验证命令与原始退出码见 `evidence/qwen38-extraction-design/commands.json`；数值诊断输出见 `numerics.log`。这里“已实现”只指交付物，不指提取系统已经实现。
+**Implemented (this delivery)**: this design document, a read-only code audit, cross-checking the official materials, numerical diagnostics of the existing accumulator, and local evidence. Verification commands and raw exit codes are in `evidence/qwen38-extraction-design/commands.json`; the numerical-diagnostic output is in `numerics.log`. Here, "implemented" refers only to the deliverable itself, not to the extraction system having been implemented.
 
-**未验证**：dev 实时资源与 GPU 拓扑；checkpoint 实际分片/磁盘占用；精确 HF 模块路径及 hook 张量布局；各 engine/量化/offload 组合在目标机器的运行正确性、吞吐、峰值；任何模型能力提升。
+**Unverified**: dev's live resources and GPU topology; the checkpoint's actual sharding/disk footprint; the exact HF module paths and hook tensor layout; the correctness, throughput, and peaks of each engine/quantization/offload combination on the target machine; any model capability improvement.
 
-**未完成**：可执行提取脚本改造、稳定 accumulator 修复、Rust/HTTP/MCP 新接线、旧逻辑删除、远端编译与真模型 13-task 提取、训练、生产上线验收。原因：本任务要求系统工程方案设计；本次没有加载模型或执行实现部署。不得以本文的拟议调用链宣称生产已经有引用。
+**Not done**: refactoring the executable extraction script, fixing the accumulator to be numerically stable, new Rust/HTTP/MCP wiring, removing old logic, remote compilation and the real-model 13-task extraction, training, and production go-live acceptance. Reason: this task called for a systems-engineering plan design; no model was loaded and no implementation was deployed this round. The proposed call chain in this document must not be used to claim production already references it.
 
-用户规则逐项复核：1 已列致命问题；2 明确失败策略且本次无运行 fallback；3 未作能力声明；4 三类状态及证据已区分；5 生产接线作为交付门槛，尚未实施；6 未执行禁止 git 命令；7 已将实施拆成可验收阶段；8 本次无重型任务/远端任务，故健康检查与清理未执行；9 未派 reviewer 或子代理。
+Review against the user rules, item by item: 1, the critical problems are listed; 2, an explicit failure strategy is given and this round has no runtime fallback; 3, no capability claim is made; 4, the three status categories and their evidence are distinguished; 5, production wiring is set as an acceptance gate, not yet implemented; 6, no forbidden git command was run; 7, implementation has been broken into acceptable stages; 8, no heavy task/remote task was run this round, so the health check and cleanup were not executed; 9, no reviewer or subagent was dispatched.
