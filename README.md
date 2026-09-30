@@ -2,7 +2,21 @@
 
 [![Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE) [![Rust 1.88+](https://img.shields.io/badge/Rust-1.88%2B-orange.svg)](Cargo.toml) [![MCP](https://img.shields.io/badge/MCP-stdio%20%7C%20SSE-purple.svg)](crates/gen-zero-service/README.md) [![Latency](https://img.shields.io/badge/latency-subsecond%20target-green.svg)](benchmarks/README.md)
 
-**A native decision engine for agents that need to choose, look ahead, and know when to stop.** Gen-Zero combines latent world-model simulation, search, and a safety gate in a Rust runtime exposed through a CLI and Model Context Protocol (MCP) server. The production server has no Python runtime dependency. Some semantic scoring paths use an optional Python bridge and fail closed when required evidence is unavailable.
+**A pure-Rust cognitive decision engine and runtime SDK for agents that need to choose, look ahead, and know when to stop.** Gen-Zero combines reflex plugins, latent world-model simulation, search, and a safety gate in a Rust runtime exposed through a CLI and Model Context Protocol (MCP) server. The production server has no Python runtime dependency. Some semantic scoring paths use an optional Python bridge and fail closed when required evidence is unavailable.
+
+- **Zero token:** a reflex decision takes a feature vector and returns a probability distribution over named candidates. No tokens are generated.
+- **Sub-millisecond reflex, measured:** predict p50 164 µs, p99 238 µs on one thread at input dim 1024 (see [Reflex runtime](#reflex-runtime)). The 100 µs target is not met at that shape on the measured machine.
+- **Hot-patchable:** hash-verified differential patches swap a plugin's weights under concurrent readers; the delta add uses AVX2 when the CPU has it.
+
+## Product boundary
+
+| This repository (`gen-zero`) | `gen-zero-research` and the tuning API (`tuning.gen-zero.ai`) |
+| :--- | :--- |
+| Rust runtime engine: reflex plugin inference, patch apply and hot-swap, feedback capture store, head-local online adaptation, planning, world-model simulation, safety gate, audit ledger, MCP/HTTP/CLI | Offline continuous learning: teacher training, curriculum, distillation, replay, self-play, large-model feature extraction |
+| Python client SDK (`python/gen_zero`: `client.py`, `protocol/`, `mcp/`, inference-side modules) | Compiling trained checkpoints into reflex plugins and patches |
+| Public benchmark data used for evaluation | Private training pools and datasets |
+
+A reflex plugin or patch is produced upstream and consumed here. This repository ships no training loop for reflex operators; `reflex-adapt` only takes one bounded, loss-gated gradient step on a single linear head.
 
 ## Why Gen-Zero?
 
@@ -155,30 +169,97 @@ the same as `git status` and proceeds. The claim "every bare destructive command
 
 ### Not measured
 
-Earlier versions of this README quoted sub-100 µs reflex latency, a 0.85 ms planning SLA, a 0.00 % versus
+Reflex predict latency is now measured (see [Reflex runtime](#reflex-runtime)); it does not meet
+100 µs at input dim 1024. Earlier versions of this README also quoted a 0.85 ms planning SLA, a 0.00 % versus
 14.2 % permutation flip rate against named LLMs, a 450 MB memory ceiling, and node-allocation and ledger
 throughput figures. No artifact in this repository measures them end to end. The planning latencies were
 hardcoded constants in `benchmarks/suites/latency_suite.py`. Treat latency and memory budgets
 as engineering targets, not measured guarantees. There is no evidence here for
 "100.0% zero breach", "<0.1ms reflexes", "infinite lookahead", or elimination of catastrophic
-forgetting. Planning uses finite horizons and compute budgets; experience replay is intended
-to mitigate forgetting and requires evaluation across tasks.
+forgetting. Planning uses finite horizons and compute budgets.
 
 ---
 
+## Reflex runtime
 
+A reflex plugin (`gen-zero-model::ReflexPlugin`) is a contractive low-rank recurrent operator
+over an input vector plus one or more named linear heads. It is stored as a hash-addressed
+archive and served from `gen-zero-service::ReflexRegistry`, which swaps plugins with `ArcSwap`
+so readers never block.
+
+### Commands
+
+```bash
+# Latency of predict, and of a live patch hot-swap under concurrent readers.
+./target/release/gen-zero reflex-bench --plugin base.gzr --threads 4 --iterations 20000 [--patch p.patch]
+
+# Differential patches: create refuses to write a patch that does not reproduce its target.
+./target/release/gen-zero reflex-patch-create --base base.gzr --target target.gzr --out p.patch
+./target/release/gen-zero reflex-patch-inspect --patch p.patch
+./target/release/gen-zero reflex-patch-apply --base base.gzr --patch p.patch --out applied.gzr
+
+# SQLite feedback store (WAL): counts, labels, pruning.
+./target/release/gen-zero reflex-feedback-status --db fb.sqlite3 --input-dim 1024
+./target/release/gen-zero reflex-feedback-record --db fb.sqlite3 --input-dim 1024 --trace-id <id> --label <candidate>
+./target/release/gen-zero reflex-feedback-prune --db fb.sqlite3 --input-dim 1024 --before-unix-ms <ms>
+
+# One head-local adaptation step on unconsumed labeled feedback, loss-gated, hot-swapped, checkpointed.
+./target/release/gen-zero reflex-adapt --plugin base.gzr --out adapted.gzr --db fb.sqlite3 --task <task> --head <head>
+
+# MCP / HTTP service (does not load reflex plugins yet, see below).
+./target/release/gen-zero serve --mode stdio
+```
+
+Build with `--release`. A debug `cargo run` of the same benchmark measured p50 6.7 ms, about 40 times slower.
+
+### Measured latency
+
+Plugin: input dim 1024, LoRA rank 16, 8 recurrence steps, one head with 4 candidates, written by
+`cargo run --release -p gen-zero-cli --example reflex_bench_fixture -- --out base.gzr --seed 1`.
+Its weights are seeded random, not trained: latency depends on the shapes, the decisions do not
+mean anything. Release build, 24-core x86_64 host shared with other jobs (loadavg 4.8 to 7.7 during
+the run), 20,000 predictions per thread.
+
+| Run | p50 | p90 | p99 | max |
+| :--- | ---: | ---: | ---: | ---: |
+| predict, 1 thread | 164 µs | 194 µs | 238 µs | 3.1 ms |
+| predict, 4 threads | 173 µs | 204 µs | 246 µs | 8.9 ms |
+| predict, 4 threads, with one live hot-swap | 172 µs | 197 µs | 225 µs | 4.2 ms |
+
+The live hot-swap itself (`apply_patch_live`: clone, add, fix-ups, two SHA-256 checks, publish)
+took 3.8 ms for a patch between two independently seeded plugins; readers kept serving during it.
+Latency is timed with microsecond resolution per call and includes the registry lookup.
+
+### Patch exactness and SIMD scope
+
+`base + (target - base)` is not always bit-identical to `target` in f32 (sign changes, very
+different magnitudes, overflow). A patch therefore carries the f32 delta plus a sparse list of
+exact fix-up values for every element where the add does not round to the target; the example
+patch above needed 5,183 of 54,308 elements. Apply adds the delta with AVX2 when the CPU supports
+it (runtime detection, scalar loop otherwise), writes the fix-ups, and rejects the result unless
+it hashes to the patch's declared target. SIMD is used only in patch diff and apply, not in predict.
+
+### Not wired yet
+
+`serve` does not load reflex plugins, expose a reflex predict route, or record reflex traces.
+`ReflexRegistry` is constructed only by the CLI commands above, and nothing in the serving path
+calls `SqliteFeedbackStore::insert_trace`, so `reflex-feedback-record` has no trace ids to label
+unless a library caller inserts traces. Mounting the registry and trace capture into `serve` is
+open work.
+
+---
 
 ## Two cores: Rust and Python
 
 | | Rust (`crates/`) | Python (`python/gen_zero/`) |
 | :--- | :--- | :--- |
-| Role | Serving gateway | Training, world model, simulation, research |
+| Role | Runtime engine and serving gateway | Client SDK, world model, simulation |
 | Entry points | `gen-zero serve` (MCP stdio / SSE), `reflex`, `entail`, `fold`, `keygen` | `GenZero()` client, `python -m gen_zero.cli semantic` HTTP service |
 | Reflex decision | `reflex` / `ask` verb, with semantic scoring through the Python bridge | `decide(mode="reflex")` |
 | Planning engines | six `PlanningEngine` impls (one-step-payoff approximations for three of them: GFlowNet, CFR, CP-SAT; MCTS is a genuine finite-horizon search, see above) | six experimental engines, Dynamic-K router |
 | World model | Wired deterministic 1024-d latent dynamics; not the trained Python neural model | Neural dynamics used by MCTS and latent simulation; MPC-CEM caveat above |
 | `simulate` / `what_if` / `audit_action` | Rust CLI, MCP and HTTP paths; distinct state/action contract | `GenZero` methods and `/v1/simulate`, `/v1/what_if`, `/v1/audit_action` |
-| Training and trajectory extraction | no | `scripts/extract_trajectories.py`, `scripts/train_world_model_dynamics.py` |
+| Training and trajectory extraction | no | world-model dynamics only (`scripts/extract_trajectories.py`, `scripts/train_world_model_dynamics.py`); every other training pipeline lives in `gen-zero-research` |
 | Safety gate | four-tier `PolicyGate`, semantic risk via bridge | same tiers, plus CP-SAT pre-filter |
 | Audit ledger | Appended for ask and pipeline decisions; optional durable checkpoints | no |
 
@@ -318,8 +399,11 @@ CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback cargo build --release -p gen-
 ```
 
 Subcommands include `serve`, `mcp`, `keygen`, `reflex`, `decide`, `simulate`,
-`what-if`, `audit`, `audit-ledger`, `entail`, and `fold`. Run `--help` on each
-subcommand for its input contract.
+`what-if`, `audit`, `audit-ledger`, `entail`, `fold`, and the reflex plugin
+commands `reflex-bench`, `reflex-patch-create`, `reflex-patch-apply`,
+`reflex-patch-inspect`, `reflex-feedback-status`, `reflex-feedback-record`,
+`reflex-feedback-prune`, and `reflex-adapt` (see [Reflex runtime](#reflex-runtime)).
+Run `--help` on each subcommand for its input contract.
 
 **Name collision with the Python CLI.** `python/pyproject.toml`'s `[project.scripts]` registers a
 console script also named `gen-zero` (`python/setup.py` is a thin legacy `setup()` shim that reads the
@@ -480,6 +564,8 @@ returns no plan.
 | Planning, simulation, gate, provenance | Public implementation | Deployment and integration options may vary |
 | Local 9B feature-adapter smoke test | Included (`examples/run_9b_demo.py`, 6.4MB adapter) | Included |
 | Dense multi-model manifold clusters (405B / 180B / 123B / 72B) | Private research assets and extraction pipelines not shipped | Contact maintainers for availability |
+| Reflex plugin runtime: inference, patch apply, hot-swap, feedback store, head-local adapt | Included | Included |
+| Reflex plugin training and patch compilation | Not included | `gen-zero-research` / tuning API |
 
 The private `gen-zero-research` repository contains extraction, offline datasets, and training loops. This public repository does not include those pipelines or model weights. The table describes repository boundaries, not a guarantee that a commercial edition or particular cluster is currently available.
 

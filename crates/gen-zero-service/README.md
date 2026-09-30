@@ -23,6 +23,14 @@ Spec 25 cognitive runtime (mount snapshots, tangent SSM, geometry gate).
 - `pipeline_verb`: the `pipeline` verb, exposing the planner's
   `ProductionPipeline` (`simulate`, `what_if`, `audit_action`, `decide`) over
   `zero`, MCP, HTTP (`POST /v1/pipeline/{op}`) and the CLI.
+- `reflex_registry`: `ReflexRegistry`, lock-free (`ArcSwap`) serving of
+  reflex plugins by task, with verified live patch hot-swap: readers keep the
+  plugin they loaded while a patched copy is published.
+- `reflex_adapter`: `ReflexOnlineAdapter`, one head-local softmax
+  cross-entropy step over unconsumed SQLite feedback, rejected unless the
+  batch loss does not regress, then hot-swapped and marked consumed.
+  Neither reflex module is mounted by `server` yet; only the CLI's
+  `reflex-*` commands construct them.
 - `server`: the dual-transport MCP server (Doc 07): a simd-json stdio parsing
   loop, and Axum 0.7 HTTP/SSE routing (`/sse`, `/message`, `/v1/decisions`,
   `/v1/decisions/stream`, ...).
@@ -54,6 +62,8 @@ Spec 25 cognitive runtime (mount snapshots, tangent SSM, geometry gate).
   `Proposal`, `Reject`, `RequestBinding`, `Snapshot`, `Version`: mount
   snapshots and the CAS registry.
 - `McpServer`: the dual-transport MCP server.
+- `ReflexRegistry`, `ReflexError`, `ReflexOnlineAdapter`, `AdaptationReport`:
+  reflex plugin serving and head-local adaptation.
 - `PolymorphicZeroEngine`, `ZeroContentBlock`, `ZeroToolOutcome`, `ZeroVerb`:
   the `zero` tool router and its outcome types.
 

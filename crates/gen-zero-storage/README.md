@@ -15,6 +15,10 @@ consumers.
 - `replay`: columnar causal replay buffer with Causal PER and SIMD vector
   batches. Contiguous columnar arrays for states, actions, rewards, next
   states and dones, backed by the Fenwick tree for prioritized sampling.
+- `reflex_store`: `SqliteFeedbackStore`, a WAL-mode SQLite store of reflex
+  traces (input and head features as zstd-compressed f16), their feedback
+  labels, and which traces a `reflex-adapt` cycle already consumed; prunes by
+  age and keeps unconsumed labels unless forced.
 - `snapshot`: golden snapshot manager with zstd chunked streaming and
   copy-on-write rollback. Sub-16ms atomic snapshot capture and rollback,
   with 85%+ memory footprint reduction from chunked zstd compression.
@@ -26,6 +30,8 @@ consumers.
 - `CausalSampleBatch`, `ColumnarCausalReplayBuffer`, `TrajectoryStep`: the
   columnar causal replay buffer.
 - `GoldenSnapshot`, `GoldenSnapshotManager`: snapshot capture and rollback.
+- `SqliteFeedbackStore`, `ReflexTraceRecord`, `ReflexFeedbackBatchItem`,
+  `ReflexFeedbackStatus`: the reflex feedback store.
 
 ## Dependencies
 
