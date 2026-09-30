@@ -61,6 +61,25 @@ pub enum Commands {
         /// on the default key before serving.
         #[arg(long, env = "GENZERO_MOUNT_ASSETS")]
         mount_assets: Option<String>,
+        /// Closed-loop tuning server base URL. When set, spawns the native
+        /// Rust feedback syncer and patch poller background tasks.
+        #[arg(long, env = "GENZERO_TUNING_ENDPOINT")]
+        tuning_endpoint: Option<String>,
+        /// Bearer token for the closed-loop tuning server.
+        #[arg(long, env = "GENZERO_TUNING_TOKEN")]
+        tuning_token: Option<String>,
+        /// Task name reported to the closed-loop tuning server.
+        #[arg(long, env = "GENZERO_TUNING_TASK", default_value = "synthetic")]
+        tuning_task: String,
+        /// Seconds between feedback-buffer sync attempts.
+        #[arg(long, env = "GENZERO_SYNC_INTERVAL_SECS", default_value_t = 30)]
+        sync_interval_secs: u64,
+        /// Seconds between tuning-patch poll attempts.
+        #[arg(long, env = "GENZERO_POLL_INTERVAL_SECS", default_value_t = 60)]
+        poll_interval_secs: u64,
+        /// Directory downloaded tuning patches are written to.
+        #[arg(long, env = "GENZERO_MODELS_DIR", default_value = "./models")]
+        models_dir: PathBuf,
     },
     /// Alias for MCP server command
     Mcp {
@@ -532,8 +551,25 @@ async fn main() -> anyhow::Result<()> {
             port,
             token,
             mount_assets,
+            tuning_endpoint,
+            tuning_token,
+            tuning_task,
+            sync_interval_secs,
+            poll_interval_secs,
+            models_dir,
         } => {
-            let server = McpServer::new().with_auth_token(token.clone());
+            let closed_loop =
+                tuning_endpoint.map(|tuning_endpoint| gen_zero_service::ClosedLoopConfig {
+                    tuning_endpoint: Some(tuning_endpoint),
+                    tuning_token,
+                    task: tuning_task,
+                    sync_interval_secs,
+                    poll_interval_secs,
+                    models_dir,
+                });
+            let server = McpServer::new()
+                .with_auth_token(token.clone())
+                .with_closed_loop_config(closed_loop);
             if let Some(path) = &mount_assets {
                 mount_assets_file(&server, path)?;
             }

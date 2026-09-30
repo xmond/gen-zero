@@ -379,6 +379,7 @@ async fn mcp_frames_reach_the_same_runtime() {
         engine: Arc::clone(&engine),
         auth_token: None,
         bridge_required: false,
+        closed_loop: None,
     };
     let call = |args: Value| {
         let mut buf = json!({
@@ -596,6 +597,7 @@ async fn http_and_mcp_ask_require_measured_sheaf_relaxation() {
         engine,
         auth_token: None,
         bridge_required: false,
+        closed_loop: None,
     };
     let mut frame = json!({"jsonrpc": "2.0", "id": 42, "method": "tools/call",
         "params": {"name": "zero", "arguments": req}})
@@ -652,6 +654,7 @@ async fn contradictory_decision_pins_reject_over_http_and_mcp() {
         engine,
         auth_token: None,
         bridge_required: false,
+        closed_loop: None,
     };
     let mut frame = json!({"jsonrpc": "2.0", "id": 43, "method": "tools/call",
         "params": {"name": "zero", "arguments": req}})
