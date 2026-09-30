@@ -166,8 +166,18 @@ async fn mcp_tools_list_advertises_causal_fold() {
             "tiered",
             "left",
             "weighted_tropical",
-            "weighted_logprob"
+            "weighted_logprob",
+            "soft"
         ])
+    );
+    assert_eq!(schema["properties"]["entropy_threshold"]["minimum"], 0);
+    assert_eq!(
+        schema["properties"]["soft_sets"]["items"]["items"]["required"],
+        json!(["relation", "p"])
+    );
+    assert_eq!(
+        schema["anyOf"][2]["required"],
+        json!(["soft_sets", "genders"])
     );
     assert_eq!(
         schema["properties"]["sets"]["items"]["items"]["type"],
@@ -187,6 +197,11 @@ async fn mcp_tools_list_advertises_causal_fold() {
         .filter_map(|a| a.as_str())
         .collect();
     assert!(zero_actions.contains(&"causal_fold"), "{zero_actions:?}");
+    assert!(
+        zero_actions.contains(&"graph_coarse_grain"),
+        "{zero_actions:?}"
+    );
+    assert!(zero_actions.contains(&"graph_zoom"), "{zero_actions:?}");
 }
 
 #[tokio::test]
@@ -676,5 +691,105 @@ async fn tiered_band0_bypasses_scoring_but_not_invalid_input() {
         assert_eq!(body["error"]["code"], "CausalFoldRefused");
         assert_eq!(body["result"]["meta"]["causal_fold"]["dispatched_band"], 1);
         assert!(body["result"]["meta"]["causal_fold"]["candidates"].is_array());
+    }
+}
+
+// -------------------------------------------------------------- strategy soft
+
+/// `T_soft(10, 11, Female) = {14: .9, 15: .1}` from counts 9 and 1.
+fn soft_body(entropy_threshold: f64) -> Value {
+    json!({
+        "edges": [10, 11],
+        "genders": ["Male", "Male", "Female"],
+        "weights": [
+            {"r1": 10, "r2": 11, "gender": "Female", "relation": 14, "count": 9},
+            {"r1": 10, "r2": 11, "gender": "Female", "relation": 15, "count": 1},
+        ],
+        "strategy": "soft",
+        "entropy_threshold": entropy_threshold,
+    })
+}
+
+#[tokio::test]
+async fn http_soft_concludes_below_the_entropy_threshold() {
+    let (status, body) = post(&engine(), "/v1/causal_fold", soft_body(0.5)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let cf = &body["result"]["meta"]["causal_fold"];
+    assert_eq!(cf["strategy"], "soft", "{body}");
+    assert_eq!(cf["predicted"], 14, "{body}");
+    assert!(
+        (cf["probability"].as_f64().unwrap() - 0.9).abs() < 1e-5,
+        "{body}"
+    );
+    let h = -(0.9f64 * 0.9f64.ln() + 0.1 * 0.1f64.ln());
+    assert!((cf["entropy"].as_f64().unwrap() - h).abs() < 1e-5, "{body}");
+    assert_eq!(cf["distribution"][1]["relation"], 15, "{body}");
+    assert_eq!(cf["threshold_calibrated"], false, "{body}");
+    assert_eq!(cf["soft_axioms"], 1, "{body}");
+}
+
+#[tokio::test]
+async fn http_soft_refuses_above_the_entropy_threshold_and_on_unclosed_mass() {
+    let (status, body) = post(&engine(), "/v1/causal_fold", soft_body(0.2)).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["error"]["code"], "CausalFoldRefused", "{body}");
+    assert!(
+        body["result"]["rejection"]["detail"]
+            .as_str()
+            .unwrap()
+            .contains("exceeds tau_H"),
+        "{body}"
+    );
+
+    // Half the first leaf is on relation 12, which has no kernel with 11.
+    let mut open = soft_body(2.0);
+    open.as_object_mut().unwrap().remove("edges");
+    open["soft_sets"] = json!([
+        [{"relation": 10, "p": 0.4}, {"relation": 12, "p": 0.6}],
+        [{"relation": 11, "p": 1.0}],
+    ]);
+    let (status, body) = post(&engine(), "/v1/causal_fold", open).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert!(
+        body["result"]["rejection"]["detail"]
+            .as_str()
+            .unwrap()
+            .contains("unclosed mass"),
+        "{body}"
+    );
+}
+
+#[tokio::test]
+async fn http_soft_request_faults_are_400() {
+    let mut no_threshold = soft_body(0.5);
+    no_threshold
+        .as_object_mut()
+        .unwrap()
+        .remove("entropy_threshold");
+    let mut no_weights = soft_body(0.5);
+    no_weights.as_object_mut().unwrap().remove("weights");
+    let mut chart_with_threshold = two_plus_two_body("chart");
+    chart_with_threshold["entropy_threshold"] = json!(0.5);
+    let mut margin = soft_body(0.5);
+    margin["margin_threshold"] = json!(0.1);
+    let mut negative = soft_body(0.5);
+    negative["entropy_threshold"] = json!(-1.0);
+    let mut bad_leaf = soft_body(0.5);
+    bad_leaf.as_object_mut().unwrap().remove("edges");
+    bad_leaf["soft_sets"] = json!([[{"relation": 10, "p": 0.5}], [{"relation": 11, "p": 1.0}]]);
+    let mut soft_sets_on_chart = two_plus_two_body("chart");
+    soft_sets_on_chart["soft_sets"] = json!([[{"relation": 10, "p": 1.0}]]);
+    for body in [
+        no_threshold,
+        no_weights,
+        chart_with_threshold,
+        margin,
+        negative,
+        bad_leaf,
+        soft_sets_on_chart,
+    ] {
+        let (status, out) = post(&engine(), "/v1/causal_fold", body.clone()).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body} -> {out}");
+        assert_eq!(out["error"]["code"], "InvalidParams", "{out}");
     }
 }

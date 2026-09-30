@@ -63,7 +63,7 @@ use gen_zero_core::{
 use gen_zero_gate::{PolicyGate, PolicyTier, SemanticRisk};
 use gen_zero_lod::{
     AxiomWeights, FoldOutcome, Gender, GeometryParams, LodGraph, LogProbSemiring, RelId,
-    RelationKey, RelationSemiring, ResultSet, TropicalSemiring, WeightedFoldOutcome,
+    RelationKey, RelationSemiring, ResultSet, SoftResultSet, TropicalSemiring, WeightedFoldOutcome,
 };
 use gen_zero_model::{
     contains_raw_control_marker, ActionETFChoiceHead, MetricKind, DEFAULT_UNCALIBRATED_TEMPERATURE,
@@ -125,6 +125,10 @@ pub enum ZeroVerb {
     GraphPrune,
     /// Banach fixed-point confidence evolution (or dry run) on the live LodGraph.
     GraphEvolve,
+    /// Coarse-grain a cluster of nodes into one summary node on a coarser band.
+    GraphCoarseGrain,
+    /// Move one node one Lod band in or out, or to the band its coordinate implies.
+    GraphZoom,
 }
 
 impl ZeroVerb {
@@ -141,6 +145,8 @@ impl ZeroVerb {
             Self::GraphPpr => Some(GraphOp::Ppr),
             Self::GraphPrune => Some(GraphOp::Prune),
             Self::GraphEvolve => Some(GraphOp::Evolve),
+            Self::GraphCoarseGrain => Some(GraphOp::CoarseGrain),
+            Self::GraphZoom => Some(GraphOp::Zoom),
             _ => None,
         }
     }
@@ -171,6 +177,8 @@ impl ZeroVerb {
                 "graph_ppr" => return Ok(Self::GraphPpr),
                 "graph_prune" => return Ok(Self::GraphPrune),
                 "graph_evolve" => return Ok(Self::GraphEvolve),
+                "graph_coarse_grain" => return Ok(Self::GraphCoarseGrain),
+                "graph_zoom" => return Ok(Self::GraphZoom),
                 _ => {}
             }
         }
@@ -1127,12 +1135,26 @@ struct CausalFoldAxiomWeightWire {
     count: u64,
 }
 
-/// Request: `{edges, genders, axioms?, strategy?}` or `{sets, gender, axioms?}`.
-/// Unknown keys are refused, not ignored. Missing `axioms` means an empty
-/// table; missing `strategy` means `"tiered"` with weights, otherwise `"chart"`.
+/// One `(relation, probability)` entry of a soft leaf.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SoftEntryWire {
+    relation: RelId,
+    p: f32,
+}
+
+/// Request: `{edges, genders, axioms?, strategy?}` or `{sets, gender, axioms?}`,
+/// or for `strategy: "soft"` `{edges | soft_sets, genders, weights, axioms?,
+/// entropy_threshold}`. Unknown keys are refused, not ignored. Missing `axioms`
+/// means an empty table; missing `strategy` means `"tiered"` with weights,
+/// otherwise `"chart"`.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CausalFoldWire {
+    #[serde(default)]
+    soft_sets: Option<Vec<Vec<SoftEntryWire>>>,
+    #[serde(default)]
+    entropy_threshold: Option<f32>,
     #[serde(default)]
     weights: Option<Vec<CausalFoldAxiomWeightWire>>,
     #[serde(default)]
@@ -1742,7 +1764,9 @@ impl PolymorphicZeroEngine {
             | ZeroVerb::GraphRecall
             | ZeroVerb::GraphPpr
             | ZeroVerb::GraphPrune
-            | ZeroVerb::GraphEvolve => {
+            | ZeroVerb::GraphEvolve
+            | ZeroVerb::GraphCoarseGrain
+            | ZeroVerb::GraphZoom => {
                 let op = verb.graph_op().expect("matched a graph verb");
                 let args = arguments.clone();
                 let graph = Arc::clone(&self.graph);
@@ -3633,7 +3657,8 @@ impl PolymorphicZeroEngine {
     /// never picks among survivors. `meta.causal_fold.conflict_keys` counts
     /// the conflict keys in the table so a caller can see one was present.
     /// Graph verbs: `graph_deposit`, `graph_recall`, `graph_ppr`, `graph_prune`,
-    /// `graph_evolve` on this engine's live graph. See [`crate::graph_verb`].
+    /// `graph_evolve`, `graph_coarse_grain`, `graph_zoom` on this engine's live
+    /// graph. See [`crate::graph_verb`].
     fn handle_graph(
         verb: ZeroVerb,
         op: GraphOp,
@@ -3738,15 +3763,32 @@ impl PolymorphicZeroEngine {
                 "causal_fold.strategy must not be null",
             ));
         }
-        if block.get("sets").is_some_and(Value::is_null) {
-            return Err(Rejection::invalid(
-                "causal_fold",
-                "causal_fold.sets must not be null",
-            ));
+        for field in ["sets", "soft_sets", "entropy_threshold"] {
+            if block.get(field).is_some_and(Value::is_null) {
+                return Err(Rejection::invalid(
+                    "causal_fold",
+                    format!("causal_fold.{field} must not be null"),
+                ));
+            }
         }
         // Inspect lengths in the borrowed JSON before cloning/deserializing or
         // allocating any relation sets. HTTP JSON parsing precedes this gate.
         let invalid = |detail: &str| Err(Rejection::invalid("causal_fold", detail));
+        if let Some(sets) = block.get("soft_sets").and_then(Value::as_array) {
+            if sets.len() > MAX_CAUSAL_FOLD_EDGES {
+                return invalid("causal_fold.soft_sets must contain 1 to 64 sets");
+            }
+            let mut total = 0;
+            for ids in sets.iter().filter_map(Value::as_array) {
+                if ids.len() > MAX_CAUSAL_FOLD_SET_RELATIONS {
+                    return invalid("causal_fold.soft_sets exceeds single-set relation cap (64)");
+                }
+                total += ids.len();
+                if total > MAX_CAUSAL_FOLD_TOTAL_SET_RELATIONS {
+                    return invalid("causal_fold.soft_sets exceeds total relation cap (256)");
+                }
+            }
+        }
         if let Some(sets) = block.get("sets").and_then(Value::as_array) {
             if sets.len() > MAX_CAUSAL_FOLD_EDGES {
                 return invalid("causal_fold.sets must contain 1 to 64 sets");
@@ -3849,6 +3891,21 @@ impl PolymorphicZeroEngine {
                 chain.push(ResultSet::from_ids(ids.iter().copied()));
             }
             Some((chain, gender))
+        } else if let Some(soft_sets) = &wire.soft_sets {
+            if !wire.edges.is_empty() {
+                return invalid("cannot provide both causal_fold.edges and causal_fold.soft_sets");
+            }
+            if soft_sets.is_empty() {
+                return invalid("causal_fold.soft_sets must contain 1 to 64 sets");
+            }
+            if wire.genders.len() != soft_sets.len() + 1 {
+                return invalid(&format!(
+                    "causal_fold.genders must have soft_sets.len() + 1 = {} entries, got {}",
+                    soft_sets.len() + 1,
+                    wire.genders.len()
+                ));
+            }
+            None
         } else {
             if wire.edges.is_empty() {
                 return refuse(
@@ -3892,13 +3949,14 @@ impl PolymorphicZeroEngine {
             Some("left") => "left",
             Some("weighted_tropical") => "weighted_tropical",
             Some("weighted_logprob") => "weighted_logprob",
+            Some("soft") => "soft",
             Some(other) => {
                 return refuse(
                     Rejection::invalid(
                         "causal_fold",
                         format!(
                             "unknown causal_fold.strategy {other:?}; expected chart, \
-                             tiered, left, weighted_tropical or weighted_logprob"
+                             tiered, left, weighted_tropical, weighted_logprob or soft"
                         ),
                     ),
                     meta,
@@ -3907,14 +3965,30 @@ impl PolymorphicZeroEngine {
         };
 
         let weighted = matches!(strategy, "weighted_tropical" | "weighted_logprob");
-        if weighted && wire.weights.as_ref().is_none_or(Vec::is_empty) {
-            return invalid("causal_fold.weights required for weighted strategies");
+        let soft = strategy == "soft";
+        if (weighted || soft) && wire.weights.as_ref().is_none_or(Vec::is_empty) {
+            return invalid("causal_fold.weights required for weighted and soft strategies");
         }
         if !weighted
             && strategy != "tiered"
+            && !soft
             && (block.get("weights").is_some() || block.get("margin_threshold").is_some())
         {
             return invalid("causal_fold.weights and margin_threshold require a weighted strategy");
+        }
+        if soft && block.get("margin_threshold").is_some() {
+            return invalid(
+                "causal_fold.margin_threshold does not apply to soft; its gate is entropy_threshold",
+            );
+        }
+        if soft != wire.entropy_threshold.is_some() {
+            return invalid(
+                "causal_fold.entropy_threshold is required by strategy soft and accepted by no \
+                 other; there is no default, since no threshold is calibrated",
+            );
+        }
+        if !soft && wire.soft_sets.is_some() {
+            return invalid("causal_fold.soft_sets requires strategy soft");
         }
         if block.get("weights").is_some() && wire.weights.as_ref().is_none_or(Vec::is_empty) {
             return invalid("causal_fold.weights must be a non-empty array");
@@ -4016,6 +4090,9 @@ impl PolymorphicZeroEngine {
                     );
                 }
             }
+        }
+        if soft {
+            return Self::soft_causal_fold(&wire, sem, meta, axioms_count, conflict_keys);
         }
         let band0 =
             (strategy == "tiered").then(|| sem.chart_fold_chain(&wire.edges, &wire.genders));
@@ -4157,6 +4234,19 @@ impl PolymorphicZeroEngine {
                     rejection: None,
                 }
             }
+            FoldOutcome::SoftConcluded { .. } => {
+                // Only `fold_chain_soft` makes this outcome, and the soft
+                // strategy returned above.
+                refuse(
+                    Rejection {
+                        code: "InternalError".to_string(),
+                        stage: "causal_fold".to_string(),
+                        detail: format!("strategy {strategy} produced a soft outcome"),
+                        http_status: 500,
+                    },
+                    meta,
+                )
+            }
             FoldOutcome::Refused {
                 step_failed,
                 reason,
@@ -4185,6 +4275,131 @@ impl PolymorphicZeroEngine {
                     meta,
                 )
             }
+        }
+    }
+
+    /// `causal_fold` with `strategy: "soft"`: the soft kernels are the relative
+    /// frequencies of `weights` (`count / total` per key, nothing held back), a
+    /// `Single` discrete axiom is a delta kernel, and the leaves are deltas on
+    /// `edges` or the caller's `soft_sets`. The fold is
+    /// [`RelationSemiring::fold_chain_soft`] gated on the caller's
+    /// `entropy_threshold`; a refusal is 422 `CausalFoldRefused`.
+    fn soft_causal_fold(
+        wire: &CausalFoldWire,
+        mut sem: RelationSemiring,
+        meta: Value,
+        axioms_count: usize,
+        conflict_keys: usize,
+    ) -> ZeroToolOutcome {
+        let refuse =
+            |r: Rejection, meta: Value| ZeroToolOutcome::rejected(ZeroVerb::CausalFold, r, meta);
+        let invalid =
+            |detail: String| refuse(Rejection::invalid("causal_fold", detail), meta.clone());
+        let tau_h = wire
+            .entropy_threshold
+            .expect("soft requires entropy_threshold");
+        if !(tau_h.is_finite() && tau_h >= 0.0) {
+            return invalid(format!(
+                "causal_fold.entropy_threshold must be finite and >= 0, got {tau_h}"
+            ));
+        }
+        let mut counts = std::collections::BTreeMap::<RelationKey, Vec<(RelId, u64)>>::new();
+        for w in wire.weights.as_ref().expect("validated weights") {
+            counts
+                .entry(RelationKey::new(w.r1, w.r2, w.gender))
+                .or_default()
+                .push((w.relation, w.count));
+        }
+        let soft_axioms = counts.len();
+        for (key, entries) in counts {
+            match SoftResultSet::from_counts(&entries, 0.0) {
+                Ok(kernel) => sem.insert_soft_axiom(key, kernel),
+                Err(e) => return invalid(format!("invalid causal_fold.weights at {key:?}: {e}")),
+            }
+        }
+        let chain: Vec<SoftResultSet> = match &wire.soft_sets {
+            Some(sets) => {
+                let mut chain = Vec::with_capacity(sets.len());
+                for (i, set) in sets.iter().enumerate() {
+                    match SoftResultSet::from_probs(set.iter().map(|e| (e.relation, e.p))) {
+                        Ok(leaf) => chain.push(leaf),
+                        Err(e) => return invalid(format!("causal_fold.soft_sets[{i}]: {e}")),
+                    }
+                }
+                chain
+            }
+            None => wire
+                .edges
+                .iter()
+                .map(|&r| SoftResultSet::delta(r))
+                .collect(),
+        };
+        let mut meta = meta;
+        meta["causal_fold"] = json!({
+            "strategy": "soft",
+            "entropy_threshold": tau_h,
+            "threshold_calibrated": false,
+            "axioms": axioms_count,
+            "soft_axioms": soft_axioms,
+            "conflict_keys": conflict_keys,
+            "edges": chain.len(),
+        });
+        match sem.fold_chain_soft(&chain, &wire.genders, tau_h) {
+            FoldOutcome::SoftConcluded {
+                predicted,
+                probability,
+                entropy,
+                steps,
+                distribution,
+                unclosed_mass,
+                step_entropies,
+            } => {
+                let cf = &mut meta["causal_fold"];
+                cf["predicted"] = json!(predicted);
+                cf["probability"] = json!(probability);
+                cf["entropy"] = json!(entropy);
+                cf["steps"] = json!(steps);
+                cf["distribution"] = json!(distribution
+                    .iter()
+                    .map(|&(relation, p)| json!({"relation": relation, "p": p}))
+                    .collect::<Vec<_>>());
+                cf["unclosed_mass"] = json!(unclosed_mass);
+                cf["step_entropies"] = json!(step_entropies);
+                ZeroToolOutcome {
+                    verb: ZeroVerb::CausalFold,
+                    is_error: false,
+                    content: text_block(format!(
+                        "Concluded: relation {predicted} with p {probability:.4}, entropy \
+                         {entropy:.4} nats <= {tau_h} in {steps} steps (strategy soft)"
+                    )),
+                    meta,
+                    rejection: None,
+                }
+            }
+            FoldOutcome::Refused {
+                step_failed,
+                reason,
+            } => {
+                meta["causal_fold"]["step_failed"] = json!(step_failed);
+                refuse(
+                    Rejection {
+                        code: "CausalFoldRefused".to_string(),
+                        stage: "causal_fold".to_string(),
+                        detail: reason,
+                        http_status: 422,
+                    },
+                    meta,
+                )
+            }
+            FoldOutcome::Concluded { .. } => refuse(
+                Rejection {
+                    code: "InternalError".to_string(),
+                    stage: "causal_fold".to_string(),
+                    detail: "the soft fold produced a discrete outcome".to_string(),
+                    http_status: 500,
+                },
+                meta,
+            ),
         }
     }
 

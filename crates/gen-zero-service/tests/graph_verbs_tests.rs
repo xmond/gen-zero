@@ -686,3 +686,161 @@ fn graph_geometry_configuration_fails_closed() {
     )
     .is_err());
 }
+
+/// A unit-ball coordinate at Euclidean radius `r` along hyperbolic axis `axis`.
+fn radial(r: f64, axis: usize) -> Value {
+    let mut h = [0.0; 4];
+    h[axis] = r;
+    json!({"hyperbolic": h, "spherical": [1, 0, 0, 0], "euclidean": [0, 0, 0, 0, 0, 0, 0, 0]})
+}
+
+/// Normalized depth 2 artanh(0.9998) ~ 9.21: band 0. 2 artanh(0.995) ~ 5.99: band 1.
+const DEEP: f64 = 0.9998;
+const MID: f64 = 0.995;
+
+async fn deposit_leaves(engine: &PolymorphicZeroEngine) -> ZeroToolOutcome {
+    let leaf = |entity: u64, axis: usize| {
+        json!({"entity_id": entity, "label": format!("leaf {entity}"), "status": "validated",
+               "coord": radial(DEEP, axis), "hdc": [entity, 0, 0, 0], "confidence": 0.9})
+    };
+    run(
+        engine,
+        json!({"action": "graph_deposit", "graph": {"nodes": [leaf(1, 0), leaf(2, 1), leaf(3, 2)]}}),
+    )
+    .await
+}
+
+fn coarse_grain_request(dry_run: bool) -> Value {
+    json!({"action": "graph_coarse_grain", "graph": {
+        "members": [{"entity_id": 1}, {"entity_id": 2}, {"entity_id": 3}],
+        "entity_id": 500, "coord": radial(MID, 0), "hdc": [0, 0, 0, 0], "dry_run": dry_run,
+    }})
+}
+
+#[tokio::test]
+async fn coarse_grain_and_zoom_run_through_the_zero_entry() {
+    let engine = engine();
+    let deposited = deposit_leaves(&engine).await;
+    assert!(!deposited.is_error, "{:?}", deposited.meta);
+    // No `band` given: every leaf gets the band its coordinate implies.
+    for n in deposited.meta["graph_op"]["nodes"].as_array().unwrap() {
+        assert_eq!(n["band"], 0, "{n}");
+    }
+
+    let dry = run(&engine, coarse_grain_request(true)).await;
+    assert!(!dry.is_error, "{:?}", dry.meta);
+    assert_eq!(dry.verb, ZeroVerb::GraphCoarseGrain);
+    assert_eq!(dry.meta["graph_op"]["applied"], false);
+    assert_eq!(dry.meta["graph_op"]["graph"]["nodes"], 3);
+    assert_eq!(dry.meta["graph_op"]["graph"]["csr_edges"], 0);
+
+    let out = run(&engine, coarse_grain_request(false)).await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    assert_eq!(op["summary"]["entity_id"], 500);
+    assert_eq!(op["summary"]["band"], 1);
+    assert_eq!(op["edge_type"], "coarse_grain");
+    assert_eq!(op["graph"]["nodes"], 4);
+    assert_eq!(op["graph"]["csr_edges"], 3);
+    assert_eq!(op["graph"]["pending_edges"], 0);
+
+    // The coarse-grain edges are in the CSR: diffusion from a leaf reaches the summary.
+    let ppr = run(
+        &engine,
+        json!({"action": "graph_ppr", "graph": {"seeds": [{"entity_id": 1, "weight": 1.0}], "top_k": 4}}),
+    )
+    .await;
+    let results = ppr.meta["graph_op"]["results"].as_array().unwrap();
+    let summary = results.iter().find(|r| r["entity_id"] == 500).unwrap();
+    assert!(summary["score"].as_f64().unwrap() > 0.0, "{results:?}");
+
+    // The summary cannot sink to its members' band; it can rise.
+    let sink = run(
+        &engine,
+        json!({"action": "graph_zoom", "graph": {"entity_id": 500, "direction": "in"}}),
+    )
+    .await;
+    assert!(sink.is_error);
+    assert_eq!(code(&sink), "InvalidParams");
+    let rise_dry = run(
+        &engine,
+        json!({"action": "graph_zoom", "graph": {"entity_id": 500, "direction": "out", "dry_run": true}}),
+    )
+    .await;
+    assert_eq!(rise_dry.verb, ZeroVerb::GraphZoom);
+    assert_eq!(rise_dry.meta["graph_op"]["to_band"], 2);
+    assert_eq!(rise_dry.meta["graph_op"]["applied"], false);
+    let rise = run(
+        &engine,
+        json!({"action": "graph_zoom", "graph": {"entity_id": 500, "direction": "out"}}),
+    )
+    .await;
+    assert!(!rise.is_error, "{:?}", rise.meta);
+    assert_eq!(rise.meta["graph_op"]["from_band"], 1);
+    assert_eq!(rise.meta["graph_op"]["node"]["band"], 2);
+    // Back to the band its coordinate implies.
+    let back = run(
+        &engine,
+        json!({"action": "graph_zoom", "graph": {"entity_id": 500, "direction": "to_coord"}}),
+    )
+    .await;
+    assert!(!back.is_error, "{:?}", back.meta);
+    assert_eq!(back.meta["graph_op"]["to_band"], 1);
+
+    // Past the top band is a 409; a member already in a cluster is refused.
+    let top = run(
+        &engine,
+        json!({"action": "graph_deposit", "graph": {"nodes": [
+            {"entity_id": 9, "label": "root", "status": "validated", "coord": origin(),
+             "hdc": [0, 0, 0, 0], "confidence": 0.5}]}}),
+    )
+    .await;
+    assert_eq!(top.meta["graph_op"]["nodes"][0]["band"], 3);
+    let past = run(
+        &engine,
+        json!({"action": "graph_zoom", "graph": {"entity_id": 9, "direction": "out"}}),
+    )
+    .await;
+    assert_eq!(code(&past), "BandOutOfRange");
+    let again = run(&engine, coarse_grain_request(false)).await;
+    assert!(again.is_error);
+    assert_eq!(code(&again), "InvalidParams");
+}
+
+#[tokio::test]
+async fn coarse_grain_edges_and_requests_fail_closed() {
+    let engine = engine();
+    deposit_leaves(&engine).await;
+    // A deposited coarse_grain edge must go from a finer band to a coarser one.
+    let flat = run(
+        &engine,
+        json!({"action": "graph_deposit", "graph": {"edges": [
+            {"source": {"entity_id": 1}, "target": {"entity_id": 2}, "type": "coarse_grain", "weight": 1.0}]}}),
+    )
+    .await;
+    assert!(flat.is_error);
+    assert_eq!(code(&flat), "InvalidParams");
+
+    // A summary as deep as its members is refused and changes nothing.
+    let mut deep = coarse_grain_request(false);
+    deep["graph"]["coord"] = radial(DEEP, 3);
+    let refused = run(&engine, deep).await;
+    assert!(refused.is_error);
+    for bad in [
+        json!({"action": "graph_coarse_grain", "graph": {"members": [], "entity_id": 500,
+               "coord": radial(MID, 0), "hdc": [0, 0, 0, 0]}}),
+        json!({"action": "graph_coarse_grain", "graph": {"members": [{"entity_id": 404}],
+               "entity_id": 500, "coord": radial(MID, 0), "hdc": [0, 0, 0, 0]}}),
+        json!({"action": "graph_zoom", "graph": {"entity_id": 1, "direction": "sideways"}}),
+        json!({"action": "graph_zoom", "graph": {"entity_id": 1, "direction": "in", "extra": 1}}),
+    ] {
+        assert!(run(&engine, bad.clone()).await.is_error, "{bad}");
+    }
+    let ppr = run(
+        &engine,
+        json!({"action": "graph_ppr", "graph": {"seeds": [{"entity_id": 1, "weight": 1.0}], "top_k": 1}}),
+    )
+    .await;
+    assert_eq!(ppr.meta["graph_op"]["graph"]["nodes"], 3);
+    assert_eq!(ppr.meta["graph_op"]["graph"]["csr_edges"], 0);
+}

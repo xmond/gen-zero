@@ -1482,7 +1482,7 @@ impl ProductManifold {
 /// Norm tolerance for f32 sphere coordinates (f32 rounding of a unit vector).
 const COORD_SPHERE_TOL: f64 = 4e-6;
 /// Smallest `1 - c ||x_H||^2` a constructor accepts.
-const COORD_BOUNDARY_FLOOR: f32 = 1e-4;
+pub(crate) const COORD_BOUNDARY_FLOOR: f32 = 1e-4;
 
 /// 16-coordinate chart of `H_{-c}^4 x R^8 x S_R^3` for Lod graph nodes.
 ///

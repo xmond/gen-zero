@@ -10,6 +10,16 @@
 //!   falsified and revoked. `dry_run` reports and rolls back.
 //! - `graph_evolve`: optionally retract such evidence, then evolve every
 //!   confidence to the fixed point. `dry_run` reports and rolls back.
+//! - `graph_coarse_grain`: insert a summary node for a cluster of member nodes
+//!   on the band its coordinate implies (strictly coarser than every member),
+//!   link each member to it with a `CoarseGrain` edge and flush. `dry_run`
+//!   reports and rolls back.
+//! - `graph_zoom`: move one node one band `in` or `out`, or `to_coord`: to the
+//!   band its coordinate implies. The coarse-grain order is kept. `dry_run`
+//!   reports and rolls back.
+//!
+//! A deposited node without `band` gets the band its coordinate implies
+//! (`LodNode::derive_band_from_coord`).
 //!
 //! The graph's geometry (curvature, sphere radius, metric weights) is fixed when
 //! the engine starts (`GENZERO_GRAPH_GEOMETRY`) and echoed in every response.
@@ -25,7 +35,7 @@ use crate::cognitive::Rejection;
 use crate::zero::action_id;
 use gen_zero_lod::{
     EdgeType, EpistemicStatus, FixedPointReport, LodBand, LodError, LodGraph, LodNode,
-    MixedCurvatureCoord,
+    MixedCurvatureCoord, ZoomDirection,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -61,7 +71,7 @@ pub const MAX_EVOLVE_RETRACTIONS: usize = 256;
 /// Most status transitions listed in one response; the total is always reported.
 pub const MAX_LISTED_TRANSITIONS: usize = 256;
 
-/// The five graph operations.
+/// The seven graph operations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GraphOp {
     Deposit,
@@ -69,6 +79,8 @@ pub enum GraphOp {
     Ppr,
     Prune,
     Evolve,
+    CoarseGrain,
+    Zoom,
 }
 
 impl GraphOp {
@@ -79,6 +91,8 @@ impl GraphOp {
             Self::Ppr => "graph_ppr",
             Self::Prune => "graph_prune",
             Self::Evolve => "graph_evolve",
+            Self::CoarseGrain => "graph_coarse_grain",
+            Self::Zoom => "graph_zoom",
         }
     }
 }
@@ -104,7 +118,8 @@ struct NodeSpec {
     entity_id: Option<u64>,
     action: Option<String>,
     label: String,
-    band: u8,
+    /// Absent: the band the coordinate implies.
+    band: Option<u8>,
     status: String,
     coord: CoordSpec,
     hdc: [u64; 4],
@@ -183,6 +198,26 @@ struct EvolveSpec {
     max_steps: Option<usize>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CoarseGrainSpec {
+    members: Vec<EntityRef>,
+    entity_id: Option<u64>,
+    action: Option<String>,
+    coord: CoordSpec,
+    hdc: [u64; 4],
+    dry_run: Option<bool>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ZoomSpec {
+    entity_id: Option<u64>,
+    action: Option<String>,
+    direction: String,
+    dry_run: Option<bool>,
+}
+
 /// Resolved parameters of one confidence evolution.
 #[derive(Clone, Copy)]
 struct EvolveParams {
@@ -235,6 +270,7 @@ fn invalid(detail: impl Into<String>) -> Rejection {
 fn graph_rejection(e: LodError) -> Rejection {
     let (code, status) = match &e {
         LodError::FixedPointDiverged { .. } => ("FixedPointDiverged", 422),
+        LodError::SpineBreatheOutOfBounds { .. } => ("BandOutOfRange", 409),
         LodError::DuplicateEntity(_) => ("DuplicateEntity", 409),
         LodError::EntityNotFound(_) | LodError::NodeNotFound(_) => ("EntityNotFound", 404),
         LodError::CsrInvariant(_) | LodError::FlushConflict | LodError::CheckpointRejected(_) => {
@@ -286,6 +322,10 @@ fn parse_status(name: &str, allow_axiomatic: bool) -> Result<EpistemicStatus, Re
             "unknown status `{other}`; expected hypothesized | validated | falsified"
         ))),
     }
+}
+
+fn band_level(band: LodBand) -> u8 {
+    band as u8
 }
 
 fn parse_band(band: u8) -> Result<LodBand, Rejection> {
@@ -346,6 +386,7 @@ fn node_json(graph: &LodGraph, id: u32) -> Value {
             "entity_id": n.entity_id,
             "label": n.label,
             "status": status_name(n.status),
+            "band": band_level(n.band),
             "prior": n.prior,
             "confidence": n.confidence,
         }),
@@ -365,6 +406,8 @@ pub fn execute_graph(
         GraphOp::Ppr => ppr(graph, parse(block, op)?)?,
         GraphOp::Prune => prune(graph, parse(block, op)?)?,
         GraphOp::Evolve => evolve(graph, parse(block, op)?)?,
+        GraphOp::CoarseGrain => coarse_grain(graph, parse(block, op)?)?,
+        GraphOp::Zoom => zoom(graph, parse(block, op)?)?,
     };
     result["op"] = json!(op.name());
     result["graph"] = graph_meta(graph);
@@ -415,11 +458,22 @@ fn deposit(
                 "nodes[{i}].label must be 1..={MAX_LABEL_BYTES} bytes"
             )));
         }
-        let band = parse_band(n.band)?;
-        let node = LodNode::new(0, band, coord(graph, &n.coord)?, label, entity_id)
-            .with_status(parse_status(&n.status, allow_axiomatic)?)
-            .with_hdc_fingerprint(n.hdc)
-            .with_prior(n.confidence);
+        let mut node = LodNode::new(
+            0,
+            LodBand::Lod0Atomic,
+            coord(graph, &n.coord)?,
+            label,
+            entity_id,
+        )
+        .with_status(parse_status(&n.status, allow_axiomatic)?)
+        .with_hdc_fingerprint(n.hdc)
+        .with_prior(n.confidence);
+        node.band = match n.band {
+            Some(band) => parse_band(band)?,
+            None => node
+                .derive_band_from_coord(&graph.geometry())
+                .map_err(graph_rejection)?,
+        };
         nodes.push(node);
     }
     let mut edges = Vec::with_capacity(spec.edges.len());
@@ -721,6 +775,121 @@ fn evolve(graph: &LodGraph, spec: EvolveSpec) -> Result<(String, Value), Rejecti
         json!({
             "retracted_evidence": retracted,
             "fixed_point": fixed_point,
+            "dry_run": dry_run,
+            "applied": !dry_run,
+        }),
+    ))
+}
+
+fn coarse_grain(graph: &LodGraph, spec: CoarseGrainSpec) -> Result<(String, Value), Rejection> {
+    if spec.members.is_empty() || spec.members.len() > MAX_DEPOSIT_NODES {
+        return Err(invalid(format!(
+            "members must hold 1..={MAX_DEPOSIT_NODES} entities"
+        )));
+    }
+    let summary_entity = entity(spec.entity_id, spec.action.as_deref(), "graph_coarse_grain")?;
+    let summary_coord = coord(graph, &spec.coord)?;
+    let dry_run = spec.dry_run.unwrap_or(false);
+    let mut members = Vec::with_capacity(spec.members.len());
+    for (i, m) in spec.members.iter().enumerate() {
+        let e = entity(m.entity_id, m.action.as_deref(), &format!("members[{i}]"))?;
+        let node = graph
+            .node_for_entity(e)
+            .ok_or_else(|| graph_rejection(LodError::EntityNotFound(e)))?;
+        members.push(node);
+    }
+    let (summary, member_nodes, csr_edges) = graph
+        .transact(|g| {
+            if g.node_count() + 1 > MAX_GRAPH_NODES {
+                return Err(LodError::InvalidNode(format!(
+                    "the live graph is capped at {MAX_GRAPH_NODES} nodes"
+                )));
+            }
+            let before = g.create_checkpoint();
+            let id = g.coarse_grain_cluster(&members, summary_entity, summary_coord, spec.hdc)?;
+            let summary = node_json(g, id);
+            let member_nodes: Vec<Value> = members.iter().map(|&m| node_json(g, m)).collect();
+            let csr_edges = g.csr_snapshot().num_edges();
+            if dry_run {
+                g.rollback_checkpoint(&before)?;
+            }
+            Ok((summary, member_nodes, csr_edges))
+        })
+        .map_err(graph_rejection)?;
+    let summary_line = format!(
+        "graph_coarse_grain: {} member(s) {} under entity {summary_entity} at band {}",
+        members.len(),
+        if dry_run {
+            "would be coarse-grained (dry run, rolled back)"
+        } else {
+            "coarse-grained"
+        },
+        summary["band"]
+    );
+    Ok((
+        summary_line,
+        json!({
+            "summary": summary,
+            "members": member_nodes,
+            "edge_type": "coarse_grain",
+            "csr_edges_after": csr_edges,
+            "dry_run": dry_run,
+            "applied": !dry_run,
+        }),
+    ))
+}
+
+fn zoom(graph: &LodGraph, spec: ZoomSpec) -> Result<(String, Value), Rejection> {
+    let e = entity(spec.entity_id, spec.action.as_deref(), "graph_zoom")?;
+    let direction = match spec.direction.as_str() {
+        "in" => Some(ZoomDirection::In),
+        "out" => Some(ZoomDirection::Out),
+        "to_coord" => None,
+        other => {
+            return Err(invalid(format!(
+                "unknown direction `{other}`; expected in | out | to_coord"
+            )))
+        }
+    };
+    let dry_run = spec.dry_run.unwrap_or(false);
+    let node = graph
+        .node_for_entity(e)
+        .ok_or_else(|| graph_rejection(LodError::EntityNotFound(e)))?;
+    let (from, to, node_after) = graph
+        .transact(|g| {
+            let before = g.create_checkpoint();
+            let (from, to) = match direction {
+                Some(d) => {
+                    let from = g.get_node(node).ok_or(LodError::NodeNotFound(node))?.band;
+                    (from, g.zoom_node(node, d)?)
+                }
+                None => g.migrate_band_to_coord(node)?,
+            };
+            let node_after = node_json(g, node);
+            if dry_run {
+                g.rollback_checkpoint(&before)?;
+            }
+            Ok((from, to, node_after))
+        })
+        .map_err(graph_rejection)?;
+    let summary = format!(
+        "graph_zoom: entity {e} band {} -> {}{}",
+        band_level(from),
+        band_level(to),
+        if dry_run {
+            " (dry run, rolled back)"
+        } else {
+            ""
+        }
+    );
+    Ok((
+        summary,
+        json!({
+            "entity_id": e,
+            "direction": spec.direction,
+            "from_band": band_level(from),
+            "to_band": band_level(to),
+            "node": node_after,
             "dry_run": dry_run,
             "applied": !dry_run,
         }),

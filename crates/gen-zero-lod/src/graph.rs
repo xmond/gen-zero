@@ -10,7 +10,8 @@
 //! metric weights. There is no other metric in this module.
 //!
 //! Confidence is the fixed point of `c = (1 - beta) pi + beta P c` over the
-//! `DependsOn` / `CausalTransition` edges (`evolve_epistemic_fixed_point`), a
+//! `DependsOn` / `CausalTransition` / `CoarseGrain` edges
+//! (`evolve_epistemic_fixed_point`), a
 //! `beta`-contraction in the max norm, so cycles converge to one answer. Evidence
 //! enters through `falsify_node` and leaves through `retract_falsification`; the
 //! next evolution moves every dependent accordingly, in either direction.
@@ -21,7 +22,7 @@
 
 use crate::error::LodError;
 use crate::manifold::{Epochs, GeometryParams, MixedCurvatureCoord, ProductManifold, Version};
-use crate::node::{hdc_hamming_distance_256, EpistemicStatus, LodNode};
+use crate::node::{hdc_hamming_distance_256, EpistemicStatus, LodBand, LodNode, ZoomDirection};
 use crate::ppr::compute_ppr_csr;
 use arc_swap::ArcSwap;
 use gen_zero_core::GraphFactProvider;
@@ -309,8 +310,39 @@ struct GraphState {
     discarded: Vec<(u64, u64)>,
 }
 
-/// Everything a rollback restores: the node count, each node's status,
-/// confidence and refutation mark (the only node fields any method mutates), the
+/// The node fields a graph method may change after insert. Label, coordinate,
+/// fingerprint, entity and prior are fixed at insert.
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct NodeMutable {
+    status: EpistemicStatus,
+    confidence: f32,
+    refuted: bool,
+    band: LodBand,
+    parent_id: Option<u32>,
+}
+
+impl NodeMutable {
+    fn of(node: &LodNode) -> Self {
+        Self {
+            status: node.status,
+            confidence: node.confidence,
+            refuted: node.refuted,
+            band: node.band,
+            parent_id: node.parent_id,
+        }
+    }
+
+    fn restore(self, node: &mut LodNode) {
+        node.status = self.status;
+        node.confidence = self.confidence;
+        node.refuted = self.refuted;
+        node.band = self.band;
+        node.parent_id = self.parent_id;
+    }
+}
+
+/// Everything a rollback restores: the node count, each node's mutable fields
+/// ([`NodeMutable`]: status, confidence, refutation mark, band and parent), the
 /// CSR snapshot reference, pending edges, revocations, privileges and validated
 /// dependencies.
 /// The edge ticket counter is never rewound, so tickets stay unique.
@@ -320,7 +352,7 @@ struct GraphState {
 pub struct GraphCheckpoint {
     graph_id: u64,
     seq: u64,
-    node_states: Vec<(EpistemicStatus, f32, bool)>,
+    node_states: Vec<NodeMutable>,
     csr: Arc<CsrGraph>,
     edge_buffer: Vec<BufferedEdge>,
     revocations: HashSet<u64>,
@@ -376,7 +408,7 @@ pub struct FixedPointReport {
     pub nodes: usize,
     /// Nodes held at their prior by evidence: axioms at 1, refuted nodes at 0.
     pub pinned: usize,
-    /// Dependency edges (`DependsOn` / `CausalTransition`, positive weight, into
+    /// Dependency edges (`DependsOn` / `CausalTransition` / `CoarseGrain`, positive weight, into
     /// an unpinned node) the transition matrix was built from.
     pub dependency_edges: usize,
     /// The `k` of the first iterate with `||c^{k+1} - c^k||_inf < tolerance`.
@@ -509,8 +541,13 @@ fn iterate_to_fixed_point(
 }
 
 /// Edges along which confidence is inherited: the target depends on the source.
+/// A coarse-grained summary depends on its members, so refuting members lowers
+/// the summary at the next evolution.
 fn carries_confidence(edge_type: EdgeType) -> bool {
-    matches!(edge_type, EdgeType::DependsOn | EdgeType::CausalTransition)
+    matches!(
+        edge_type,
+        EdgeType::DependsOn | EdgeType::CausalTransition | EdgeType::CoarseGrain
+    )
 }
 
 /// Edges that make a validated dependency when both ends are active truths.
@@ -698,7 +735,13 @@ impl LodGraph {
     ///
     /// An `Axiomatic` node gets confidence 1. A `Falsified` node is refuted by
     /// evidence: confidence 0, entity revoked.
-    pub fn add_node(&self, mut node: LodNode) -> Result<u32, LodError> {
+    pub fn add_node(&self, node: LodNode) -> Result<u32, LodError> {
+        let mut st = self.state.write();
+        self.insert_node(&mut st, node)
+    }
+
+    /// [`Self::add_node`] under a held write lock.
+    fn insert_node(&self, st: &mut GraphState, mut node: LodNode) -> Result<u32, LodError> {
         node.coord.to_point(&self.manifold)?;
         if !(node.prior.is_finite() && (0.0..=1.0).contains(&node.prior)) {
             return Err(LodError::InvalidNode(format!(
@@ -725,7 +768,6 @@ impl LodGraph {
             }
             EpistemicStatus::Hypothesized | EpistemicStatus::Validated => {}
         }
-        let mut st = self.state.write();
         let id = u32::try_from(st.nodes.len())
             .map_err(|_| LodError::InvalidNode("graph holds u32::MAX nodes".into()))?;
         if let Some(parent) = node.parent_id {
@@ -774,7 +816,8 @@ impl LodGraph {
 
     /// Append a directional edge to the pending buffer and return its ticket.
     /// Both endpoints must be existing nodes; the weight must be finite and
-    /// nonnegative. The critical section is O(1): no history is copied.
+    /// nonnegative. A `CoarseGrain` edge must run from a finer band to a strictly
+    /// coarser one. The critical section is O(1): no history is copied.
     pub fn add_edge(
         &self,
         source: u32,
@@ -783,7 +826,31 @@ impl LodGraph {
         weight: f32,
     ) -> Result<u64, LodError> {
         let mut st = self.state.write();
+        self.push_edge(&mut st, source, target, edge_type, weight)
+    }
+
+    /// [`Self::add_edge`] under a held write lock.
+    fn push_edge(
+        &self,
+        st: &mut GraphState,
+        source: u32,
+        target: u32,
+        edge_type: EdgeType,
+        weight: f32,
+    ) -> Result<u64, LodError> {
         check_edge(st.nodes.len(), source, target, weight)?;
+        if edge_type == EdgeType::CoarseGrain {
+            let (fine, coarse) = (
+                st.nodes[source as usize].band,
+                st.nodes[target as usize].band,
+            );
+            if fine >= coarse {
+                return Err(LodError::InvalidEdge(format!(
+                    "coarse-grain edge {source} -> {target} must go from a finer band to a \
+                     coarser one, got {fine:?} -> {coarse:?}"
+                )));
+            }
+        }
         // Taken under the lock so buffer order is ticket order.
         let ticket = self.ticket_counter.fetch_add(1, Ordering::Relaxed);
         st.edge_buffer.push(BufferedEdge {
@@ -843,6 +910,168 @@ impl LodGraph {
         st.edge_buffer.drain(..pending.len());
         st.generation += 1;
         Ok(report)
+    }
+
+    /// Move one node one band up or down with [`LodBand::zoom_out`] /
+    /// [`LodBand::zoom_in`] and return the new band. Refused past `Lod3Systemic`
+    /// or below `Lod0Atomic`, and when the move would break the coarse-grain
+    /// order: every member of the node (source of a `CoarseGrain` edge into it)
+    /// must stay strictly finer and every summary it belongs to strictly
+    /// coarser. The coordinate is not moved.
+    pub fn zoom_node(&self, node_id: u32, direction: ZoomDirection) -> Result<LodBand, LodError> {
+        let mut st = self.state.write();
+        let band = st
+            .nodes
+            .get(node_id as usize)
+            .ok_or(LodError::NodeNotFound(node_id))?
+            .band;
+        let to = match direction {
+            ZoomDirection::In => band.zoom_in()?,
+            ZoomDirection::Out => band.zoom_out()?,
+        };
+        self.set_band(&mut st, node_id, to)?;
+        Ok(to)
+    }
+
+    /// Move a node's band, one [`Self::zoom_node`] step at a time, to the band its
+    /// coordinate implies under this graph's geometry
+    /// ([`LodNode::derive_band_from_coord`]). Returns `(from, to)`; `from == to`
+    /// changes nothing. The whole move is refused, and nothing changes, when the
+    /// target band breaks the coarse-grain order.
+    pub fn migrate_band_to_coord(&self, node_id: u32) -> Result<(LodBand, LodBand), LodError> {
+        let mut st = self.state.write();
+        let node = st
+            .nodes
+            .get(node_id as usize)
+            .ok_or(LodError::NodeNotFound(node_id))?;
+        let from = node.band;
+        let target = node.derive_band_from_coord(&self.geometry())?;
+        let mut to = from;
+        while to < target {
+            to = to.zoom_out()?;
+        }
+        while to > target {
+            to = to.zoom_in()?;
+        }
+        if to != from {
+            self.set_band(&mut st, node_id, to)?;
+        }
+        Ok((from, to))
+    }
+
+    /// Set a node's band after checking the coarse-grain order against every
+    /// `CoarseGrain` edge touching it, committed and pending. O(edges).
+    fn set_band(&self, st: &mut GraphState, node_id: u32, to: LodBand) -> Result<(), LodError> {
+        let snapshot = self.csr_snapshot.load_full();
+        for (source, target, edge_type, _) in all_edges(&snapshot, &st.edge_buffer) {
+            if edge_type != EdgeType::CoarseGrain {
+                continue;
+            }
+            let broken = if target == node_id {
+                let member = st.nodes[source as usize].band;
+                (member >= to).then(|| format!("member {source} is at {member:?}"))
+            } else if source == node_id {
+                let summary = st.nodes[target as usize].band;
+                (summary <= to).then(|| format!("summary {target} is at {summary:?}"))
+            } else {
+                None
+            };
+            if let Some(why) = broken {
+                return Err(LodError::InvalidStateTransition(format!(
+                    "node {node_id} cannot move to {to:?}: {why}, and a coarse-grain edge \
+                     must go from a finer band to a coarser one"
+                )));
+            }
+        }
+        st.nodes[node_id as usize].band = to;
+        Ok(())
+    }
+
+    /// Coarse-grain a cluster: insert one summary node for `cluster_node_ids`,
+    /// link every member to it with a `CoarseGrain` edge of weight 1, make it the
+    /// members' parent, and flush, so the link is in the CSR snapshot on return.
+    /// Returns the summary's node id.
+    ///
+    /// The summary's band is the one `summary_coord` implies
+    /// ([`LodNode::derive_band_from_coord`]), and it must be strictly coarser than
+    /// every member: a summary sits nearer the origin than what it summarizes.
+    /// Its prior is the [`LodNode::new`] default 0.5; its confidence follows the
+    /// members at the next [`Self::evolve_epistemic_fixed_point`], since
+    /// `CoarseGrain` edges carry confidence.
+    ///
+    /// Refused, with nothing changed: an empty cluster, a repeated or unknown
+    /// member, a falsified or revoked member, a member that already has a parent,
+    /// a summary band not above every member, a coordinate outside this graph's
+    /// geometry and an entity that already has a node. A flush failure is
+    /// returned after the summary and its pending edges are inserted; run the
+    /// call inside [`Self::transact`] to roll that back.
+    pub fn coarse_grain_cluster(
+        &self,
+        cluster_node_ids: &[u32],
+        summary_entity_id: u64,
+        summary_coord: MixedCurvatureCoord,
+        hdc: [u64; 4],
+    ) -> Result<u32, LodError> {
+        if cluster_node_ids.is_empty() {
+            return Err(LodError::InvalidQuery(
+                "a coarse-grain cluster needs at least one member".into(),
+            ));
+        }
+        let summary_id = {
+            let mut st = self.state.write();
+            let mut seen = HashSet::with_capacity(cluster_node_ids.len());
+            let mut finest_ceiling = LodBand::Lod0Atomic;
+            for &id in cluster_node_ids {
+                if !seen.insert(id) {
+                    return Err(LodError::InvalidQuery(format!(
+                        "node {id} is listed twice in the cluster"
+                    )));
+                }
+                let member = st
+                    .nodes
+                    .get(id as usize)
+                    .ok_or(LodError::NodeNotFound(id))?;
+                if member.status.is_falsified() || st.revocations.contains(&member.entity_id) {
+                    return Err(LodError::InvalidNode(format!(
+                        "member {id} is falsified or revoked and cannot be coarse-grained"
+                    )));
+                }
+                if let Some(parent) = member.parent_id {
+                    return Err(LodError::InvalidNode(format!(
+                        "member {id} already has parent {parent}"
+                    )));
+                }
+                finest_ceiling = finest_ceiling.max(member.band);
+            }
+            let label = format!("coarse_grain({} members)", cluster_node_ids.len());
+            let mut summary = LodNode::new(
+                0,
+                LodBand::Lod0Atomic,
+                summary_coord,
+                label,
+                summary_entity_id,
+            )
+            .with_hdc_fingerprint(hdc);
+            summary.band = summary.derive_band_from_coord(&self.geometry())?;
+            if summary.band <= finest_ceiling {
+                return Err(LodError::InvalidNode(format!(
+                    "summary coordinate implies band {:?}, not above the coarsest member \
+                     band {finest_ceiling:?}; place the summary nearer the origin",
+                    summary.band
+                )));
+            }
+            // Every check that can fail on the members is done; `insert_node`
+            // checks the coordinate and entity before it changes anything, and
+            // `push_edge` cannot fail on these endpoints and this band order.
+            let summary_id = self.insert_node(&mut st, summary)?;
+            for &id in cluster_node_ids {
+                self.push_edge(&mut st, id, summary_id, EdgeType::CoarseGrain, 1.0)?;
+                st.nodes[id as usize].parent_id = Some(summary_id);
+            }
+            summary_id
+        };
+        self.flush_edges_to_csr()?;
+        Ok(summary_id)
     }
 
     /// Run Personalized PageRank over the committed CSR snapshot. Nodes added
@@ -1044,7 +1273,8 @@ impl LodGraph {
     ///
     /// and move statuses by hysteresis on the result.
     ///
-    /// - `P[v][u]` is the weight of the `DependsOn` / `CausalTransition` edges
+    /// - `P[v][u]` is the weight of the `DependsOn` / `CausalTransition` /
+    ///   `CoarseGrain` edges
     ///   `u -> v` (`v` depends on `u`) divided by the total such weight into `v`,
     ///   over the CSR snapshot and the pending buffer. A node with no positive
     ///   weight coming in, an axiom and a refuted node get the identity row, so
@@ -1214,11 +1444,7 @@ impl LodGraph {
         GraphCheckpoint {
             graph_id: self.graph_id,
             seq: self.checkpoint_seq.fetch_add(1, Ordering::Relaxed) + 1,
-            node_states: st
-                .nodes
-                .iter()
-                .map(|n| (n.status, n.confidence, n.refuted))
-                .collect(),
+            node_states: st.nodes.iter().map(NodeMutable::of).collect(),
             csr: self.csr_snapshot.load_full(),
             edge_buffer: st.edge_buffer.clone(),
             revocations: st.revocations.clone(),
@@ -1229,7 +1455,8 @@ impl LodGraph {
     }
 
     /// Restore `checkpoint` atomically: nodes added after it are removed (their
-    /// ids become free again), statuses, confidences, refutation marks, CSR
+    /// ids become free again), statuses, confidences, refutation marks, bands,
+    /// parents, CSR
     /// snapshot, pending edges, revocations, privileges and validated dependencies return to its values.
     ///
     /// Every write since the checkpoint is discarded, including writes by other
@@ -1260,12 +1487,8 @@ impl LodGraph {
 
         st.nodes.truncate(keep);
         st.entity_index.retain(|_, id| (*id as usize) < keep);
-        for (node, &(status, confidence, refuted)) in
-            st.nodes.iter_mut().zip(&checkpoint.node_states)
-        {
-            node.status = status;
-            node.confidence = confidence;
-            node.refuted = refuted;
+        for (node, state) in st.nodes.iter_mut().zip(&checkpoint.node_states) {
+            state.restore(node);
         }
         st.edge_buffer = checkpoint.edge_buffer.clone();
         st.revocations = checkpoint.revocations.clone();
@@ -2429,5 +2652,275 @@ mod tests {
         // 4 writers x 200 attempts, 67 of each forced to roll back.
         assert_eq!(graph.csr_snapshot().num_edges(), 4 * (200 - 67));
         graph.csr_snapshot().validate().unwrap();
+    }
+
+    /// A unit-ball coordinate at normalized depth `rho` along axis `axis`.
+    fn at_depth(rho: f64, axis: usize) -> MixedCurvatureCoord {
+        let mut h = [0.0_f32; 4];
+        h[axis] = (rho / 2.0).tanh() as f32;
+        MixedCurvatureCoord::new(h, [1.0, 0.0, 0.0, 0.0], [0.0; 8]).unwrap()
+    }
+
+    /// Depth at the center of `band` on the unit ball.
+    fn band_depth(band: LodBand) -> f64 {
+        let w = crate::node::band_scale_width();
+        crate::node::max_chart_depth() - (band as u8 as f64 + 0.5) * w
+    }
+
+    /// Three atomic members near the boundary; returns their ids.
+    fn atomic_members(graph: &LodGraph) -> Vec<u32> {
+        (0..3)
+            .map(|k| {
+                let coord = at_depth(band_depth(LodBand::Lod0Atomic), k);
+                graph
+                    .add_node(LodNode::new(
+                        0,
+                        LodBand::Lod0Atomic,
+                        coord,
+                        "m",
+                        100 + k as u64,
+                    ))
+                    .unwrap()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn coarse_grain_cluster_links_members_to_a_coarser_summary_in_the_csr() {
+        let graph = LodGraph::new();
+        let members = atomic_members(&graph);
+        let summary_coord = at_depth(band_depth(LodBand::Lod1Cluster), 0);
+        let summary = graph
+            .coarse_grain_cluster(&members, 900, summary_coord, [7; 4])
+            .unwrap();
+
+        let node = graph.get_node(summary).unwrap();
+        assert_eq!(node.band, LodBand::Lod1Cluster);
+        assert_eq!(node.entity_id, 900);
+        assert_eq!(node.hdc_fingerprint, [7; 4]);
+        assert_eq!(graph.pending_edge_count(), 0, "the cluster is flushed");
+        let csr = graph.csr_snapshot();
+        csr.validate().unwrap();
+        for &m in &members {
+            let links: Vec<_> = csr.neighbors(m).collect();
+            assert_eq!(links, vec![(summary, EdgeType::CoarseGrain, 1.0)]);
+            assert_eq!(graph.get_node(m).unwrap().parent_id, Some(summary));
+        }
+        // Diffusion from one member reaches the summary through the new edge.
+        let ranking = graph
+            .query_ppr(&[(members[0], 1.0)], 0.15, 100, 1e-6)
+            .unwrap();
+        let score = |id| ranking.ranked.iter().find(|r| r.0 == id).unwrap().1;
+        assert!(score(summary) > 0.0);
+        assert_eq!(score(members[1]), 0.0);
+
+        // A second level: the Lod1 summary coarse-grains into a Lod3 root.
+        let root = graph
+            .coarse_grain_cluster(&[summary], 901, MixedCurvatureCoord::origin(), [0; 4])
+            .unwrap();
+        assert_eq!(graph.get_node(root).unwrap().band, LodBand::Lod3Systemic);
+        assert_eq!(graph.csr_snapshot().num_edges(), 4);
+    }
+
+    #[test]
+    fn coarse_grain_cluster_refuses_and_changes_nothing() {
+        let graph = LodGraph::new();
+        let members = atomic_members(&graph);
+        let coarse = at_depth(band_depth(LodBand::Lod2Milestone), 1);
+        let before = (graph.node_count(), graph.csr_snapshot().num_edges());
+        let refusals = [
+            graph.coarse_grain_cluster(&[], 900, coarse, [0; 4]),
+            graph.coarse_grain_cluster(&[members[0], members[0]], 900, coarse, [0; 4]),
+            graph.coarse_grain_cluster(&[members[0], 77], 900, coarse, [0; 4]),
+            // Summary no coarser than its members.
+            graph.coarse_grain_cluster(
+                &members,
+                900,
+                at_depth(band_depth(LodBand::Lod0Atomic), 3),
+                [0; 4],
+            ),
+            // Entity already has a node.
+            graph.coarse_grain_cluster(&members, 100, coarse, [0; 4]),
+        ];
+        for r in &refusals {
+            assert!(r.is_err(), "{r:?}");
+        }
+        graph.falsify_node(members[2]).unwrap();
+        assert!(matches!(
+            graph.coarse_grain_cluster(&members, 900, coarse, [0; 4]),
+            Err(LodError::InvalidNode(_))
+        ));
+        assert_eq!(
+            (graph.node_count(), graph.csr_snapshot().num_edges()),
+            before
+        );
+        assert_eq!(graph.pending_edge_count(), 0);
+        assert!(members
+            .iter()
+            .all(|&m| graph.get_node(m).unwrap().parent_id.is_none()));
+
+        // A member already in a cluster cannot join a second one.
+        let s = graph
+            .coarse_grain_cluster(&members[..2], 900, coarse, [0; 4])
+            .unwrap();
+        assert!(graph.get_node(s).is_some());
+        assert!(matches!(
+            graph.coarse_grain_cluster(&members[..1], 901, MixedCurvatureCoord::origin(), [0; 4]),
+            Err(LodError::InvalidNode(_))
+        ));
+    }
+
+    #[test]
+    fn coarse_grain_edges_must_point_to_a_coarser_band() {
+        let graph = LodGraph::new();
+        let fine = graph.add_node(node("fine", 1)).unwrap();
+        let coarse = graph
+            .add_node(LodNode::new(
+                0,
+                LodBand::Lod2Milestone,
+                MixedCurvatureCoord::origin(),
+                "coarse",
+                2,
+            ))
+            .unwrap();
+        let peer = graph.add_node(node("peer", 3)).unwrap();
+        assert!(graph
+            .add_edge(coarse, fine, EdgeType::CoarseGrain, 1.0)
+            .is_err());
+        assert!(graph
+            .add_edge(fine, peer, EdgeType::CoarseGrain, 1.0)
+            .is_err());
+        assert!(graph
+            .add_edge(fine, coarse, EdgeType::CoarseGrain, 1.0)
+            .is_ok());
+        // Other edge types carry no band order.
+        assert!(graph
+            .add_edge(coarse, fine, EdgeType::Semantic, 1.0)
+            .is_ok());
+    }
+
+    #[test]
+    fn zoom_node_keeps_the_coarse_grain_order_and_rolls_back() {
+        let graph = LodGraph::new();
+        let members = atomic_members(&graph);
+        let summary = graph
+            .coarse_grain_cluster(
+                &members,
+                900,
+                at_depth(band_depth(LodBand::Lod1Cluster), 0),
+                [0; 4],
+            )
+            .unwrap();
+
+        // Members may not reach their summary's band; the summary may not sink to theirs.
+        assert!(matches!(
+            graph.zoom_node(members[0], ZoomDirection::Out),
+            Err(LodError::InvalidStateTransition(_))
+        ));
+        assert!(matches!(
+            graph.zoom_node(summary, ZoomDirection::In),
+            Err(LodError::InvalidStateTransition(_))
+        ));
+        assert!(matches!(
+            graph.zoom_node(members[0], ZoomDirection::In),
+            Err(LodError::SpineBreatheOutOfBounds { .. })
+        ));
+        assert!(matches!(
+            graph.zoom_node(99, ZoomDirection::In),
+            Err(LodError::NodeNotFound(99))
+        ));
+
+        let checkpoint = graph.create_checkpoint();
+        assert_eq!(
+            graph.zoom_node(summary, ZoomDirection::Out).unwrap(),
+            LodBand::Lod2Milestone
+        );
+        assert_eq!(
+            graph.zoom_node(members[0], ZoomDirection::Out).unwrap(),
+            LodBand::Lod1Cluster
+        );
+        assert_eq!(
+            graph.zoom_node(summary, ZoomDirection::Out).unwrap(),
+            LodBand::Lod3Systemic
+        );
+        assert!(graph.zoom_node(summary, ZoomDirection::Out).is_err());
+
+        graph.rollback_checkpoint(&checkpoint).unwrap();
+        assert_eq!(graph.get_node(summary).unwrap().band, LodBand::Lod1Cluster);
+        assert_eq!(
+            graph.get_node(members[0]).unwrap().band,
+            LodBand::Lod0Atomic
+        );
+
+        // Rolling back past the cluster also restores the members' parents.
+        let fresh = LodGraph::new();
+        let members = atomic_members(&fresh);
+        let before = fresh.create_checkpoint();
+        fresh
+            .coarse_grain_cluster(&members, 900, MixedCurvatureCoord::origin(), [0; 4])
+            .unwrap();
+        fresh.rollback_checkpoint(&before).unwrap();
+        assert_eq!(fresh.node_count(), 3);
+        assert_eq!(fresh.csr_snapshot().num_edges(), 0);
+        assert!(members
+            .iter()
+            .all(|&m| fresh.get_node(m).unwrap().parent_id.is_none()));
+    }
+
+    #[test]
+    fn migrate_band_to_coord_steps_to_the_coordinate_band() {
+        let graph = LodGraph::new();
+        // Inserted at Lod0 with a coordinate at the origin, which implies Lod3.
+        let id = graph.add_node(node("root", 1)).unwrap();
+        assert_eq!(
+            graph.migrate_band_to_coord(id).unwrap(),
+            (LodBand::Lod0Atomic, LodBand::Lod3Systemic)
+        );
+        assert_eq!(
+            graph.migrate_band_to_coord(id).unwrap(),
+            (LodBand::Lod3Systemic, LodBand::Lod3Systemic)
+        );
+
+        // A member stored at Lod0 whose coordinate implies Lod3 cannot migrate
+        // to or above its Lod1 summary; the refusal changes nothing.
+        let member = graph.add_node(node("member", 2)).unwrap();
+        let summary = graph
+            .coarse_grain_cluster(
+                &[member],
+                900,
+                at_depth(band_depth(LodBand::Lod1Cluster), 0),
+                [0; 4],
+            )
+            .unwrap();
+        assert!(matches!(
+            graph.migrate_band_to_coord(member),
+            Err(LodError::InvalidStateTransition(_))
+        ));
+        assert_eq!(graph.get_node(member).unwrap().band, LodBand::Lod0Atomic);
+        assert_eq!(
+            graph.migrate_band_to_coord(summary).unwrap(),
+            (LodBand::Lod1Cluster, LodBand::Lod1Cluster)
+        );
+    }
+
+    #[test]
+    fn a_summary_loses_confidence_when_its_members_are_refuted() {
+        let graph = LodGraph::new();
+        let members = atomic_members(&graph);
+        let summary = graph
+            .coarse_grain_cluster(&members, 900, MixedCurvatureCoord::origin(), [0; 4])
+            .unwrap();
+        let before = evolve(&graph, 0.2, 0.8);
+        assert_eq!(before.dependency_edges, 3);
+        let c0 = graph.get_node(summary).unwrap().confidence;
+        assert!((c0 - 0.5).abs() < 1e-5);
+        for &m in &members {
+            graph.falsify_node(m).unwrap();
+        }
+        evolve(&graph, 0.2, 0.8);
+        let summary_node = graph.get_node(summary).unwrap();
+        // c = (1 - beta) 0.5 + beta * 0 = 0.075, below theta_lo.
+        assert!((summary_node.confidence - 0.075).abs() < 1e-5);
+        assert_eq!(summary_node.status, EpistemicStatus::Falsified);
     }
 }

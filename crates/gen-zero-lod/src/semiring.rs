@@ -9,7 +9,16 @@
 //!
 //! The relation vocabulary (`RelId`) is an opaque integer: this module carries no
 //! domain-specific (e.g. kinship, English-language) data. Callers supply their own axioms.
+//!
+//! Next to the discrete table there is a soft one: [`SoftResultSet`] is a
+//! probability distribution over relations, and `T_soft(r1, r2, g)` is one per
+//! key ([`RelationSemiring::insert_soft_axiom`]). The soft product
+//! `(a ⊗_g b)(r) = Σ a(r1) b(r2) T_soft(r1, r2, g → r)` is multilinear in `a`
+//! and `b`. Mass whose pair has no kernel is kept as an explicit *unclosed*
+//! bucket, never renormalized away, and counts toward the entropy that
+//! [`RelationSemiring::fold_chain_soft`] gates on.
 
+use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
@@ -153,12 +162,28 @@ impl AssociativityReport {
 /// `Refused` is not an error: a chain that does not close under the learned table is
 /// an expected, reportable outcome, not a bug, so the reason is carried as data
 /// rather than surfaced through `Result`/`panic!`.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum FoldOutcome {
     Concluded {
         predicted: RelId,
         steps: usize,
         proof_path: Vec<RelId>,
+    },
+    /// A soft fold ([`RelationSemiring::fold_chain_soft`]) that passed its
+    /// entropy gate. `probability` is the mass of `predicted` in the folded
+    /// distribution: a model probability, not a calibrated chance of being right.
+    SoftConcluded {
+        predicted: RelId,
+        probability: f32,
+        /// `H(p)` in nats of the folded distribution, unclosed bucket included.
+        entropy: f32,
+        steps: usize,
+        /// Every relation with mass, highest first (ties by relation id).
+        distribution: Vec<(RelId, f32)>,
+        /// Mass that no kernel closed.
+        unclosed_mass: f32,
+        /// Entropy after each fold step, starting with the first leaf.
+        step_entropies: Vec<f32>,
     },
     Refused {
         step_failed: usize,
@@ -178,12 +203,175 @@ pub const DEFAULT_CHART_STEP_BUDGET: usize = 100_000;
 pub const BUDGET_EXCEEDED_REASON: &str =
     "causal fold operation budget exceeded (potential combinatorial explosion)";
 
+/// Largest deviation from 1 of the total mass of a caller-supplied distribution.
+pub const SOFT_MASS_TOLERANCE: f64 = 1e-4;
+
+/// Two top probabilities closer than this are a tie: the argmax is undefined.
+pub const SOFT_TIE_TOLERANCE: f64 = 1e-6;
+
+/// Why a [`SoftResultSet`] was refused.
+#[derive(thiserror::Error, Debug, Clone, PartialEq)]
+pub enum SoftSetError {
+    #[error("a soft result set needs at least one relation")]
+    Empty,
+    #[error("relation {relation} has probability {p}; each must be finite and in (0, 1]")]
+    Probability { relation: RelId, p: f64 },
+    #[error("relation {0} is listed twice")]
+    Duplicate(RelId),
+    #[error("relation {relation} has count 0")]
+    ZeroCount { relation: RelId },
+    #[error("pseudo-count must be finite and >= 0, got {0}")]
+    PseudoCount(f64),
+    #[error("probabilities sum to {total}, not 1 within {SOFT_MASS_TOLERANCE}")]
+    Mass { total: f64 },
+}
+
+/// A probability distribution over relations: the soft counterpart of
+/// [`ResultSet`]. `probs` holds only positive masses. `unclosed` is the mass no
+/// relation received (a composition with no kernel, or a pseudo-count), so
+/// `sum(probs) + unclosed = 1`.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct SoftResultSet {
+    probs: BTreeMap<RelId, f32>,
+    unclosed: f32,
+}
+
+impl SoftResultSet {
+    /// A distribution from `(relation, probability)` pairs. Each probability
+    /// must be finite and in `(0, 1]`, no relation may repeat, and the total must
+    /// be 1 within [`SOFT_MASS_TOLERANCE`]; the pairs are then rescaled to sum to 1.
+    pub fn from_probs<I: IntoIterator<Item = (RelId, f32)>>(
+        entries: I,
+    ) -> Result<Self, SoftSetError> {
+        let mut raw: BTreeMap<RelId, f64> = BTreeMap::new();
+        for (relation, p) in entries {
+            let p = f64::from(p);
+            if !(p.is_finite() && p > 0.0 && p <= 1.0) {
+                return Err(SoftSetError::Probability { relation, p });
+            }
+            if raw.insert(relation, p).is_some() {
+                return Err(SoftSetError::Duplicate(relation));
+            }
+        }
+        if raw.is_empty() {
+            return Err(SoftSetError::Empty);
+        }
+        let total: f64 = raw.values().sum();
+        if (total - 1.0).abs() > SOFT_MASS_TOLERANCE {
+            return Err(SoftSetError::Mass { total });
+        }
+        Ok(Self::from_masses(
+            raw.into_iter().map(|(r, p)| (r, p / total)).collect(),
+        ))
+    }
+
+    /// Relative frequencies `count / (total + pseudo_count)`. A positive
+    /// pseudo-count leaves `pseudo_count / (total + pseudo_count)` unclosed: mass
+    /// for outcomes the counts never saw.
+    pub fn from_counts(counts: &[(RelId, u64)], pseudo_count: f64) -> Result<Self, SoftSetError> {
+        if !(pseudo_count.is_finite() && pseudo_count >= 0.0) {
+            return Err(SoftSetError::PseudoCount(pseudo_count));
+        }
+        if counts.is_empty() {
+            return Err(SoftSetError::Empty);
+        }
+        let mut seen = BTreeSet::new();
+        let mut total = 0.0_f64;
+        for &(relation, count) in counts {
+            if !seen.insert(relation) {
+                return Err(SoftSetError::Duplicate(relation));
+            }
+            if count == 0 {
+                return Err(SoftSetError::ZeroCount { relation });
+            }
+            total += count as f64;
+        }
+        let denom = total + pseudo_count;
+        Ok(Self::from_masses(
+            counts.iter().map(|&(r, c)| (r, c as f64 / denom)).collect(),
+        ))
+    }
+
+    /// All mass on one relation.
+    pub fn delta(relation: RelId) -> Self {
+        Self {
+            probs: BTreeMap::from([(relation, 1.0)]),
+            unclosed: 0.0,
+        }
+    }
+
+    /// Build from nonnegative f64 masses summing to at most 1; the rest is unclosed.
+    fn from_masses(masses: BTreeMap<RelId, f64>) -> Self {
+        let closed: f64 = masses.values().sum();
+        Self {
+            probs: masses
+                .into_iter()
+                .filter(|&(_, p)| p > 0.0)
+                .map(|(r, p)| (r, p as f32))
+                .collect(),
+            unclosed: (1.0 - closed).max(0.0) as f32,
+        }
+    }
+
+    /// Mass of `relation`, 0 when it has none.
+    pub fn probability(&self, relation: RelId) -> f32 {
+        self.probs.get(&relation).copied().unwrap_or(0.0)
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = (RelId, f32)> + '_ {
+        self.probs.iter().map(|(&r, &p)| (r, p))
+    }
+
+    /// Number of relations with mass.
+    pub fn len(&self) -> usize {
+        self.probs.len()
+    }
+
+    /// No relation has mass: everything is unclosed.
+    pub fn is_empty(&self) -> bool {
+        self.probs.is_empty()
+    }
+
+    pub fn unclosed_mass(&self) -> f32 {
+        self.unclosed
+    }
+
+    /// The relations with mass, as a discrete [`ResultSet`].
+    pub fn support(&self) -> ResultSet {
+        ResultSet::from_ids(self.probs.keys().copied())
+    }
+
+    /// `H(p) = -Σ p ln p` in nats over every relation and the unclosed bucket.
+    /// 0 for a delta, `ln n` for a uniform distribution over `n` outcomes.
+    pub fn entropy(&self) -> f32 {
+        let h: f64 = self
+            .probs
+            .values()
+            .copied()
+            .chain(std::iter::once(self.unclosed))
+            .map(f64::from)
+            .filter(|&p| p > 0.0)
+            .map(|p| -p * p.ln())
+            .sum();
+        h.max(0.0) as f32
+    }
+
+    /// Relations by mass, highest first; equal masses by relation id.
+    pub fn ranked(&self) -> Vec<(RelId, f32)> {
+        let mut ranked: Vec<(RelId, f32)> = self.iter().collect();
+        ranked.sort_by(|a, b| b.1.total_cmp(&a.1).then(a.0.cmp(&b.0)));
+        ranked
+    }
+}
+
 /// The learned relation semiring: a compact `BTreeMap`-backed lookup table for `T`, plus
-/// the set of keys recorded as conflicted (multi-valued).
+/// the set of keys recorded as conflicted (multi-valued), plus the soft table
+/// `T_soft` of the soft product.
 #[derive(Clone, Debug, Default)]
 pub struct RelationSemiring {
     table: BTreeMap<RelationKey, ResultSet>,
     conflict_keys: BTreeSet<RelationKey>,
+    soft_table: BTreeMap<RelationKey, SoftResultSet>,
 }
 
 impl RelationSemiring {
@@ -226,6 +414,199 @@ impl RelationSemiring {
     /// lookup just to test for absence or iterate a conflict key's members.
     pub(crate) fn entry(&self, key: &RelationKey) -> Option<&ResultSet> {
         self.table.get(key)
+    }
+
+    /// Insert one soft axiom `T_soft(key) = kernel`, replacing an earlier one.
+    pub fn insert_soft_axiom(&mut self, key: RelationKey, kernel: SoftResultSet) {
+        self.soft_table.insert(key, kernel);
+    }
+
+    /// Number of soft axioms.
+    pub fn soft_len(&self) -> usize {
+        self.soft_table.len()
+    }
+
+    /// The soft kernel of `key`: its soft axiom, else a `Single` discrete axiom
+    /// as a delta. `Ok(None)` when the key has neither (the pair's mass stays
+    /// unclosed). Refused: a conflict key with no soft axiom (its candidates
+    /// carry no weights, and this module never invents them), and a soft axiom
+    /// whose support differs from the discrete axiom of the same key.
+    fn soft_kernel(&self, key: &RelationKey) -> Result<Option<Cow<'_, SoftResultSet>>, String> {
+        match (self.soft_table.get(key), self.table.get(key)) {
+            (Some(soft), Some(hard)) if soft.support() != *hard && !hard.is_empty() => {
+                Err(format!(
+                    "soft axiom {key:?} has support {:?} but the discrete axiom says {hard:?}",
+                    soft.support()
+                ))
+            }
+            (Some(soft), _) => Ok(Some(Cow::Borrowed(soft))),
+            (None, Some(ResultSet::Single(r))) => Ok(Some(Cow::Owned(SoftResultSet::delta(*r)))),
+            (None, Some(ResultSet::Multi(candidates))) => Err(format!(
+                "conflict key {key:?} has candidates {candidates:?} but no soft axiom weighs them"
+            )),
+            (None, Some(ResultSet::Empty) | None) => Ok(None),
+        }
+    }
+
+    /// The soft product `(a ⊗_g b)(r) = Σ_{r1, r2} a(r1) b(r2) T_soft(r1, r2, g → r)`.
+    /// Mass on a pair without a kernel, and the unclosed mass of `a` and `b`,
+    /// is unclosed in the result. Refused on a kernel refusal (see
+    /// [`Self::insert_soft_axiom`]) and when more than `DEFAULT_CHART_STEP_BUDGET`
+    /// pair-and-relation operations would be needed.
+    pub fn compose_soft(
+        &self,
+        a: &SoftResultSet,
+        b: &SoftResultSet,
+        gender: Gender,
+    ) -> Result<SoftResultSet, String> {
+        let mut budget = DEFAULT_CHART_STEP_BUDGET;
+        self.compose_soft_within(a, b, gender, &mut budget)
+    }
+
+    fn compose_soft_within(
+        &self,
+        a: &SoftResultSet,
+        b: &SoftResultSet,
+        gender: Gender,
+        budget: &mut usize,
+    ) -> Result<SoftResultSet, String> {
+        let mut spend = |n: usize| {
+            *budget = budget
+                .checked_sub(n)
+                .ok_or_else(|| BUDGET_EXCEEDED_REASON.to_string())?;
+            Ok::<(), String>(())
+        };
+        let mut masses: BTreeMap<RelId, f64> = BTreeMap::new();
+        for (r1, p1) in a.iter() {
+            for (r2, p2) in b.iter() {
+                spend(1)?;
+                let Some(kernel) = self.soft_kernel(&RelationKey::new(r1, r2, gender))? else {
+                    continue;
+                };
+                spend(kernel.len())?;
+                let joint = f64::from(p1) * f64::from(p2);
+                for (r, pt) in kernel.iter() {
+                    *masses.entry(r).or_insert(0.0) += joint * f64::from(pt);
+                }
+            }
+        }
+        Ok(SoftResultSet::from_masses(masses))
+    }
+
+    /// Left fold of a chain of soft result sets, `(...((e1 ⊗ e2) ⊗ e3)...)`, with
+    /// the same gender convention as [`Self::left_fold_chain`]: step `i` joins at
+    /// `genders[i + 1]`, and `genders.len() == chain.len() + 1`. The soft product
+    /// is not assumed associative, so the bracketing is fixed to the left one.
+    ///
+    /// Fails closed. `Refused` when the chain is malformed, `tau_h` is not finite
+    /// and nonnegative, a step's kernel lookup is refused or over budget, no mass
+    /// closes, or at the root:
+    /// - the entropy `H(p)` (unclosed bucket included) exceeds `tau_h`;
+    /// - the unclosed mass is at least the top relation's mass ("no derivation"
+    ///   is the most likely outcome);
+    /// - the top two relations tie within [`SOFT_TIE_TOLERANCE`] (a bimodal
+    ///   root has no argmax).
+    ///
+    /// `tau_h` is the caller's; nothing here calibrates it.
+    pub fn fold_chain_soft(
+        &self,
+        chain: &[SoftResultSet],
+        genders: &[Gender],
+        tau_h: f32,
+    ) -> FoldOutcome {
+        let refuse = |step_failed: usize, reason: String| FoldOutcome::Refused {
+            step_failed,
+            reason,
+        };
+        if chain.is_empty() || genders.len() != chain.len() + 1 {
+            return refuse(
+                0,
+                format!(
+                    "invalid chain: {} sets and {} node genders",
+                    chain.len(),
+                    genders.len()
+                ),
+            );
+        }
+        if chain.len() > 64 {
+            return refuse(
+                0,
+                "chain length exceeds maximum supported bound (64)".into(),
+            );
+        }
+        if !(tau_h.is_finite() && tau_h >= 0.0) {
+            return refuse(
+                0,
+                format!("entropy threshold must be finite and >= 0, got {tau_h}"),
+            );
+        }
+        if let Some(i) = chain.iter().position(SoftResultSet::is_empty) {
+            return refuse(0, format!("leaf {i} has no relation with mass"));
+        }
+        let mut budget = DEFAULT_CHART_STEP_BUDGET;
+        let mut acc = chain[0].clone();
+        let mut step_entropies = vec![acc.entropy()];
+        for i in 1..chain.len() {
+            acc = match self.compose_soft_within(&acc, &chain[i], genders[i + 1], &mut budget) {
+                Ok(next) => next,
+                Err(reason) => return refuse(i + 1, reason),
+            };
+            if acc.is_empty() {
+                return refuse(
+                    i + 1,
+                    format!(
+                        "no soft composition closes at step {} (node gender {:?})",
+                        i + 1,
+                        genders[i + 1]
+                    ),
+                );
+            }
+            step_entropies.push(acc.entropy());
+        }
+        let steps = chain.len() - 1;
+        let entropy = acc.entropy();
+        let ranked = acc.ranked();
+        let top: Vec<_> = ranked.iter().take(3).collect();
+        let unclosed = acc.unclosed_mass();
+        if entropy > tau_h {
+            return refuse(
+                steps + 1,
+                format!(
+                    "entropy {entropy:.6} nats exceeds tau_H {tau_h}: top {top:?}, \
+                     unclosed mass {unclosed:.6}"
+                ),
+            );
+        }
+        let (predicted, probability) = ranked[0];
+        if unclosed >= probability {
+            return refuse(
+                steps + 1,
+                format!(
+                    "unclosed mass {unclosed:.6} is at least the top relation {predicted} \
+                     ({probability:.6}): no derivation is the likeliest outcome"
+                ),
+            );
+        }
+        if let Some(&(second, p2)) = ranked.get(1) {
+            if f64::from(probability - p2) <= SOFT_TIE_TOLERANCE {
+                return refuse(
+                    steps + 1,
+                    format!(
+                        "multimodal root: relations {predicted} and {second} tie at \
+                         {probability:.6}; no argmax"
+                    ),
+                );
+            }
+        }
+        FoldOutcome::SoftConcluded {
+            predicted,
+            probability,
+            entropy,
+            steps,
+            distribution: ranked,
+            unclosed_mass: unclosed,
+            step_entropies,
+        }
     }
 
     pub fn conflict_keys(&self) -> impl Iterator<Item = &RelationKey> {
@@ -1006,6 +1387,258 @@ mod tests {
                 assert_eq!(reason, BUDGET_EXCEEDED_REASON);
             }
             other => panic!("expected a tiny budget to refuse, got {other:?}"),
+        }
+    }
+
+    // ---- soft semiring ------------------------------------------------------
+
+    fn soft(entries: &[(RelId, f32)]) -> SoftResultSet {
+        SoftResultSet::from_probs(entries.iter().copied()).unwrap()
+    }
+
+    fn close(a: f32, b: f64) -> bool {
+        (f64::from(a) - b).abs() < 1e-5
+    }
+
+    /// `T_soft(A, C) = {X: .9, Y: .1}`, `T_soft(B, C) = {Y: 1}` under every gender.
+    fn soft_table() -> RelationSemiring {
+        let mut sem = RelationSemiring::new();
+        for g in Gender::ALL {
+            sem.insert_soft_axiom(
+                RelationKey::new(R_A, R_C, g),
+                soft(&[(R_X, 0.9), (R_Y, 0.1)]),
+            );
+            sem.insert_soft_axiom(RelationKey::new(R_B, R_C, g), soft(&[(R_Y, 1.0)]));
+        }
+        sem
+    }
+
+    #[test]
+    fn soft_result_set_validates_and_measures_entropy() {
+        assert!(close(SoftResultSet::delta(R_A).entropy(), 0.0));
+        let uniform = soft(&[(R_A, 0.25), (R_B, 0.25), (R_C, 0.25), (R_D, 0.25)]);
+        assert!(close(uniform.entropy(), 4f64.ln()));
+        // The unclosed bucket counts as an outcome: 3 seen of 4 counts.
+        let counted = SoftResultSet::from_counts(&[(R_A, 2), (R_B, 1)], 1.0).unwrap();
+        assert!(close(counted.probability(R_A), 0.5));
+        assert!(close(counted.unclosed_mass(), 0.25));
+        assert!(close(
+            counted.entropy(),
+            -(0.5f64 * 0.5f64.ln() + 2.0 * 0.25 * 0.25f64.ln())
+        ));
+
+        type E = SoftSetError;
+        let bad = |e: &[(RelId, f32)]| SoftResultSet::from_probs(e.iter().copied()).unwrap_err();
+        assert_eq!(bad(&[]), E::Empty);
+        assert_eq!(bad(&[(R_A, 0.5), (R_A, 0.5)]), E::Duplicate(R_A));
+        assert!(matches!(
+            bad(&[(R_A, 0.0), (R_B, 1.0)]),
+            E::Probability { .. }
+        ));
+        assert!(matches!(bad(&[(R_A, f32::NAN)]), E::Probability { .. }));
+        assert!(matches!(bad(&[(R_A, 1.5)]), E::Probability { .. }));
+        assert!(matches!(bad(&[(R_A, 0.5), (R_B, 0.4)]), E::Mass { .. }));
+        assert!(matches!(
+            SoftResultSet::from_counts(&[(R_A, 0)], 0.0),
+            Err(E::ZeroCount { .. })
+        ));
+        assert!(matches!(
+            SoftResultSet::from_counts(&[(R_A, 1)], -1.0),
+            Err(E::PseudoCount(_))
+        ));
+    }
+
+    #[test]
+    fn compose_soft_is_the_kernel_sum_and_keeps_unclosed_mass() {
+        let sem = soft_table();
+        let a = soft(&[(R_A, 0.7), (R_B, 0.3)]);
+        let c = SoftResultSet::delta(R_C);
+        let out = sem.compose_soft(&a, &c, Gender::Male).unwrap();
+        // X = .7 * .9; Y = .7 * .1 + .3 * 1.
+        assert!(close(out.probability(R_X), 0.63));
+        assert!(close(out.probability(R_Y), 0.37));
+        assert!(close(out.unclosed_mass(), 0.0));
+
+        // (D, C) has no kernel: D's mass stays unclosed, not renormalized away.
+        let a = soft(&[(R_A, 0.4), (R_D, 0.6)]);
+        let out = sem.compose_soft(&a, &c, Gender::Male).unwrap();
+        assert!(close(out.probability(R_X), 0.36));
+        assert!(close(out.probability(R_Y), 0.04));
+        assert!(close(out.unclosed_mass(), 0.6));
+    }
+
+    #[test]
+    fn compose_soft_is_linear_in_each_argument() {
+        let sem = soft_table();
+        let c = SoftResultSet::delta(R_C);
+        let (a1, a2) = (soft(&[(R_A, 1.0)]), soft(&[(R_B, 1.0)]));
+        let lambda = 0.35_f32;
+        let mix = soft(&[(R_A, lambda), (R_B, 1.0 - lambda)]);
+        let (o1, o2) = (
+            sem.compose_soft(&a1, &c, Gender::Female).unwrap(),
+            sem.compose_soft(&a2, &c, Gender::Female).unwrap(),
+        );
+        let om = sem.compose_soft(&mix, &c, Gender::Female).unwrap();
+        for r in [R_X, R_Y] {
+            let expected =
+                f64::from(lambda * o1.probability(r) + (1.0 - lambda) * o2.probability(r));
+            assert!(close(om.probability(r), expected), "relation {r}");
+        }
+    }
+
+    #[test]
+    fn fold_chain_soft_concludes_under_the_entropy_gate_and_refuses_above_it() {
+        let sem = soft_table();
+        let chain = [soft(&[(R_A, 0.7), (R_B, 0.3)]), SoftResultSet::delta(R_C)];
+        let genders = [Gender::Male; 3];
+        let h = -(0.63f64 * 0.63f64.ln() + 0.37 * 0.37f64.ln());
+        match sem.fold_chain_soft(&chain, &genders, 0.7) {
+            FoldOutcome::SoftConcluded {
+                predicted,
+                probability,
+                entropy,
+                steps,
+                distribution,
+                unclosed_mass,
+                step_entropies,
+            } => {
+                assert_eq!(predicted, R_X);
+                assert!(close(probability, 0.63));
+                assert!(close(entropy, h));
+                assert_eq!(steps, 1);
+                assert_eq!(distribution.len(), 2);
+                assert_eq!(distribution[0].0, R_X);
+                assert!(close(unclosed_mass, 0.0));
+                assert_eq!(step_entropies.len(), 2);
+            }
+            other => panic!("expected SoftConcluded, got {other:?}"),
+        }
+        match sem.fold_chain_soft(&chain, &genders, 0.5) {
+            FoldOutcome::Refused {
+                step_failed,
+                reason,
+            } => {
+                assert_eq!(step_failed, 2);
+                assert!(reason.contains("exceeds tau_H"), "{reason}");
+            }
+            other => panic!("expected an entropy refusal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fold_chain_soft_refuses_a_tie_and_a_dominant_unclosed_mass() {
+        let mut sem = soft_table();
+        sem.insert_soft_axiom(
+            RelationKey::new(R_A, R_D, Gender::Male),
+            soft(&[(R_X, 0.5), (R_Y, 0.5)]),
+        );
+        let genders = [Gender::Male; 3];
+        // Bimodal root: entropy ln 2 passes a loose gate, the tie does not.
+        let tie = [SoftResultSet::delta(R_A), SoftResultSet::delta(R_D)];
+        match sem.fold_chain_soft(&tie, &genders, 1.0) {
+            FoldOutcome::Refused { reason, .. } => {
+                assert!(reason.contains("multimodal"), "{reason}")
+            }
+            other => panic!("expected a tie refusal, got {other:?}"),
+        }
+        // 60% of the mass never closes: "no derivation" beats relation X.
+        let open = [soft(&[(R_A, 0.4), (R_D, 0.6)]), SoftResultSet::delta(R_C)];
+        match sem.fold_chain_soft(&open, &genders, 2.0) {
+            FoldOutcome::Refused { reason, .. } => {
+                assert!(reason.contains("unclosed mass"), "{reason}")
+            }
+            other => panic!("expected an unclosed refusal, got {other:?}"),
+        }
+        // Nothing closes at all.
+        let none = [SoftResultSet::delta(R_D), SoftResultSet::delta(R_D)];
+        assert!(matches!(
+            sem.fold_chain_soft(&none, &genders, 2.0),
+            FoldOutcome::Refused { step_failed: 2, .. }
+        ));
+    }
+
+    #[test]
+    fn fold_chain_soft_refuses_bad_input_and_unweighted_conflict_keys() {
+        let sem = soft_table();
+        let chain = [SoftResultSet::delta(R_A), SoftResultSet::delta(R_C)];
+        for (genders, tau) in [
+            (&[Gender::Male; 2][..], 1.0),
+            (&[Gender::Male; 3][..], -0.1),
+            (&[Gender::Male; 3][..], f32::NAN),
+        ] {
+            assert!(matches!(
+                sem.fold_chain_soft(&chain, genders, tau),
+                FoldOutcome::Refused { step_failed: 0, .. }
+            ));
+        }
+        assert!(matches!(
+            sem.fold_chain_soft(&[], &[Gender::Male], 1.0),
+            FoldOutcome::Refused { step_failed: 0, .. }
+        ));
+
+        // A discrete conflict key has no weights: the soft fold refuses it.
+        let mut conflicted = RelationSemiring::new();
+        let key = RelationKey::new(R_A, R_C, Gender::Male);
+        conflicted.insert_axiom(key, ResultSet::from_ids([R_X, R_Y]));
+        match conflicted.fold_chain_soft(&chain, &[Gender::Male; 3], 2.0) {
+            FoldOutcome::Refused { reason, .. } => {
+                assert!(reason.contains("no soft axiom"), "{reason}")
+            }
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+        // Weighing the same candidates makes it foldable.
+        conflicted.insert_soft_axiom(key, soft(&[(R_X, 0.95), (R_Y, 0.05)]));
+        assert!(matches!(
+            conflicted.fold_chain_soft(&chain, &[Gender::Male; 3], 0.5),
+            FoldOutcome::SoftConcluded { predicted: R_X, .. }
+        ));
+        // A soft axiom that disagrees with the discrete one is refused.
+        conflicted.insert_soft_axiom(key, soft(&[(R_Z, 1.0)]));
+        match conflicted.fold_chain_soft(&chain, &[Gender::Male; 3], 2.0) {
+            FoldOutcome::Refused { reason, .. } => {
+                assert!(reason.contains("discrete axiom"), "{reason}")
+            }
+            other => panic!("expected a refusal, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fold_chain_soft_on_deltas_matches_the_discrete_left_fold() {
+        let sem = associative_table();
+        let edges = [R_A, R_B, R_C, R_D, R_B];
+        let genders = [Gender::Unknown; 6];
+        let FoldOutcome::Concluded { predicted, .. } = sem.left_fold_chain(&edges, &genders) else {
+            panic!("the associative table closes every chain");
+        };
+        let chain: Vec<_> = edges.iter().map(|&r| SoftResultSet::delta(r)).collect();
+        match sem.fold_chain_soft(&chain, &genders, 0.0) {
+            FoldOutcome::SoftConcluded {
+                predicted: soft_predicted,
+                probability,
+                entropy,
+                ..
+            } => {
+                assert_eq!(soft_predicted, predicted);
+                assert!(close(probability, 1.0));
+                assert!(close(entropy, 0.0));
+            }
+            other => panic!("expected SoftConcluded, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn fold_chain_soft_fails_closed_on_budget() {
+        let wide = SoftResultSet::from_probs((0..64).map(|r| (r as RelId, 1.0 / 64.0))).unwrap();
+        let mut sem = RelationSemiring::new();
+        for r1 in 0..64 {
+            for r2 in 0..64 {
+                sem.insert_soft_axiom(RelationKey::new(r1, r2, Gender::Male), wide.clone());
+            }
+        }
+        let chain = vec![wide; 40];
+        match sem.fold_chain_soft(&chain, &[Gender::Male; 41], 100.0) {
+            FoldOutcome::Refused { reason, .. } => assert_eq!(reason, BUDGET_EXCEEDED_REASON),
+            other => panic!("expected a budget refusal, got {other:?}"),
         }
     }
 }
