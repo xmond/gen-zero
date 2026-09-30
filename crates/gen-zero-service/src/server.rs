@@ -511,13 +511,13 @@ impl McpServer {
             "tools/list" => {
                 let mut zero_tool = json!({
                                 "name": "zero",
-                                "description": "Universal Gen-Zero Polymorphic Decision, Planning & Cognitive Primitive (0-Token Pure-Prefill). Supports 12 cognitive verbs: ask (alias decide), route, imagine, stream, grep, compact, entail, causal_fold, pipeline, simulate, what_if, audit.",
+                                "description": "Universal Gen-Zero Polymorphic Decision, Planning & Cognitive Primitive (0-Token Pure-Prefill). Supports 16 cognitive verbs: ask (alias decide), route, imagine, stream, grep, compact, entail, causal_fold, pipeline, simulate, what_if, audit, graph_deposit, graph_recall, graph_ppr, graph_prune.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "action": {
                                             "type": "string",
-                                            "enum": ["ask", "route", "imagine", "stream", "grep", "compact", "entail", "causal_fold", "pipeline", "simulate", "what_if", "audit"],
+                                            "enum": ["ask", "route", "imagine", "stream", "grep", "compact", "entail", "causal_fold", "pipeline", "simulate", "what_if", "audit", "graph_deposit", "graph_recall", "graph_ppr", "graph_prune"],
                                             "description": "Optional explicit verb. If omitted, intent is deduced automatically."
                                         },
                                         "candidates": {
@@ -557,6 +557,10 @@ impl McpServer {
                                         "entailment": {
                                             "type": "object",
                                             "description": "Numeric request for 'entail': {passage, question}, each [H | R | S] coordinates of the topology preset the mount seals: compact_64d (H^32 x R^16 x S^15, 64 values), balanced_128d (H^64 x R^32 x S^31, 128), boolq_128d (H^80 x R^24 x S^23, 128) or extended_256d (H^160 x R^48 x S^47, 256). Any other width is refused with FiberMismatch. Runs the asymmetric Busemann containment test on the geometry the mount seals (assets `entailment` block). Optional scheme 2: add passage_events and question_events (equal-length [{time_ns, input: tangent coordinates of the same width}] at the passage and question points) plus window_start_ns; the question-minus-transported-passage difference is scanned by the sealed `entailment.dynamics` SSM and moves the question point before the test. No text encoder; margin is not a calibrated probability."
+                                        },
+                                        "graph": {
+                                            "type": "object",
+                                            "description": "Request for the graph verbs on the engine's live LodGraph (the graph the PolicyGate reads for revocations). Name nodes by entity_id or by action (entity id = the action's id). graph_deposit: {nodes?: [{entity_id | action, label, band: 0..3, status: hypothesized | validated | falsified, coord: {hyperbolic: [4], spherical: [4], euclidean: [8]}, hdc: [4 u64], confidence}], edges?: [{source: {entity_id | action}, target: {...}, type: validates | falsifies | causal_transition | semantic | coarse_grain | depends_on, weight}]}, one transaction, flushed into the CSR snapshot, rolled back whole on any error. graph_recall: {coord, hdc, top_k, crag_margin}. graph_ppr: {seeds: [{entity_id | action, weight}], top_k, alpha?, max_iters?, tolerance?}. graph_prune: {entity_id | action, dry_run?}: falsifies the node and its DependsOn/CausalTransition dependents and revokes their entities, which hard-stops those actions at the gate; dry_run reports and rolls back. Process memory only: not persisted across restarts."
                                         },
                                         "causal_fold": {
                                             "type": "object",

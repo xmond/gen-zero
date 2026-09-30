@@ -28,6 +28,7 @@ use gen_zero_core::{
     ActionId, CoreError, FullLatent, LocalActionFrame, NormalizedEntropy, WorldModelDynamics,
 };
 use gen_zero_gate::{PolicyGate, PolicyTier};
+use gen_zero_lod::LodGraph;
 use gen_zero_planner::{AStarEngine, AStarGoal, MctsEngine, MpcCemEngine, PlanningEngine};
 use gen_zero_worldmodel::{
     ConformalWorldModelDynamics, LatentDynamicsWorldModel, SymplecticWorldModelDynamics,
@@ -599,6 +600,7 @@ impl Rollout {
 fn rollout<'a>(
     model: &WorldDynamics,
     gate: &PolicyGate,
+    graph: &LodGraph,
     start: &FullLatent,
     horizon: usize,
     keep_phase: bool,
@@ -618,8 +620,9 @@ fn rollout<'a>(
         let name = pick(step, &current)?;
         single_action &= *first_action.get_or_insert(name) == name;
         let id = action_id(name);
+        // The live graph's revocations reach every imagined step.
         let verdict = gate
-            .evaluate_basic(id, NormalizedEntropy::ZERO)
+            .evaluate(id, NormalizedEntropy::ZERO, Some(graph), None)
             .map_err(|e| failure("GateError", format!("policy gate failed: {e}")))?;
         worst_tier = worst_tier.max(verdict.tier);
         let StepOut {
@@ -727,7 +730,7 @@ fn provenance_meta(spec: DynamicsSpec) -> Value {
 }
 
 /// `simulate`: replay a fixed action plan from a latent state.
-pub fn simulate(gate: &PolicyGate, args: &Value) -> WorldResult {
+pub fn simulate(gate: &PolicyGate, graph: &LodGraph, args: &Value) -> WorldResult {
     let state = parse_latent(args.get("state"), "state")?;
     let actions = parse_names(args.get("actions"), "actions", MAX_HORIZON, false)?;
     let horizon = parse_horizon(args.get("horizon"), actions.len())?;
@@ -741,9 +744,15 @@ pub fn simulate(gate: &PolicyGate, args: &Value) -> WorldResult {
     let kind = spec.kind;
     let model = WorldDynamics::new(spec)?;
     let keep_phase = kind.has_phase_space();
-    let run = rollout(&model, gate, &state, horizon, keep_phase, |step, _| {
-        Ok(actions[step - 1].as_str())
-    })?;
+    let run = rollout(
+        &model,
+        gate,
+        graph,
+        &state,
+        horizon,
+        keep_phase,
+        |step, _| Ok(actions[step - 1].as_str()),
+    )?;
     let summary = format!(
         "Simulated {} of {horizon} step(s) on the {}: survival {}, return {:.4}",
         run.trajectory.len(),
@@ -760,7 +769,7 @@ pub fn simulate(gate: &PolicyGate, args: &Value) -> WorldResult {
 
 /// `what_if`: compare candidate first actions. Later steps follow the greedy
 /// one-step policy over the candidates.
-pub fn what_if(gate: &PolicyGate, args: &Value) -> WorldResult {
+pub fn what_if(gate: &PolicyGate, graph: &LodGraph, args: &Value) -> WorldResult {
     let state = parse_latent(args.get("state"), "state")?;
     let candidates = parse_names(args.get("candidates"), "candidates", MAX_CANDIDATES, true)?;
     let horizon = parse_horizon(args.get("horizon"), DEFAULT_HORIZON)?;
@@ -772,6 +781,7 @@ pub fn what_if(gate: &PolicyGate, args: &Value) -> WorldResult {
         let run = rollout(
             &model,
             gate,
+            graph,
             &state,
             horizon,
             false,
@@ -849,6 +859,7 @@ pub const VERDICT_UNVERIFIED: &str = "UNVERIFIED_UNTRAINED_DYNAMICS";
 /// audited action name, made by the engine.
 pub fn audit(
     gate: &PolicyGate,
+    graph: &LodGraph,
     args: &Value,
     semantic_tier: PolicyTier,
     semantic_meta: Value,
@@ -880,6 +891,7 @@ pub fn audit(
     let run = rollout(
         &model,
         gate,
+        graph,
         &state,
         horizon,
         false,
@@ -1000,6 +1012,7 @@ pub fn plan_latent(
 pub fn trajectory_for_choice(
     spec: DynamicsSpec,
     gate: &PolicyGate,
+    graph: &LodGraph,
     latent: &FullLatent,
     chosen: &str,
     candidates: &[String],
@@ -1009,6 +1022,7 @@ pub fn trajectory_for_choice(
     let run = rollout(
         &model,
         gate,
+        graph,
         latent,
         horizon,
         false,
@@ -1081,7 +1095,7 @@ mod tests {
     fn simulate_replays_the_plan_and_reports_provenance() {
         let gate = PolicyGate::default();
         let args = json!({"state": latent(0.0), "actions": ["a", "b", "c"]});
-        let (meta, _) = simulate(&gate, &args).unwrap();
+        let (meta, _) = simulate(&gate, &LodGraph::new(), &args).unwrap();
         assert_eq!(meta["provenance"], PROVENANCE);
         assert_eq!(meta["trained"], false);
         let sim = &meta["simulation"];
@@ -1094,14 +1108,14 @@ mod tests {
     fn simulate_refuses_a_horizon_beyond_the_plan() {
         let gate = PolicyGate::default();
         let args = json!({"state": latent(0.0), "actions": ["a"], "horizon": 2});
-        assert!(simulate(&gate, &args).is_err());
+        assert!(simulate(&gate, &LodGraph::new(), &args).is_err());
     }
 
     #[test]
     fn a_blown_up_state_is_a_hazard_at_step_one() {
         let gate = PolicyGate::default();
         let args = json!({"state": latent(10.0), "actions": ["a", "b"]});
-        let (meta, _) = simulate(&gate, &args).unwrap();
+        let (meta, _) = simulate(&gate, &LodGraph::new(), &args).unwrap();
         let sim = &meta["simulation"];
         assert_eq!(sim["is_safe"], false);
         assert_eq!(sim["first_hazard_step"], 1);
@@ -1113,7 +1127,7 @@ mod tests {
     fn what_if_ranks_safe_before_hazard_and_is_advisory() {
         let gate = PolicyGate::default();
         let args = json!({"state": latent(0.0), "candidates": ["a", "b", "c"], "horizon": 3});
-        let (meta, _) = what_if(&gate, &args).unwrap();
+        let (meta, _) = what_if(&gate, &LodGraph::new(), &args).unwrap();
         assert_eq!(meta["ranking"].as_array().unwrap().len(), 3);
         assert_eq!(meta["advisory_only"], true);
         assert_eq!(meta["provenance"], PROVENANCE);
@@ -1124,7 +1138,7 @@ mod tests {
     fn what_if_has_no_top_candidate_when_every_rollout_is_hazardous() {
         let gate = PolicyGate::default();
         let args = json!({"state": latent(10.0), "candidates": ["a", "b"]});
-        let (meta, _) = what_if(&gate, &args).unwrap();
+        let (meta, _) = what_if(&gate, &LodGraph::new(), &args).unwrap();
         assert!(meta["top_candidate"].is_null());
     }
 
@@ -1134,6 +1148,7 @@ mod tests {
         let args = json!({"state": latent(0.0), "target_action": "a", "horizon": 3});
         let (meta, _) = audit(
             &gate,
+            &LodGraph::new(),
             &args,
             PolicyTier::Tier0Proceed,
             json!({"assessed": true}),
@@ -1148,12 +1163,66 @@ mod tests {
     fn audit_verdict_follows_hazard_then_tier() {
         let gate = PolicyGate::default();
         let hot = json!({"state": latent(10.0), "target_action": "a"});
-        let (meta, _) = audit(&gate, &hot, PolicyTier::Tier0Proceed, json!({})).unwrap();
+        let (meta, _) = audit(
+            &gate,
+            &LodGraph::new(),
+            &hot,
+            PolicyTier::Tier0Proceed,
+            json!({}),
+        )
+        .unwrap();
         assert_eq!(meta["verdict"], VERDICT_LETHAL);
         let calm = json!({"state": latent(0.0), "target_action": "a"});
-        let (meta, _) = audit(&gate, &calm, PolicyTier::Tier2Escalate, json!({})).unwrap();
+        let (meta, _) = audit(
+            &gate,
+            &LodGraph::new(),
+            &calm,
+            PolicyTier::Tier2Escalate,
+            json!({}),
+        )
+        .unwrap();
         assert_eq!(meta["verdict"], VERDICT_CONFIRM);
-        let (meta, _) = audit(&gate, &calm, PolicyTier::Tier3HardStop, json!({})).unwrap();
+        let (meta, _) = audit(
+            &gate,
+            &LodGraph::new(),
+            &calm,
+            PolicyTier::Tier3HardStop,
+            json!({}),
+        )
+        .unwrap();
+        assert_eq!(meta["verdict"], VERDICT_POLICY);
+    }
+
+    /// A falsified graph node for action "a" hard-stops every simulated step of
+    /// "a" and turns the audit into a policy rejection.
+    #[test]
+    fn graph_revocation_reaches_worldsim_rollouts() {
+        use gen_zero_lod::{EpistemicStatus, LodBand, LodNode, MixedCurvatureCoord};
+        let gate = PolicyGate::default();
+        let graph = LodGraph::new();
+        let entity = u64::from(action_id("a").0);
+        graph
+            .add_node(
+                LodNode::new(
+                    0,
+                    LodBand::Lod0Atomic,
+                    MixedCurvatureCoord::origin(),
+                    "a",
+                    entity,
+                )
+                .with_status(EpistemicStatus::Falsified),
+            )
+            .unwrap();
+        let args = json!({"state": latent(0.0), "actions": ["a", "b"]});
+        let (meta, _) = simulate(&gate, &graph, &args).unwrap();
+        let steps = meta["simulation"]["trajectory"].as_array().unwrap();
+        assert_eq!(steps[0]["tier"], "HardStop");
+        assert_eq!(steps[1]["tier"], "Proceed");
+        let (meta, _) = simulate(&gate, &LodGraph::new(), &args).unwrap();
+        assert_eq!(meta["simulation"]["trajectory"][0]["tier"], "Proceed");
+
+        let calm = json!({"state": latent(0.0), "target_action": "a"});
+        let (meta, _) = audit(&gate, &graph, &calm, PolicyTier::Tier0Proceed, json!({})).unwrap();
         assert_eq!(meta["verdict"], VERDICT_POLICY);
     }
 

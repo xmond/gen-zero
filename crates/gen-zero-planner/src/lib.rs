@@ -18,8 +18,8 @@ pub use engine::{
 };
 pub use error::PlannerError;
 pub use pipeline::{
-    AuditReport, AuditVerdict, CandidateOutcome, DecideMode, DecideRequest, Decision,
-    ProductionPipeline, PrunedAction, Rollout, SimStep, WhatIfReport, DEFAULT_WARN_RISK,
+    AuditReport, AuditVerdict, CandidateOutcome, DecideMode, DecideRequest, Decision, GraphContext,
+    GraphFact, ProductionPipeline, PrunedAction, Rollout, SimStep, WhatIfReport, DEFAULT_WARN_RISK,
     MAX_DECIDE_CANDIDATES, MAX_HORIZON, MAX_WHAT_IF_CANDIDATES,
 };
 pub use router::{DynamicKMoERouter, RoutingTier};

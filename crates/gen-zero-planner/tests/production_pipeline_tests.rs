@@ -9,10 +9,10 @@
 
 use gen_zero_core::{ActionId, CoreError, FullLatent, NormalizedEntropy, WorldModelDynamics};
 use gen_zero_gate::{Budget, LinearConstraint, PolicyGate, PolicyTier, RuleId, SheafProblem};
-use gen_zero_lod::{EpistemicStatus, LodBand, LodGraph, LodNode, MixedCurvatureCoord};
+use gen_zero_lod::{EdgeType, EpistemicStatus, LodBand, LodGraph, LodNode, MixedCurvatureCoord};
 use gen_zero_planner::{
-    AuditVerdict, DecideMode, DecideRequest, PlannerError, ProductionPipeline, RoutingTier,
-    DEFAULT_WARN_RISK, MAX_HORIZON, MAX_WHAT_IF_CANDIDATES,
+    AuditVerdict, DecideMode, DecideRequest, GraphContext, PlannerError, ProductionPipeline,
+    RoutingTier, DEFAULT_WARN_RISK, MAX_HORIZON, MAX_WHAT_IF_CANDIDATES,
 };
 use gen_zero_worldmodel::{LatentDynamicsWorldModel, DONE_NORM, SAFETY_SOURCE_NORM_MARGIN};
 use nalgebra::{DMatrix, DVector};
@@ -44,22 +44,90 @@ fn pipeline(gate: PolicyGate) -> ProductionPipeline {
 #[test]
 fn graph_revocation_prunes_candidate_before_engine_dispatch() {
     let graph = Arc::new(LodGraph::new());
-    graph.add_node(
-        LodNode::new(
-            0,
-            LodBand::Lod0Atomic,
-            MixedCurvatureCoord::origin(),
-            "revoked",
-            2,
+    graph
+        .add_node(
+            LodNode::new(
+                0,
+                LodBand::Lod0Atomic,
+                MixedCurvatureCoord::origin(),
+                "revoked",
+                2,
+            )
+            .with_status(EpistemicStatus::Falsified),
         )
-        .with_status(EpistemicStatus::Falsified),
-    );
+        .unwrap();
     let p = pipeline(PolicyGate::default()).with_graph(graph);
     let state = FullLatent::zeros();
     assert_eq!(
         p.decide(&decide_req(&state, &[ActionId(2)], DecideMode::Reflex))
             .unwrap_err(),
         PlannerError::NoFeasibleAction
+    );
+}
+
+fn lod(label: &str, entity: u64) -> LodNode {
+    LodNode::new(
+        0,
+        LodBand::Lod0Atomic,
+        MixedCurvatureCoord::origin(),
+        label,
+        entity,
+    )
+}
+
+/// The chosen action's graph node seeds PPR; its causal successor comes back
+/// as a fact, the unrelated node does not, and a falsified node never does.
+#[test]
+fn decision_carries_ppr_graph_context_of_the_chosen_action() {
+    let graph = Arc::new(LodGraph::new());
+    let act = graph.add_node(lod("open valve", 1)).unwrap();
+    let effect = graph.add_node(lod("pressure drops", 1001)).unwrap();
+    let dead = graph
+        .add_node(lod("stale belief", 1002).with_status(EpistemicStatus::Falsified))
+        .unwrap();
+    graph.add_node(lod("unrelated", 1003)).unwrap();
+    graph
+        .add_edge(act, effect, EdgeType::CausalTransition, 1.0)
+        .unwrap();
+    graph
+        .add_edge(act, dead, EdgeType::CausalTransition, 1.0)
+        .unwrap();
+    graph.flush_edges_to_csr().unwrap();
+    let p = pipeline(PolicyGate::default()).with_graph(graph);
+    let state = FullLatent::zeros();
+    let d = p
+        .decide(&decide_req(&state, &[ActionId(1)], DecideMode::Reflex))
+        .unwrap();
+    assert_eq!(d.action, ActionId(1));
+    match d.graph_context {
+        GraphContext::Diffused {
+            seed_entities,
+            facts,
+            converged,
+            ..
+        } => {
+            assert_eq!(seed_entities, vec![1]);
+            let entities: Vec<u64> = facts.iter().map(|f| f.entity_id).collect();
+            assert_eq!(entities, vec![1001]);
+            assert_eq!(facts[0].label, "pressure drops");
+            assert!(converged);
+        }
+        other => panic!("expected diffused context, got {other:?}"),
+    }
+}
+
+#[test]
+fn decision_graph_context_names_why_it_is_unavailable() {
+    let p = pipeline(PolicyGate::default());
+    let state = FullLatent::zeros();
+    let d = p
+        .decide(&decide_req(&state, &[ActionId(1)], DecideMode::Reflex))
+        .unwrap();
+    assert_eq!(
+        d.graph_context,
+        GraphContext::Unavailable {
+            reason: "action 1 has no node in the live graph".into()
+        }
     );
 }
 

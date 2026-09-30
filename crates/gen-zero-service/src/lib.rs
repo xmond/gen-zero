@@ -12,6 +12,7 @@ pub mod bridge;
 pub mod closed_loop;
 pub mod cognitive;
 pub mod error;
+pub mod graph_verb;
 pub mod imagine;
 pub mod mount;
 pub mod pipeline_verb;

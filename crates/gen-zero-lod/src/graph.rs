@@ -1,8 +1,15 @@
-//! gen-zero-lod Dynamic Graph Topology, Epistemic Lifecycle & Pearl Cascading Pruning.
+//! gen-zero-lod dynamic graph topology, epistemic lifecycle and causal cascade pruning.
 //!
-//! Provides lock-free double-buffered CSR snapshots (ArcSwap<CsrGraph>),
-//! dynamic ticket-sequenced edge append buffer, 2-stage HDC+Fisher/Manifold recall,
-//! and Pearl causal cascade pruning with virtual loss rollback.
+//! Readers traverse an immutable CSR snapshot (`ArcSwap<CsrGraph>`) without locks.
+//! Writers append ticketed edges to a pending buffer. `flush_edges_to_csr` merges
+//! only the pending edges into a new snapshot and drains them from the buffer, so
+//! the buffer never holds committed history.
+//!
+//! `create_checkpoint` / `rollback_checkpoint` restore the whole mutable graph state
+//! atomically. `cascade_prune_and_rollback` falsifies a premise and its dependents,
+//! retracts their validated dependencies, and returns the pre-prune checkpoint so
+//! the prune itself can be undone. Nothing here touches a search tree: the planner's
+//! MCTS is sequential and has no virtual loss (see `gen-zero-planner/src/config.rs`).
 
 use crate::error::LodError;
 use crate::manifold::MixedCurvatureCoord;
@@ -10,7 +17,7 @@ use crate::node::{hdc_hamming_distance_256, EpistemicStatus, LodNode};
 use crate::ppr::compute_ppr_csr;
 use arc_swap::ArcSwap;
 use gen_zero_core::GraphFactProvider;
-use parking_lot::RwLock;
+use parking_lot::{Mutex, RwLock};
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -44,12 +51,13 @@ pub struct BufferedEdge {
     pub ticket: u64,
 }
 
-/// Immutable Compressed Sparse Row (CSR) Graph Snapshot.
-/// Provides lock-free zero-allocation graph traversal for PPR and CRAG.
+/// Immutable Compressed Sparse Row (CSR) Graph Snapshot, traversed lock-free
+/// by PPR and the CRAG expansion of two-stage recall.
 ///
 /// Fields are private so the CSR invariants hold for every value:
 /// `row_offsets.len() == num_nodes + 1`, `row_offsets` is non-decreasing and
-/// ends at `col_indices.len()`, and the three edge arrays share one length.
+/// ends at `col_indices.len()`, the three edge arrays share one length, every
+/// target is a node, and every weight is finite and nonnegative.
 #[derive(Clone, Debug)]
 pub struct CsrGraph {
     num_nodes: usize,
@@ -78,23 +86,40 @@ impl CsrGraph {
         }
     }
 
-    /// Construct CSR snapshot from a set of buffered edges and node count.
-    pub fn from_edges(num_nodes: usize, edges: &[BufferedEdge]) -> Self {
+    /// Construct a CSR snapshot from buffered edges. An edge whose endpoint is
+    /// outside `num_nodes` is an error, never dropped.
+    pub fn from_edges(num_nodes: usize, edges: &[BufferedEdge]) -> Result<Self, LodError> {
+        Self::empty().merged(num_nodes, edges)
+    }
+
+    /// New snapshot holding this snapshot's edges plus `delta`, over `num_nodes`
+    /// nodes (never fewer than this snapshot has). Within a row, existing edges keep
+    /// their order and delta edges follow in slice order.
+    ///
+    /// Cost is O(num_nodes + existing edges + delta): an immutable CSR array is
+    /// rebuilt, not patched. What this avoids is re-reading the whole edge history.
+    pub fn merged(&self, num_nodes: usize, delta: &[BufferedEdge]) -> Result<Self, LodError> {
+        if num_nodes < self.num_nodes {
+            return Err(LodError::CsrInvariant(format!(
+                "cannot shrink a snapshot from {} to {num_nodes} nodes",
+                self.num_nodes
+            )));
+        }
+        for edge in delta {
+            check_edge(num_nodes, edge.source, edge.target, edge.weight)?;
+        }
         if num_nodes == 0 {
-            return Self::empty();
+            return Ok(Self::empty());
         }
 
-        // Count degrees for valid node ranges
         let mut degrees = vec![0usize; num_nodes];
-        for edge in edges {
-            let u = edge.source as usize;
-            let v = edge.target as usize;
-            if u < num_nodes && v < num_nodes {
-                degrees[u] += 1;
-            }
+        for (u, degree) in degrees.iter_mut().enumerate().take(self.num_nodes) {
+            *degree = self.row_offsets[u + 1] - self.row_offsets[u];
+        }
+        for edge in delta {
+            degrees[edge.source as usize] += 1;
         }
 
-        // Build prefix row offsets
         let mut row_offsets = Vec::with_capacity(num_nodes + 1);
         row_offsets.push(0);
         let mut current_offset = 0;
@@ -109,25 +134,75 @@ impl CsrGraph {
         let mut edge_types = vec![EdgeType::Semantic; total_edges];
 
         let mut insert_cursor = row_offsets[..num_nodes].to_vec();
-        for edge in edges {
+        for (cursor, row) in insert_cursor.iter_mut().zip(self.row_offsets.windows(2)) {
+            let (start, end) = (row[0], row[1]);
+            let (at, len) = (*cursor, end - start);
+            col_indices[at..at + len].copy_from_slice(&self.col_indices[start..end]);
+            edge_weights[at..at + len].copy_from_slice(&self.edge_weights[start..end]);
+            edge_types[at..at + len].copy_from_slice(&self.edge_types[start..end]);
+            *cursor += len;
+        }
+        for edge in delta {
             let u = edge.source as usize;
-            let v = edge.target as usize;
-            if u < num_nodes && v < num_nodes {
-                let idx = insert_cursor[u];
-                col_indices[idx] = edge.target;
-                edge_weights[idx] = edge.weight;
-                edge_types[idx] = edge.edge_type;
-                insert_cursor[u] += 1;
-            }
+            let idx = insert_cursor[u];
+            col_indices[idx] = edge.target;
+            edge_weights[idx] = edge.weight;
+            edge_types[idx] = edge.edge_type;
+            insert_cursor[u] += 1;
         }
 
-        Self {
+        let csr = Self {
             num_nodes,
             row_offsets,
             col_indices,
             edge_weights,
             edge_types,
+        };
+        csr.validate()?;
+        Ok(csr)
+    }
+
+    /// Check every CSR invariant. A snapshot that fails is never published.
+    pub fn validate(&self) -> Result<(), LodError> {
+        let fail = |detail: String| Err(LodError::CsrInvariant(detail));
+        let edges = self.col_indices.len();
+        if self.row_offsets.len() != self.num_nodes + 1 {
+            return fail(format!(
+                "{} row offsets for {} nodes",
+                self.row_offsets.len(),
+                self.num_nodes
+            ));
         }
+        if self.row_offsets[0] != 0 || self.row_offsets[self.num_nodes] != edges {
+            return fail("row offsets must start at 0 and end at the edge count".into());
+        }
+        if self.row_offsets.windows(2).any(|w| w[0] > w[1]) {
+            return fail("row offsets decrease".into());
+        }
+        if self.edge_weights.len() != edges || self.edge_types.len() != edges {
+            return fail("edge arrays differ in length".into());
+        }
+        if let Some(v) = self
+            .col_indices
+            .iter()
+            .find(|&&v| v as usize >= self.num_nodes)
+        {
+            return fail(format!("edge target {v} outside {} nodes", self.num_nodes));
+        }
+        if let Some(w) = self
+            .edge_weights
+            .iter()
+            .find(|w| !(w.is_finite() && **w >= 0.0))
+        {
+            return fail(format!("edge weight {w} is not finite and nonnegative"));
+        }
+        Ok(())
+    }
+
+    /// Number of edges in this snapshot.
+    #[inline]
+    pub fn num_edges(&self) -> usize {
+        self.col_indices.len()
     }
 
     /// Number of nodes covered by this snapshot.
@@ -160,18 +235,6 @@ impl CsrGraph {
         &self.edge_types
     }
 
-    /// Copy of this snapshot grown to `num_nodes` nodes; new nodes have no edges.
-    fn with_num_nodes(&self, num_nodes: usize) -> Self {
-        let mut grown = self.clone();
-        if num_nodes > grown.num_nodes {
-            grown.num_nodes = num_nodes;
-            grown
-                .row_offsets
-                .resize(num_nodes + 1, grown.col_indices.len());
-        }
-        grown
-    }
-
     /// Outgoing neighbor iterator for node u: (target_node, edge_type, weight).
     pub fn neighbors(&self, u: u32) -> impl Iterator<Item = (u32, EdgeType, f32)> + '_ {
         let u_idx = u as usize;
@@ -197,16 +260,122 @@ impl CsrGraph {
     }
 }
 
+/// An edge endpoint must be an existing node and its weight finite and nonnegative.
+fn check_edge(num_nodes: usize, source: u32, target: u32, weight: f32) -> Result<(), LodError> {
+    if source as usize >= num_nodes || target as usize >= num_nodes {
+        return Err(LodError::InvalidEdge(format!(
+            "edge {source} -> {target} names a node outside the {num_nodes} in the graph"
+        )));
+    }
+    if !(weight.is_finite() && weight >= 0.0) {
+        return Err(LodError::InvalidEdge(format!(
+            "edge {source} -> {target} weight {weight} must be finite and nonnegative"
+        )));
+    }
+    Ok(())
+}
+
+/// Mutable graph state. One lock guards all of it, so a checkpoint or a rollback
+/// reads or restores a single consistent state.
+///
+/// Lock order: `txn_lock` -> `flush_lock` -> `state`. The CSR snapshot is stored
+/// only while `state` is write-locked; methods that must see it consistent with
+/// the nodes load it while holding `state`.
+#[derive(Default)]
+struct GraphState {
+    nodes: Vec<LodNode>,
+    entity_index: HashMap<u64, u32>,
+    /// Edges not yet merged into the CSR snapshot, in ticket order.
+    edge_buffer: Vec<BufferedEdge>,
+    revocations: HashSet<u64>,
+    privileges: HashMap<u64, Vec<u32>>,
+    validated_deps: HashSet<(u64, u64)>,
+    /// Bumped by every CSR store and every rollback. A flush built against an
+    /// older generation is discarded.
+    generation: u64,
+    /// Sorted, disjoint checkpoint sequence ranges `(after, upto]` whose state a
+    /// rollback discarded. Checkpoints in them can no longer be restored.
+    discarded: Vec<(u64, u64)>,
+}
+
+/// Everything a rollback restores: the node count, each node's status and
+/// confidence (the only node fields any method mutates), the CSR snapshot
+/// reference, pending edges, revocations, privileges and validated dependencies.
+/// The edge ticket counter is never rewound, so tickets stay unique.
+///
+/// Memory is O(nodes + pending edges + revocations + dependencies) per checkpoint.
+#[derive(Clone, Debug)]
+pub struct GraphCheckpoint {
+    graph_id: u64,
+    seq: u64,
+    node_states: Vec<(EpistemicStatus, f32)>,
+    csr: Arc<CsrGraph>,
+    edge_buffer: Vec<BufferedEdge>,
+    revocations: HashSet<u64>,
+    privileges: HashMap<u64, Vec<u32>>,
+    validated_deps: HashSet<(u64, u64)>,
+}
+
+impl GraphCheckpoint {
+    /// Number of nodes the graph had when this checkpoint was taken.
+    pub fn node_count(&self) -> usize {
+        self.node_states.len()
+    }
+}
+
+/// Result of one [`LodGraph::flush_edges_to_csr`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FlushReport {
+    /// Pending edges merged into the new snapshot and drained from the buffer.
+    pub merged_edges: usize,
+    /// Nodes covered by the published snapshot.
+    pub csr_nodes: usize,
+    /// Edges in the published snapshot.
+    pub csr_edges: usize,
+    /// Edges appended while the flush was building; they wait for the next flush.
+    pub pending_edges: usize,
+}
+
+/// Result of one [`LodGraph::cascade_prune_and_rollback`].
+#[derive(Clone, Debug)]
+pub struct PruneOutcome {
+    /// The falsified root, then every dependent falsified with it, in BFS order.
+    pub pruned: Vec<u32>,
+    /// Entity ids revoked by this prune, parallel to `pruned`.
+    pub revoked_entities: Vec<u64>,
+    /// Validated dependencies retracted because one end was pruned.
+    pub retracted_dependencies: usize,
+    /// State just before the prune, taken under the same lock. Pass it to
+    /// [`LodGraph::rollback_checkpoint`] to undo the prune.
+    pub checkpoint: GraphCheckpoint,
+}
+
+/// Ranked output of [`LodGraph::query_ppr`].
+#[derive(Clone, Debug, PartialEq)]
+pub struct PprRanking {
+    /// `(node id, score)` for live nodes, highest score first.
+    pub ranked: Vec<(u32, f32)>,
+    pub iterations: usize,
+    pub residual: f32,
+    pub converged: bool,
+}
+
+static NEXT_GRAPH_ID: AtomicU64 = AtomicU64::new(1);
+
 /// Dynamic LodGraph integrating multi-scale nodes, ticketed edge buffer,
 /// lock-free CSR snapshots, and epistemic governance.
 pub struct LodGraph {
-    nodes: RwLock<Vec<LodNode>>,
-    edge_buffer: RwLock<Vec<BufferedEdge>>,
-    ticket_counter: AtomicU64,
+    /// Identity checked by `rollback_checkpoint`, so a checkpoint cannot be
+    /// restored into another graph.
+    graph_id: u64,
+    state: RwLock<GraphState>,
     csr_snapshot: ArcSwap<CsrGraph>,
-    revocations: RwLock<HashSet<u64>>,
-    privileges: RwLock<HashMap<u64, Vec<u32>>>,
-    validated_deps: RwLock<HashSet<(u64, u64)>>,
+    ticket_counter: AtomicU64,
+    checkpoint_seq: AtomicU64,
+    /// Serializes flush builds against each other and against rollbacks.
+    flush_lock: Mutex<()>,
+    /// Serializes [`LodGraph::transact`] writers.
+    txn_lock: Mutex<()>,
 }
 
 impl Default for LodGraph {
@@ -219,191 +388,283 @@ impl LodGraph {
     /// Initialize an empty LodGraph.
     pub fn new() -> Self {
         Self {
-            nodes: RwLock::new(Vec::new()),
-            edge_buffer: RwLock::new(Vec::new()),
-            ticket_counter: AtomicU64::new(1),
+            graph_id: NEXT_GRAPH_ID.fetch_add(1, Ordering::Relaxed),
+            state: RwLock::new(GraphState::default()),
             csr_snapshot: ArcSwap::from_pointee(CsrGraph::empty()),
-            revocations: RwLock::new(HashSet::new()),
-            privileges: RwLock::new(HashMap::new()),
-            validated_deps: RwLock::new(HashSet::new()),
+            ticket_counter: AtomicU64::new(1),
+            checkpoint_seq: AtomicU64::new(0),
+            flush_lock: Mutex::new(()),
+            txn_lock: Mutex::new(()),
         }
     }
 
-    /// Insert a new node into the graph, assigning an auto-incrementing ID.
-    pub fn add_node(&self, mut node: LodNode) -> u32 {
-        let mut nodes = self.nodes.write();
-        let id = nodes.len() as u32;
+    /// Insert a node and return its id. Refuses a coordinate the recall metric
+    /// would reject, a confidence outside [0, 1], an unknown parent, and an
+    /// entity id that already has a node: the gate addresses nodes by entity.
+    pub fn add_node(&self, mut node: LodNode) -> Result<u32, LodError> {
+        node.coord
+            .product_distance(&MixedCurvatureCoord::origin())?;
+        if !(node.confidence.is_finite() && (0.0..=1.0).contains(&node.confidence)) {
+            return Err(LodError::InvalidNode(format!(
+                "confidence {} must lie in [0, 1]",
+                node.confidence
+            )));
+        }
+        let mut st = self.state.write();
+        let id = u32::try_from(st.nodes.len())
+            .map_err(|_| LodError::InvalidNode("graph holds u32::MAX nodes".into()))?;
+        if let Some(parent) = node.parent_id {
+            if parent >= id {
+                return Err(LodError::InvalidNode(format!(
+                    "parent {parent} is not an existing node"
+                )));
+            }
+        }
+        if st.entity_index.contains_key(&node.entity_id) {
+            return Err(LodError::DuplicateEntity(node.entity_id));
+        }
         node.id = id;
-
         if node.status.is_falsified() {
-            self.revocations.write().insert(node.entity_id);
+            st.revocations.insert(node.entity_id);
         }
-
-        nodes.push(node);
-
-        // Keep CSR snapshot node count aligned so queries know about newly added nodes
-        let snap = self.csr_snapshot.load();
-        if snap.num_nodes < nodes.len() {
-            self.csr_snapshot
-                .store(Arc::new(snap.with_num_nodes(nodes.len())));
-        }
-
-        id
+        st.entity_index.insert(node.entity_id, id);
+        st.nodes.push(node);
+        Ok(id)
     }
 
     /// Retrieve a cloned copy of a node by ID.
     pub fn get_node(&self, id: u32) -> Option<LodNode> {
-        let nodes = self.nodes.read();
-        nodes.get(id as usize).cloned()
+        self.state.read().nodes.get(id as usize).cloned()
+    }
+
+    /// Node id holding `entity_id`, if any.
+    pub fn node_for_entity(&self, entity_id: u64) -> Option<u32> {
+        self.state.read().entity_index.get(&entity_id).copied()
     }
 
     /// Number of nodes currently in graph.
     pub fn node_count(&self) -> usize {
-        self.nodes.read().len()
+        self.state.read().nodes.len()
     }
 
-    /// Append a directional edge to the dynamic edge buffer.
-    pub fn add_edge(&self, source: u32, target: u32, edge_type: EdgeType, weight: f32) -> u64 {
+    /// Edges appended but not yet merged into the CSR snapshot.
+    pub fn pending_edge_count(&self) -> usize {
+        self.state.read().edge_buffer.len()
+    }
+
+    /// The currently published CSR snapshot.
+    pub fn csr_snapshot(&self) -> Arc<CsrGraph> {
+        self.csr_snapshot.load_full()
+    }
+
+    /// Append a directional edge to the pending buffer and return its ticket.
+    /// Both endpoints must be existing nodes; the weight must be finite and
+    /// nonnegative. The critical section is O(1): no history is copied.
+    pub fn add_edge(
+        &self,
+        source: u32,
+        target: u32,
+        edge_type: EdgeType,
+        weight: f32,
+    ) -> Result<u64, LodError> {
+        let mut st = self.state.write();
+        check_edge(st.nodes.len(), source, target, weight)?;
+        // Taken under the lock so buffer order is ticket order.
         let ticket = self.ticket_counter.fetch_add(1, Ordering::Relaxed);
-        let edge = BufferedEdge {
+        st.edge_buffer.push(BufferedEdge {
             source,
             target,
             edge_type,
             weight,
             ticket,
-        };
-
-        self.edge_buffer.write().push(edge);
-
-        // If edge represents a validated causal dependency, register into validated_deps
-        if edge_type == EdgeType::DependsOn || edge_type == EdgeType::Validates {
-            let nodes = self.nodes.read();
-            if let (Some(u), Some(v)) = (nodes.get(source as usize), nodes.get(target as usize)) {
-                if u.status.is_active_truth() && v.status.is_active_truth() {
-                    self.validated_deps
-                        .write()
-                        .insert((u.entity_id, v.entity_id));
-                }
+        });
+        if matches!(edge_type, EdgeType::DependsOn | EdgeType::Validates) {
+            let (u, v) = (&st.nodes[source as usize], &st.nodes[target as usize]);
+            if u.status.is_active_truth() && v.status.is_active_truth() {
+                let dep = (u.entity_id, v.entity_id);
+                st.validated_deps.insert(dep);
             }
         }
-
-        ticket
+        Ok(ticket)
     }
 
     /// Transition a node from Hypothesized to Validated upon environment proof or intervention.
-    /// Automatically detects and backfills connected validated dependencies into `validated_deps`.
+    /// Backfills validated dependencies on both outgoing and incoming
+    /// `DependsOn` / `Validates` edges, in the CSR snapshot and the pending buffer.
     pub fn validate_node(&self, node_id: u32) -> Result<(), LodError> {
-        let mut nodes = self.nodes.write();
-        let num_nodes = nodes.len();
-        if (node_id as usize) >= num_nodes {
+        let mut guard = self.state.write();
+        let st = &mut *guard;
+        let idx = node_id as usize;
+        if idx >= st.nodes.len() {
             return Err(LodError::NodeNotFound(node_id));
         }
-
-        if nodes[node_id as usize].status == EpistemicStatus::Falsified {
+        if st.nodes[idx].status == EpistemicStatus::Falsified {
             return Err(LodError::InvalidStateTransition(
                 "Cannot validate an already falsified node".into(),
             ));
         }
 
-        nodes[node_id as usize].status = EpistemicStatus::Validated;
-        nodes[node_id as usize].confidence = 1.0;
+        st.nodes[idx].status = EpistemicStatus::Validated;
+        st.nodes[idx].confidence = 1.0;
+        let node_entity = st.nodes[idx].entity_id;
+        st.revocations.remove(&node_entity);
 
-        let node_entity = nodes[node_id as usize].entity_id;
-        self.revocations.write().remove(&node_entity);
-
-        // Check both CSR snapshot and dynamic edge_buffer for connected dependencies
+        let dependency = |t: EdgeType| matches!(t, EdgeType::DependsOn | EdgeType::Validates);
+        let active = |id: u32| {
+            st.nodes
+                .get(id as usize)
+                .filter(|n| n.status.is_active_truth())
+                .map(|n| n.entity_id)
+        };
         let snapshot = self.csr_snapshot.load();
         let mut new_deps = Vec::new();
-
         for (nbr, edge_type, _) in snapshot.neighbors(node_id) {
-            if matches!(edge_type, EdgeType::DependsOn | EdgeType::Validates) {
-                if let Some(target) = nodes.get(nbr as usize) {
-                    if target.status.is_active_truth() {
-                        new_deps.push((node_entity, target.entity_id));
+            if dependency(edge_type) {
+                if let Some(target) = active(nbr) {
+                    new_deps.push((node_entity, target));
+                }
+            }
+        }
+        // Incoming CSR edges: the CSR indexes rows by source only, so this is an
+        // O(E) scan. After a flush the buffer is small and nearly every edge lives here.
+        for src in 0..snapshot.num_nodes() as u32 {
+            for (nbr, edge_type, _) in snapshot.neighbors(src) {
+                if nbr == node_id && dependency(edge_type) {
+                    if let Some(source) = active(src) {
+                        new_deps.push((source, node_entity));
                     }
                 }
             }
         }
-
-        let edge_buf = self.edge_buffer.read();
-        for edge in edge_buf.iter() {
-            if matches!(edge.edge_type, EdgeType::DependsOn | EdgeType::Validates) {
-                if edge.source == node_id {
-                    if let Some(target) = nodes.get(edge.target as usize) {
-                        if target.status.is_active_truth() {
-                            new_deps.push((node_entity, target.entity_id));
-                        }
-                    }
-                } else if edge.target == node_id {
-                    if let Some(src) = nodes.get(edge.source as usize) {
-                        if src.status.is_active_truth() {
-                            new_deps.push((src.entity_id, node_entity));
-                        }
-                    }
+        for edge in &st.edge_buffer {
+            if !dependency(edge.edge_type) {
+                continue;
+            }
+            if edge.source == node_id {
+                if let Some(target) = active(edge.target) {
+                    new_deps.push((node_entity, target));
+                }
+            }
+            if edge.target == node_id {
+                if let Some(source) = active(edge.source) {
+                    new_deps.push((source, node_entity));
                 }
             }
         }
-
-        let mut val_deps = self.validated_deps.write();
-        for dep in new_deps {
-            val_deps.insert(dep);
-        }
-
+        st.validated_deps.extend(new_deps);
         Ok(())
     }
 
-    /// Flush and compact all buffered edges into a new immutable CSR snapshot.
-    /// Atomically replaces the current CSR snapshot for lock-free reader access.
-    pub fn flush_edges_to_csr(&self) {
-        let num_nodes = self.nodes.read().len();
-        let edges = self.edge_buffer.read().clone();
-        let new_csr = CsrGraph::from_edges(num_nodes, &edges);
-        self.csr_snapshot.store(Arc::new(new_csr));
+    /// Merge the pending edges into a new CSR snapshot and drain them from the
+    /// buffer. The new snapshot is the current snapshot plus the pending delta,
+    /// grown to the current node count, and is validated before it is published.
+    ///
+    /// On any error the old snapshot and the whole buffer are kept. Edges added
+    /// while the snapshot builds stay pending. A rollback during the build makes
+    /// this return `FlushConflict` without committing.
+    pub fn flush_edges_to_csr(&self) -> Result<FlushReport, LodError> {
+        let _flush = self.flush_lock.lock();
+        let (base, pending, num_nodes, generation) = {
+            let st = self.state.read();
+            (
+                self.csr_snapshot.load_full(),
+                st.edge_buffer.clone(),
+                st.nodes.len(),
+                st.generation,
+            )
+        };
+        let merged = base.merged(num_nodes, &pending)?;
+
+        let mut st = self.state.write();
+        let prefix_matches = st.edge_buffer.len() >= pending.len()
+            && st
+                .edge_buffer
+                .iter()
+                .zip(&pending)
+                .all(|(a, b)| a.ticket == b.ticket);
+        if st.generation != generation || !prefix_matches {
+            return Err(LodError::FlushConflict);
+        }
+        let report = FlushReport {
+            merged_edges: pending.len(),
+            csr_nodes: merged.num_nodes(),
+            csr_edges: merged.num_edges(),
+            pending_edges: st.edge_buffer.len() - pending.len(),
+        };
+        self.csr_snapshot.store(Arc::new(merged));
+        st.edge_buffer.drain(..pending.len());
+        st.generation += 1;
+        Ok(report)
     }
 
-    /// Run Personalized PageRank over the active CSR snapshot.
+    /// Run Personalized PageRank over the committed CSR snapshot. Nodes added
+    /// since the last flush take part with no edges. Every seed must be a node;
+    /// bad parameters are errors. Falsified and revoked nodes are left out of the
+    /// ranking.
     pub fn query_ppr(
         &self,
         seeds: &[(u32, f32)],
         alpha: f32,
         max_iters: usize,
         tolerance: f32,
-    ) -> Vec<(u32, f32)> {
+    ) -> Result<PprRanking, LodError> {
+        let st = self.state.read();
         let snapshot = self.csr_snapshot.load();
-        let scores = compute_ppr_csr(
-            snapshot.num_nodes,
-            &snapshot.row_offsets,
-            &snapshot.col_indices,
-            &snapshot.edge_weights,
+        let num_nodes = st.nodes.len();
+        if snapshot.num_nodes() > num_nodes {
+            return Err(LodError::CsrInvariant(format!(
+                "snapshot covers {} nodes but the graph has {num_nodes}",
+                snapshot.num_nodes()
+            )));
+        }
+        let padded;
+        let row_offsets = if snapshot.num_nodes() < num_nodes {
+            let mut rows = snapshot.row_ptrs().to_vec();
+            rows.resize(num_nodes + 1, snapshot.num_edges());
+            padded = rows;
+            &padded[..]
+        } else {
+            snapshot.row_ptrs()
+        };
+        let ppr = compute_ppr_csr(
+            num_nodes,
+            row_offsets,
+            snapshot.col_indices(),
+            snapshot.edge_weights(),
             seeds,
             alpha,
             max_iters,
             tolerance,
-        );
+        )?;
 
-        let nodes = self.nodes.read();
-        let revoked = self.revocations.read();
-        let mut ranked: Vec<(u32, f32)> = scores
+        let mut ranked: Vec<(u32, f32)> = ppr
+            .scores
             .into_iter()
             .enumerate()
             .filter(|(idx, _)| {
-                nodes.get(*idx).is_some_and(|node| {
-                    !node.status.is_falsified() && !revoked.contains(&node.entity_id)
-                })
+                let node = &st.nodes[*idx];
+                !node.status.is_falsified() && !st.revocations.contains(&node.entity_id)
             })
             .map(|(idx, s)| (idx as u32, s))
             .collect();
-
-        // Sort descending by score
-        ranked.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-        ranked
+        ranked.sort_by(|a, b| b.1.total_cmp(&a.1));
+        Ok(PprRanking {
+            ranked,
+            iterations: ppr.iterations,
+            residual: ppr.residual,
+            converged: ppr.converged,
+        })
     }
 
-    /// Two-Stage Memory Recall Pipeline:
-    /// Stage 1: Fast HDC POPCNT Hamming filter (< 1.5µs across 500k nodes) -> selects Top-4K.
-    /// Stage 2: Mixed-Curvature product geodesic rerank with Corrective RAG (CRAG) margin.
+    /// Two-Stage Memory Recall:
+    /// Stage 1: HDC Hamming distance over every live node (a linear POPCNT scan),
+    /// keeping the `4 * top_k` closest.
+    /// Stage 2: Mixed-curvature product geodesic rerank of those candidates, with a
+    /// Corrective RAG (CRAG) margin: when the top two are closer than
+    /// `crag_margin`, the 1-hop CSR neighbors of the top one join the rerank.
     ///
-    /// Excludes falsified and revoked hypotheses to eliminate false memory recall.
+    /// Excludes falsified and revoked nodes. `top_k` must be at least 1 and
+    /// `crag_margin` finite and nonnegative; an out-of-domain coordinate is an error.
     pub fn two_stage_recall(
         &self,
         query_coord: &MixedCurvatureCoord,
@@ -411,13 +672,18 @@ impl LodGraph {
         top_k: usize,
         crag_margin: f32,
     ) -> Result<Vec<(u32, f32)>, LodError> {
-        let nodes = self.nodes.read();
-        if nodes.is_empty() || top_k == 0 {
-            return Ok(Vec::new());
+        if top_k == 0 {
+            return Err(LodError::InvalidQuery("top_k must be at least 1".into()));
         }
-        let revs = self.revocations.read();
+        if !(crag_margin.is_finite() && crag_margin >= 0.0) {
+            return Err(LodError::InvalidQuery(format!(
+                "crag_margin must be finite and nonnegative, got {crag_margin}"
+            )));
+        }
+        query_coord.product_distance(&MixedCurvatureCoord::origin())?;
+        let st = self.state.read();
+        let (nodes, revs) = (&st.nodes, &st.revocations);
 
-        // Stage 1: Filter out falsified / revoked nodes & compute HDC Hamming Distance
         let mut candidates: Vec<(u32, u32)> = nodes
             .iter()
             .filter(|n| !n.status.is_falsified() && !revs.contains(&n.entity_id))
@@ -433,152 +699,218 @@ impl LodGraph {
             return Ok(Vec::new());
         }
 
-        let candidate_pool_size = (top_k * 4)
-            .min(candidates.len())
-            .max(top_k.min(candidates.len()));
+        let candidate_pool_size = top_k.saturating_mul(4).min(candidates.len());
         if candidate_pool_size < candidates.len() {
             // O(N) linear selection instead of O(N log N) full sort
             candidates.select_nth_unstable_by_key(candidate_pool_size, |c| c.1);
             candidates.truncate(candidate_pool_size);
         }
 
-        // Stage 2: Full Mixed-Curvature Product Geodesic Reranking.
         // An out-of-domain coordinate aborts the recall instead of being skipped.
         let mut reranked: Vec<(u32, f32)> = Vec::with_capacity(candidates.len());
         for &(id, _) in &candidates {
-            if let Some(n) = nodes.get(id as usize) {
-                reranked.push((id, n.coord.product_distance(query_coord)?));
-            }
+            reranked.push((id, nodes[id as usize].coord.product_distance(query_coord)?));
         }
+        reranked.sort_by(|a, b| a.1.total_cmp(&b.1));
 
-        reranked.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-
-        // Corrective RAG (CRAG) Margin Check:
-        // If distance difference between top-1 and top-2 is below margin, expand neighborhood
-        if reranked.len() >= 2 {
-            let d1 = reranked[0].1;
-            let d2 = reranked[1].1;
-            if (d2 - d1).abs() < crag_margin {
-                // Critical ambiguity detected; query CSR snapshot to pull 1-hop neighbors of top-1
-                let snapshot = self.csr_snapshot.load();
-                let top1_id = reranked[0].0;
-                for (nbr, _, _) in snapshot.neighbors(top1_id) {
-                    if !reranked.iter().any(|(id, _)| *id == nbr) {
-                        if let Some(nbr_node) = nodes.get(nbr as usize) {
-                            if !nbr_node.status.is_falsified()
-                                && !revs.contains(&nbr_node.entity_id)
-                            {
-                                let dist = nbr_node.coord.product_distance(query_coord)?;
-                                reranked.push((nbr, dist));
-                            }
-                        }
-                    }
+        if reranked.len() >= 2 && (reranked[1].1 - reranked[0].1).abs() < crag_margin {
+            let snapshot = self.csr_snapshot.load();
+            let top1_id = reranked[0].0;
+            for (nbr, _, _) in snapshot.neighbors(top1_id) {
+                if reranked.iter().any(|(id, _)| *id == nbr) {
+                    continue;
                 }
-                reranked.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+                let nbr_node = &nodes[nbr as usize];
+                if !nbr_node.status.is_falsified() && !revs.contains(&nbr_node.entity_id) {
+                    reranked.push((nbr, nbr_node.coord.product_distance(query_coord)?));
+                }
             }
+            reranked.sort_by(|a, b| a.1.total_cmp(&b.1));
         }
 
         reranked.truncate(top_k);
         Ok(reranked)
     }
 
-    /// Pearl Causal Subtree Pruning & Rollback.
+    /// Pearl causal subtree pruning with belief rollback.
     ///
     /// When environment feedback or formal proof falsifies an assumption:
     /// 1. Mark `falsified_node_id` as `Falsified`.
-    /// 2. Traverse all downstream dependent nodes (`DependsOn`, `CausalTransition`) that are not Axiomatic.
-    /// 3. Cascade mark them as `Falsified`.
-    /// 4. Register entity revocations and purge invalidated dependencies.
-    /// 5. Return all pruned node IDs so MCTS Arena can rollback virtual losses.
-    pub fn cascade_prune_and_rollback(&self, falsified_node_id: u32) -> Vec<u32> {
-        let mut nodes = self.nodes.write();
-        let num_nodes = nodes.len();
-        if (falsified_node_id as usize) >= num_nodes {
-            return Vec::new();
+    /// 2. Walk every downstream `DependsOn` / `CausalTransition` edge, in the CSR
+    ///    snapshot and the pending buffer, and falsify each non-axiomatic target.
+    /// 3. Revoke the entity of every pruned node.
+    /// 4. Retract every validated dependency that touches a pruned entity.
+    ///
+    /// The returned [`PruneOutcome::checkpoint`] is the state just before step 1,
+    /// captured under the same write lock, so the whole prune can be undone with
+    /// [`Self::rollback_checkpoint`]. An unknown node or an axiomatic root is an error.
+    pub fn cascade_prune_and_rollback(
+        &self,
+        falsified_node_id: u32,
+    ) -> Result<PruneOutcome, LodError> {
+        let mut guard = self.state.write();
+        let root = falsified_node_id as usize;
+        if root >= guard.nodes.len() {
+            return Err(LodError::NodeNotFound(falsified_node_id));
         }
-        if nodes[falsified_node_id as usize].status == EpistemicStatus::Axiomatic {
-            return Vec::new();
+        if guard.nodes[root].status == EpistemicStatus::Axiomatic {
+            return Err(LodError::InvalidStateTransition(format!(
+                "node {falsified_node_id} is axiomatic and cannot be pruned"
+            )));
         }
+        let checkpoint = self.capture(&guard);
+        let st = &mut *guard;
 
-        let mut pruned = Vec::new();
-        let mut new_revocations = Vec::new();
-        let mut queue = VecDeque::new();
-
-        // Mark root falsified
-        nodes[falsified_node_id as usize].status = EpistemicStatus::Falsified;
-        let root_entity = nodes[falsified_node_id as usize].entity_id;
-        new_revocations.push(root_entity);
-        pruned.push(falsified_node_id);
-        queue.push_back(falsified_node_id);
+        let mut pruned = vec![falsified_node_id];
+        let mut queue = VecDeque::from([falsified_node_id]);
+        st.nodes[root].status = EpistemicStatus::Falsified;
 
         let snapshot = self.csr_snapshot.load();
-        let edge_buf = self.edge_buffer.read();
-
+        let propagates =
+            |t: EdgeType| matches!(t, EdgeType::DependsOn | EdgeType::CausalTransition);
         while let Some(curr) = queue.pop_front() {
-            // 1. Check CSR outgoing edges
-            for (nbr, edge_type, _) in snapshot.neighbors(curr) {
-                if matches!(edge_type, EdgeType::DependsOn | EdgeType::CausalTransition) {
-                    let nbr_idx = nbr as usize;
-                    if nbr_idx < num_nodes
-                        && !matches!(
-                            nodes[nbr_idx].status,
-                            EpistemicStatus::Axiomatic | EpistemicStatus::Falsified
-                        )
-                    {
-                        nodes[nbr_idx].status = EpistemicStatus::Falsified;
-                        let ent = nodes[nbr_idx].entity_id;
-                        new_revocations.push(ent);
-                        pruned.push(nbr);
-                        queue.push_back(nbr);
-                    }
-                }
-            }
-
-            // 2. Check un-flushed buffered edges to guarantee zero invisible dependency gaps
-            for edge in edge_buf.iter() {
-                if edge.source == curr
-                    && matches!(
-                        edge.edge_type,
-                        EdgeType::DependsOn | EdgeType::CausalTransition
-                    )
-                {
-                    let nbr_idx = edge.target as usize;
-                    if nbr_idx < num_nodes
-                        && !matches!(
-                            nodes[nbr_idx].status,
-                            EpistemicStatus::Axiomatic | EpistemicStatus::Falsified
-                        )
-                    {
-                        nodes[nbr_idx].status = EpistemicStatus::Falsified;
-                        let ent = nodes[nbr_idx].entity_id;
-                        new_revocations.push(ent);
-                        pruned.push(edge.target);
-                        queue.push_back(edge.target);
-                    }
+            let csr_targets = snapshot
+                .neighbors(curr)
+                .filter(|(_, t, _)| propagates(*t))
+                .map(|(v, _, _)| v);
+            let buffered_targets = st
+                .edge_buffer
+                .iter()
+                .filter(|e| e.source == curr && propagates(e.edge_type))
+                .map(|e| e.target);
+            let targets: Vec<u32> = csr_targets.chain(buffered_targets).collect();
+            for nbr in targets {
+                let node = &mut st.nodes[nbr as usize];
+                if !matches!(
+                    node.status,
+                    EpistemicStatus::Axiomatic | EpistemicStatus::Falsified
+                ) {
+                    node.status = EpistemicStatus::Falsified;
+                    pruned.push(nbr);
+                    queue.push_back(nbr);
                 }
             }
         }
 
-        // Batch update revocations without acquiring lock on every BFS pop
-        self.revocations.write().extend(new_revocations);
-
-        // Purge invalidated dependencies
-        let pruned_entities: HashSet<u64> = pruned
+        let revoked_entities: Vec<u64> = pruned
             .iter()
-            .filter_map(|&id| nodes.get(id as usize).map(|n| n.entity_id))
+            .map(|&id| st.nodes[id as usize].entity_id)
             .collect();
-
-        self.validated_deps
-            .write()
+        st.revocations.extend(revoked_entities.iter().copied());
+        let pruned_entities: HashSet<u64> = revoked_entities.iter().copied().collect();
+        let before = st.validated_deps.len();
+        st.validated_deps
             .retain(|(u, v)| !pruned_entities.contains(u) && !pruned_entities.contains(v));
+        let retracted_dependencies = before - st.validated_deps.len();
 
-        pruned
+        Ok(PruneOutcome {
+            pruned,
+            revoked_entities,
+            retracted_dependencies,
+            checkpoint,
+        })
+    }
+
+    /// Capture the whole mutable state atomically. See [`GraphCheckpoint`].
+    pub fn create_checkpoint(&self) -> GraphCheckpoint {
+        let st = self.state.read();
+        self.capture(&st)
+    }
+
+    fn capture(&self, st: &GraphState) -> GraphCheckpoint {
+        GraphCheckpoint {
+            graph_id: self.graph_id,
+            seq: self.checkpoint_seq.fetch_add(1, Ordering::Relaxed) + 1,
+            node_states: st.nodes.iter().map(|n| (n.status, n.confidence)).collect(),
+            csr: self.csr_snapshot.load_full(),
+            edge_buffer: st.edge_buffer.clone(),
+            revocations: st.revocations.clone(),
+            privileges: st.privileges.clone(),
+            validated_deps: st.validated_deps.clone(),
+        }
+    }
+
+    /// Restore `checkpoint` atomically: nodes added after it are removed (their
+    /// ids become free again), statuses, CSR snapshot, pending edges,
+    /// revocations, privileges and validated dependencies return to its values.
+    ///
+    /// Every write since the checkpoint is discarded, including writes by other
+    /// threads; use [`Self::transact`] to keep writers serialized. Refused: a
+    /// checkpoint of another graph, and one taken after an earlier checkpoint that
+    /// has since been restored (its state no longer exists).
+    pub fn rollback_checkpoint(&self, checkpoint: &GraphCheckpoint) -> Result<(), LodError> {
+        let _flush = self.flush_lock.lock();
+        let mut st = self.state.write();
+        if checkpoint.graph_id != self.graph_id {
+            return Err(LodError::CheckpointRejected(
+                "checkpoint belongs to another graph".into(),
+            ));
+        }
+        let seq = checkpoint.seq;
+        if st.discarded.iter().any(|&(a, b)| seq > a && seq <= b) {
+            return Err(LodError::CheckpointRejected(format!(
+                "checkpoint {seq} was discarded by an earlier rollback"
+            )));
+        }
+        let keep = checkpoint.node_states.len();
+        if keep > st.nodes.len() {
+            return Err(LodError::CheckpointRejected(format!(
+                "checkpoint has {keep} nodes but the graph has {}",
+                st.nodes.len()
+            )));
+        }
+
+        st.nodes.truncate(keep);
+        st.entity_index.retain(|_, id| (*id as usize) < keep);
+        for (node, &(status, confidence)) in st.nodes.iter_mut().zip(&checkpoint.node_states) {
+            node.status = status;
+            node.confidence = confidence;
+        }
+        st.edge_buffer = checkpoint.edge_buffer.clone();
+        st.revocations = checkpoint.revocations.clone();
+        st.privileges = checkpoint.privileges.clone();
+        st.validated_deps = checkpoint.validated_deps.clone();
+        self.csr_snapshot.store(Arc::clone(&checkpoint.csr));
+        st.generation += 1;
+
+        // Checkpoints taken after this one describe states that no longer exist.
+        let upto = self.checkpoint_seq.load(Ordering::Relaxed);
+        if upto > seq {
+            while st.discarded.last().is_some_and(|&(a, _)| a >= seq) {
+                st.discarded.pop();
+            }
+            match st.discarded.last_mut() {
+                Some(last) if last.1 >= seq => last.1 = upto,
+                _ => st.discarded.push((seq, upto)),
+            }
+        }
+        Ok(())
+    }
+
+    /// Run `f` as one write transaction: writers through `transact` are
+    /// serialized, and an error from `f` rolls the graph back to its state before
+    /// `f`. Not reentrant: calling `transact` inside `f` deadlocks.
+    pub fn transact<T>(
+        &self,
+        f: impl FnOnce(&LodGraph) -> Result<T, LodError>,
+    ) -> Result<T, LodError> {
+        let _txn = self.txn_lock.lock();
+        let checkpoint = self.create_checkpoint();
+        match f(self) {
+            Ok(value) => Ok(value),
+            Err(error) => match self.rollback_checkpoint(&checkpoint) {
+                Ok(()) => Err(error),
+                Err(rollback) => Err(LodError::CheckpointRejected(format!(
+                    "transaction failed ({error}) and its rollback was refused: {rollback}"
+                ))),
+            },
+        }
     }
 
     /// Register a privilege bitflag for an agent.
     pub fn add_privilege(&self, agent_id: u64, privilege: u32) {
-        let mut privs = self.privileges.write();
-        let list = privs.entry(agent_id).or_default();
+        let mut st = self.state.write();
+        let list = st.privileges.entry(agent_id).or_default();
         if !list.contains(&privilege) {
             list.push(privilege);
         }
@@ -586,7 +918,7 @@ impl LodGraph {
 
     /// Explicitly revoke an entity ID in the cognitive graph.
     pub fn revoke_entity(&self, entity_id: u64) {
-        self.revocations.write().insert(entity_id);
+        self.state.write().revocations.insert(entity_id);
     }
 }
 
@@ -594,20 +926,20 @@ impl GraphFactProvider for LodGraph {
     type DepIter<'a> = std::vec::IntoIter<(u64, u64)>;
 
     fn active_validated_dependencies<'a>(&'a self) -> Self::DepIter<'a> {
-        let deps: Vec<(u64, u64)> = self.validated_deps.read().iter().copied().collect();
+        let deps: Vec<(u64, u64)> = self.state.read().validated_deps.iter().copied().collect();
         deps.into_iter()
     }
 
     fn is_revoked(&self, entity_id: u64) -> bool {
-        self.revocations.read().contains(&entity_id)
+        self.state.read().revocations.contains(&entity_id)
     }
 
     fn has_privilege(&self, agent_id: u64, privilege: u32) -> bool {
-        let privs = self.privileges.read();
-        privs
+        self.state
+            .read()
+            .privileges
             .get(&agent_id)
-            .map(|list| list.contains(&privilege))
-            .unwrap_or(false)
+            .is_some_and(|list| list.contains(&privilege))
     }
 }
 
@@ -616,202 +948,519 @@ mod tests {
     use super::*;
     use crate::node::LodBand;
 
+    fn node(label: &str, entity: u64) -> LodNode {
+        LodNode::new(
+            0,
+            LodBand::Lod0Atomic,
+            MixedCurvatureCoord::origin(),
+            label,
+            entity,
+        )
+    }
+
+    fn pruned(graph: &LodGraph, id: u32) -> Vec<u32> {
+        graph.cascade_prune_and_rollback(id).unwrap().pruned
+    }
+
     #[test]
     fn axiom_survives_direct_and_cascading_prune() {
         let graph = LodGraph::new();
-        let coord = MixedCurvatureCoord::origin();
-        let source = graph.add_node(LodNode::new(0, LodBand::Lod0Atomic, coord, "source", 10));
-        let axiom = graph.add_node(
-            LodNode::new(0, LodBand::Lod0Atomic, coord, "axiom", 11)
-                .with_status(EpistemicStatus::Axiomatic),
-        );
-        graph.add_edge(source, axiom, EdgeType::DependsOn, 1.0);
-        graph.flush_edges_to_csr();
-        assert!(graph.cascade_prune_and_rollback(axiom).is_empty());
-        assert_eq!(graph.cascade_prune_and_rollback(source), vec![source]);
+        let source = graph.add_node(node("source", 10)).unwrap();
+        let axiom = graph
+            .add_node(node("axiom", 11).with_status(EpistemicStatus::Axiomatic))
+            .unwrap();
+        graph
+            .add_edge(source, axiom, EdgeType::DependsOn, 1.0)
+            .unwrap();
+        graph.flush_edges_to_csr().unwrap();
+        assert!(matches!(
+            graph.cascade_prune_and_rollback(axiom),
+            Err(LodError::InvalidStateTransition(_))
+        ));
+        assert_eq!(pruned(&graph, source), vec![source]);
         assert_eq!(
             graph.get_node(axiom).unwrap().status,
             EpistemicStatus::Axiomatic
         );
         assert!(!graph.is_revoked(11));
+        assert_eq!(
+            graph.cascade_prune_and_rollback(99).unwrap_err(),
+            LodError::NodeNotFound(99)
+        );
     }
 
     #[test]
     fn ppr_omits_falsified_and_revoked_nodes() {
         let graph = LodGraph::new();
-        let coord = MixedCurvatureCoord::origin();
-        let live = graph.add_node(LodNode::new(0, LodBand::Lod0Atomic, coord, "live", 20));
-        let false_node = graph.add_node(
-            LodNode::new(0, LodBand::Lod0Atomic, coord, "false", 21)
-                .with_status(EpistemicStatus::Falsified),
-        );
-        let revoked = graph.add_node(LodNode::new(0, LodBand::Lod0Atomic, coord, "revoked", 22));
+        let live = graph.add_node(node("live", 20)).unwrap();
+        let false_node = graph
+            .add_node(node("false", 21).with_status(EpistemicStatus::Falsified))
+            .unwrap();
+        let revoked = graph.add_node(node("revoked", 22)).unwrap();
         graph.revoke_entity(22);
-        let result = graph.query_ppr(
-            &[(live, 1.0), (false_node, 1.0), (revoked, 1.0)],
-            0.15,
-            10,
-            1e-4,
-        );
+        let result = graph
+            .query_ppr(
+                &[(live, 1.0), (false_node, 1.0), (revoked, 1.0)],
+                0.15,
+                10,
+                1e-4,
+            )
+            .unwrap();
         assert_eq!(
-            result.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
+            result.ranked.iter().map(|(id, _)| *id).collect::<Vec<_>>(),
             vec![live]
         );
     }
 
     #[test]
+    fn ppr_refuses_unknown_seed_and_bad_alpha() {
+        let graph = LodGraph::new();
+        let a = graph.add_node(node("a", 1)).unwrap();
+        assert!(matches!(
+            graph.query_ppr(&[(a + 1, 1.0)], 0.15, 10, 1e-4),
+            Err(LodError::InvalidQuery(_))
+        ));
+        assert!(matches!(
+            graph.query_ppr(&[(a, 1.0)], 1.0, 10, 1e-4),
+            Err(LodError::InvalidQuery(_))
+        ));
+    }
+
+    #[test]
     fn test_lod_graph_workflow() {
         let graph = LodGraph::new();
-
         let coord0 = MixedCurvatureCoord::origin();
-        let n0 = LodNode::new(0, LodBand::Lod0Atomic, coord0, "sensor_read", 1001)
-            .with_status(EpistemicStatus::Validated);
-        let id0 = graph.add_node(n0);
-
-        let n1 = LodNode::new(1, LodBand::Lod1Cluster, coord0, "sub_goal", 1002)
-            .with_status(EpistemicStatus::Hypothesized);
-        let id1 = graph.add_node(n1);
-
-        let n2 = LodNode::new(2, LodBand::Lod2Milestone, coord0, "milestone", 1003)
-            .with_status(EpistemicStatus::Hypothesized);
-        let id2 = graph.add_node(n2);
+        let id0 = graph
+            .add_node(
+                LodNode::new(0, LodBand::Lod0Atomic, coord0, "sensor_read", 1001)
+                    .with_status(EpistemicStatus::Validated),
+            )
+            .unwrap();
+        let id1 = graph
+            .add_node(LodNode::new(
+                1,
+                LodBand::Lod1Cluster,
+                coord0,
+                "sub_goal",
+                1002,
+            ))
+            .unwrap();
+        let id2 = graph
+            .add_node(LodNode::new(
+                2,
+                LodBand::Lod2Milestone,
+                coord0,
+                "milestone",
+                1003,
+            ))
+            .unwrap();
 
         // Add dependencies: 0 -> 1 -> 2
-        graph.add_edge(id0, id1, EdgeType::DependsOn, 1.0);
-        graph.add_edge(id1, id2, EdgeType::DependsOn, 1.0);
-        graph.flush_edges_to_csr();
+        graph.add_edge(id0, id1, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(id1, id2, EdgeType::DependsOn, 1.0).unwrap();
+        graph.flush_edges_to_csr().unwrap();
 
-        // Check GraphFactProvider contract
         assert!(!graph.is_revoked(1001));
         assert!(!graph.is_revoked(1002));
 
-        // Now falsify node 1: should cascade prune node 2 as well!
-        let pruned = graph.cascade_prune_and_rollback(id1);
-        assert_eq!(pruned, vec![id1, id2]);
+        // Falsifying node 1 cascades to node 2.
+        let outcome = graph.cascade_prune_and_rollback(id1).unwrap();
+        assert_eq!(outcome.pruned, vec![id1, id2]);
+        assert_eq!(outcome.revoked_entities, vec![1002, 1003]);
 
         assert!(graph.is_revoked(1002));
         assert!(graph.is_revoked(1003));
-        assert!(!graph.is_revoked(1001)); // Root node 0 was not pruned
+        assert!(!graph.is_revoked(1001));
     }
 
     #[test]
     fn test_two_stage_recall_filters_falsified() {
         let graph = LodGraph::new();
-
         let coord0 = MixedCurvatureCoord::origin();
         let mut coord1 = MixedCurvatureCoord::origin();
         coord1.euclidean[0] = 5.0;
 
-        let n0 = LodNode::new(0, LodBand::Lod0Atomic, coord0, "target_node", 2001)
-            .with_hdc_fingerprint([0b1111, 0, 0, 0]);
-        let n1 = LodNode::new(1, LodBand::Lod0Atomic, coord1, "distant_node", 2002)
-            .with_hdc_fingerprint([0b0000, 0, 0, 0]);
-
-        let id0 = graph.add_node(n0);
-        let id1 = graph.add_node(n1);
+        let id0 = graph
+            .add_node(
+                LodNode::new(0, LodBand::Lod0Atomic, coord0, "target_node", 2001)
+                    .with_hdc_fingerprint([0b1111, 0, 0, 0]),
+            )
+            .unwrap();
+        let id1 = graph
+            .add_node(
+                LodNode::new(1, LodBand::Lod0Atomic, coord1, "distant_node", 2002)
+                    .with_hdc_fingerprint([0b0000, 0, 0, 0]),
+            )
+            .unwrap();
 
         let query_fp = [0b1111, 0, 0, 0];
         let recalled = graph.two_stage_recall(&coord0, &query_fp, 2, 0.1).unwrap();
         assert_eq!(recalled.len(), 2);
         assert_eq!(recalled[0].0, id0);
 
-        // Falsify node 0: must never be recalled again!
-        graph.cascade_prune_and_rollback(id0);
+        // A falsified node is never recalled again.
+        graph.cascade_prune_and_rollback(id0).unwrap();
         let recalled_after = graph.two_stage_recall(&coord0, &query_fp, 2, 0.1).unwrap();
         assert_eq!(recalled_after.len(), 1);
         assert_eq!(recalled_after[0].0, id1);
+        assert!(graph.two_stage_recall(&coord0, &query_fp, 0, 0.1).is_err());
+        assert!(graph
+            .two_stage_recall(&coord0, &query_fp, 1, f32::NAN)
+            .is_err());
     }
 
     #[test]
-    fn test_two_stage_recall_rejects_out_of_domain_coord() {
+    fn out_of_domain_coord_is_refused_at_insert_and_query() {
         let graph = LodGraph::new();
         let mut bad = MixedCurvatureCoord::origin();
-        // Public fields bypass `new`; the rerank must fail, not skip the node.
+        // Public fields bypass `new`; the graph must still refuse it.
         bad.hyperbolic = [1.0, 0.0, 0.0, 0.0];
-        graph.add_node(LodNode::new(0, LodBand::Lod0Atomic, bad, "bad", 4001));
         let err = graph
-            .two_stage_recall(&MixedCurvatureCoord::origin(), &[0; 4], 1, 0.1)
+            .add_node(LodNode::new(0, LodBand::Lod0Atomic, bad, "bad", 4001))
             .unwrap_err();
         assert_eq!(
             err,
             LodError::Geometry(crate::manifold::Reject::DomainViolation)
         );
+        assert_eq!(graph.node_count(), 0);
+        graph.add_node(node("good", 4002)).unwrap();
+        assert!(graph.two_stage_recall(&bad, &[0; 4], 1, 0.1).is_err());
+    }
+
+    #[test]
+    fn add_node_refuses_duplicate_entity_and_bad_parent() {
+        let graph = LodGraph::new();
+        let a = graph.add_node(node("a", 7)).unwrap();
+        assert_eq!(graph.node_for_entity(7), Some(a));
+        assert_eq!(
+            graph.add_node(node("again", 7)).unwrap_err(),
+            LodError::DuplicateEntity(7)
+        );
+        let mut orphan = node("orphan", 8);
+        orphan.parent_id = Some(5);
+        assert!(matches!(
+            graph.add_node(orphan),
+            Err(LodError::InvalidNode(_))
+        ));
+        assert_eq!(graph.node_count(), 1);
+    }
+
+    #[test]
+    fn add_edge_refuses_unknown_endpoint_and_bad_weight() {
+        let graph = LodGraph::new();
+        let a = graph.add_node(node("a", 1)).unwrap();
+        assert!(matches!(
+            graph.add_edge(a, 3, EdgeType::Semantic, 1.0),
+            Err(LodError::InvalidEdge(_))
+        ));
+        assert!(matches!(
+            graph.add_edge(a, a, EdgeType::Semantic, f32::NAN),
+            Err(LodError::InvalidEdge(_))
+        ));
+        assert!(matches!(
+            graph.add_edge(a, a, EdgeType::Semantic, -1.0),
+            Err(LodError::InvalidEdge(_))
+        ));
+        assert_eq!(graph.pending_edge_count(), 0);
     }
 
     #[test]
     fn test_validate_node_and_prune_propagation() {
         let graph = LodGraph::new();
-        let coord = MixedCurvatureCoord::origin();
+        let id0 = graph.add_node(node("hypo_0", 3001)).unwrap();
+        let id1 = graph.add_node(node("hypo_1", 3002)).unwrap();
+        let id2 = graph.add_node(node("hypo_2", 3003)).unwrap();
 
-        let id0 = graph.add_node(LodNode::new(0, LodBand::Lod0Atomic, coord, "hypo_0", 3001));
-        let id1 = graph.add_node(LodNode::new(1, LodBand::Lod1Cluster, coord, "hypo_1", 3002));
-        let id2 = graph.add_node(LodNode::new(
-            2,
-            LodBand::Lod2Milestone,
-            coord,
-            "hypo_2",
-            3003,
-        ));
+        graph.add_edge(id0, id1, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(id1, id2, EdgeType::DependsOn, 1.0).unwrap();
 
-        graph.add_edge(id0, id1, EdgeType::DependsOn, 1.0);
-        graph.add_edge(id1, id2, EdgeType::DependsOn, 1.0);
-
-        // Validate node 0 & node 1
         graph.validate_node(id0).unwrap();
         graph.validate_node(id1).unwrap();
 
-        // Check active dependencies
         let deps: Vec<_> = graph.active_validated_dependencies().collect();
         assert!(deps.contains(&(3001, 3002)));
 
-        // Falsifying node 0 should cascade through validated node 1 to hypothesized node 2!
-        let pruned = graph.cascade_prune_and_rollback(id0);
-        assert_eq!(pruned, vec![id0, id1, id2]);
+        // Falsifying node 0 cascades through validated node 1 to hypothesized node 2.
+        let outcome = graph.cascade_prune_and_rollback(id0).unwrap();
+        assert_eq!(outcome.pruned, vec![id0, id1, id2]);
+        assert_eq!(outcome.retracted_dependencies, 1);
         assert!(graph.is_revoked(3001));
         assert!(graph.is_revoked(3002));
         assert!(graph.is_revoked(3003));
+        assert!(graph.active_validated_dependencies().next().is_none());
+    }
 
-        let deps_after: Vec<_> = graph.active_validated_dependencies().collect();
-        assert!(deps_after.is_empty());
+    /// Regression: the CSR pass used to read outgoing edges only, so a flushed
+    /// edge INTO the validated node never became a validated dependency.
+    #[test]
+    fn validate_node_backfills_incoming_csr_edges() {
+        let graph = LodGraph::new();
+        let src = graph
+            .add_node(node("src", 5001).with_status(EpistemicStatus::Validated))
+            .unwrap();
+        let dst = graph.add_node(node("dst", 5002)).unwrap();
+        graph.add_edge(src, dst, EdgeType::DependsOn, 1.0).unwrap();
+        graph.flush_edges_to_csr().unwrap();
+        assert_eq!(graph.pending_edge_count(), 0);
+        assert!(graph.active_validated_dependencies().next().is_none());
+
+        graph.validate_node(dst).unwrap();
+        let deps: Vec<_> = graph.active_validated_dependencies().collect();
+        assert_eq!(deps, vec![(5001, 5002)]);
     }
 
     #[test]
     fn test_graph_ppr_query() {
         let graph = LodGraph::new();
-        let coord = MixedCurvatureCoord::origin();
+        let id0 = graph.add_node(node("root", 1)).unwrap();
+        let id1 = graph.add_node(node("child_a", 2)).unwrap();
+        let id2 = graph.add_node(node("child_b", 3)).unwrap();
 
-        let id0 = graph.add_node(LodNode::new(0, LodBand::Lod0Atomic, coord, "root", 1));
-        let id1 = graph.add_node(LodNode::new(1, LodBand::Lod1Cluster, coord, "child_a", 2));
-        let id2 = graph.add_node(LodNode::new(2, LodBand::Lod1Cluster, coord, "child_b", 3));
+        graph
+            .add_edge(id0, id1, EdgeType::CausalTransition, 1.0)
+            .unwrap();
+        graph
+            .add_edge(id1, id2, EdgeType::CausalTransition, 1.0)
+            .unwrap();
+        graph.flush_edges_to_csr().unwrap();
 
-        graph.add_edge(id0, id1, EdgeType::CausalTransition, 1.0);
-        graph.add_edge(id1, id2, EdgeType::CausalTransition, 1.0);
-        graph.flush_edges_to_csr();
-
-        let ppr = graph.query_ppr(&[(id0, 1.0)], 0.15, 20, 1e-4);
-        assert_eq!(ppr.len(), 3);
-        assert_eq!(ppr[0].0, id0);
+        let ppr = graph.query_ppr(&[(id0, 1.0)], 0.15, 200, 1e-5).unwrap();
+        assert_eq!(ppr.ranked.len(), 3);
+        assert_eq!(ppr.ranked[0].0, id0);
+        assert!(ppr.converged);
     }
 
     #[test]
-    fn csr_default_and_growth_keep_invariants() {
+    fn ppr_covers_nodes_added_after_the_last_flush() {
+        let graph = LodGraph::new();
+        let a = graph.add_node(node("a", 1)).unwrap();
+        let b = graph.add_node(node("b", 2)).unwrap();
+        graph.add_edge(a, b, EdgeType::Semantic, 1.0).unwrap();
+        graph.flush_edges_to_csr().unwrap();
+        let late = graph.add_node(node("late", 3)).unwrap();
+        assert_eq!(graph.csr_snapshot().num_nodes(), 2);
+        let ppr = graph.query_ppr(&[(late, 1.0)], 0.15, 20, 1e-6).unwrap();
+        assert_eq!(ppr.ranked[0], (late, 1.0));
+    }
+
+    #[test]
+    fn csr_from_edges_keeps_invariants_and_refuses_out_of_range() {
         let g = CsrGraph::default();
         assert_eq!(g.num_nodes(), 0);
         assert_eq!(g.row_ptrs(), &[0]);
 
-        let edges = [BufferedEdge {
-            source: 0,
-            target: 1,
+        let edge = |source, target| BufferedEdge {
+            source,
+            target,
             edge_type: EdgeType::Semantic,
             weight: 0.5,
             ticket: 1,
-        }];
-        let g = CsrGraph::from_edges(2, &edges).with_num_nodes(4);
+        };
+        let g = CsrGraph::from_edges(2, &[edge(0, 1)]).unwrap();
+        let g = g.merged(4, &[]).unwrap();
         assert_eq!(g.num_nodes(), 4);
         assert_eq!(g.row_ptrs(), &[0, 1, 1, 1, 1]);
         assert_eq!(g.col_indices(), &[1]);
         assert_eq!(g.edge_weights(), &[0.5]);
         assert_eq!(g.edge_types(), &[EdgeType::Semantic]);
         assert_eq!(g.neighbors(3).count(), 0);
+        assert!(matches!(
+            CsrGraph::from_edges(2, &[edge(0, 5)]),
+            Err(LodError::InvalidEdge(_))
+        ));
+        assert!(matches!(g.merged(3, &[]), Err(LodError::CsrInvariant(_))));
+    }
+
+    /// The incremental merge must equal a from-scratch build of all edges.
+    #[test]
+    fn incremental_merge_equals_full_rebuild() {
+        let edge = |source, target, ticket| BufferedEdge {
+            source,
+            target,
+            edge_type: EdgeType::DependsOn,
+            weight: ticket as f32,
+            ticket,
+        };
+        let first = [edge(0, 1, 1), edge(2, 0, 2), edge(0, 2, 3)];
+        let second = [edge(1, 2, 4), edge(0, 3, 5), edge(3, 3, 6)];
+        let incremental = CsrGraph::from_edges(3, &first)
+            .unwrap()
+            .merged(4, &second)
+            .unwrap();
+        let all: Vec<_> = first.iter().chain(&second).copied().collect();
+        let full = CsrGraph::from_edges(4, &all).unwrap();
+        assert_eq!(incremental.row_ptrs(), full.row_ptrs());
+        assert_eq!(incremental.col_indices(), full.col_indices());
+        assert_eq!(incremental.edge_weights(), full.edge_weights());
+        assert_eq!(incremental.edge_types(), full.edge_types());
+    }
+
+    /// Flush drains the buffer: its length returns to zero after every flush
+    /// instead of growing with the whole edge history.
+    #[test]
+    fn flush_drains_the_buffer_and_keeps_every_edge_once() {
+        let graph = LodGraph::new();
+        let ids: Vec<u32> = (0..10)
+            .map(|i| graph.add_node(node("n", 100 + i)).unwrap())
+            .collect();
+        for round in 0..5u32 {
+            for k in 0..20u32 {
+                let (s, t) = (ids[(k % 10) as usize], ids[((k + round) % 10) as usize]);
+                graph.add_edge(s, t, EdgeType::Semantic, 1.0).unwrap();
+            }
+            assert_eq!(graph.pending_edge_count(), 20);
+            let report = graph.flush_edges_to_csr().unwrap();
+            assert_eq!(report.merged_edges, 20);
+            assert_eq!(report.pending_edges, 0);
+            assert_eq!(graph.pending_edge_count(), 0);
+            assert_eq!(report.csr_edges, 20 * (round as usize + 1));
+        }
+        let empty = graph.flush_edges_to_csr().unwrap();
+        assert_eq!(empty.merged_edges, 0);
+        assert_eq!(empty.csr_edges, 100);
+    }
+
+    #[test]
+    fn rollback_restores_nodes_edges_csr_and_revocations() {
+        let graph = LodGraph::new();
+        let a = graph.add_node(node("a", 1)).unwrap();
+        let b = graph.add_node(node("b", 2)).unwrap();
+        graph.add_edge(a, b, EdgeType::DependsOn, 1.0).unwrap();
+        graph.flush_edges_to_csr().unwrap();
+        graph.add_edge(b, a, EdgeType::Semantic, 1.0).unwrap();
+        let checkpoint = graph.create_checkpoint();
+        let csr_before = graph.csr_snapshot();
+
+        let c = graph.add_node(node("c", 3)).unwrap();
+        graph.add_edge(a, c, EdgeType::DependsOn, 1.0).unwrap();
+        graph.flush_edges_to_csr().unwrap();
+        graph.cascade_prune_and_rollback(a).unwrap();
+        graph.add_privilege(9, 1);
+        assert!(graph.is_revoked(1) && graph.is_revoked(2) && graph.is_revoked(3));
+
+        graph.rollback_checkpoint(&checkpoint).unwrap();
+        assert_eq!(graph.node_count(), 2);
+        assert_eq!(graph.node_for_entity(3), None);
+        assert_eq!(graph.pending_edge_count(), 1);
+        assert!(Arc::ptr_eq(&graph.csr_snapshot(), &csr_before));
+        assert!(!graph.is_revoked(1) && !graph.is_revoked(2));
+        assert!(!graph.has_privilege(9, 1));
+        assert_eq!(
+            graph.get_node(a).unwrap().status,
+            EpistemicStatus::Hypothesized
+        );
+        // Entity 3 is free again, and the restored pending edge flushes once.
+        graph.add_node(node("c2", 3)).unwrap();
+        assert_eq!(graph.flush_edges_to_csr().unwrap().csr_edges, 2);
+    }
+
+    #[test]
+    fn prune_outcome_checkpoint_undoes_the_prune() {
+        let graph = LodGraph::new();
+        let a = graph
+            .add_node(node("a", 1).with_status(EpistemicStatus::Validated))
+            .unwrap();
+        let b = graph
+            .add_node(node("b", 2).with_status(EpistemicStatus::Validated))
+            .unwrap();
+        graph.add_edge(a, b, EdgeType::DependsOn, 1.0).unwrap();
+        let outcome = graph.cascade_prune_and_rollback(a).unwrap();
+        assert_eq!(outcome.pruned, vec![a, b]);
+        assert!(graph.active_validated_dependencies().next().is_none());
+
+        graph.rollback_checkpoint(&outcome.checkpoint).unwrap();
+        assert!(!graph.is_revoked(1) && !graph.is_revoked(2));
+        assert_eq!(
+            graph.get_node(b).unwrap().status,
+            EpistemicStatus::Validated
+        );
+        let deps: Vec<_> = graph.active_validated_dependencies().collect();
+        assert_eq!(deps, vec![(1, 2)]);
+    }
+
+    #[test]
+    fn rollback_refuses_foreign_and_discarded_checkpoints() {
+        let graph = LodGraph::new();
+        let other = LodGraph::new();
+        assert!(matches!(
+            graph.rollback_checkpoint(&other.create_checkpoint()),
+            Err(LodError::CheckpointRejected(_))
+        ));
+
+        let early = graph.create_checkpoint();
+        graph.add_node(node("a", 1)).unwrap();
+        let late = graph.create_checkpoint();
+        graph.rollback_checkpoint(&early).unwrap();
+        // `late` describes a state that rollback discarded, even once the node
+        // count grows back.
+        graph.add_node(node("b", 2)).unwrap();
+        assert!(matches!(
+            graph.rollback_checkpoint(&late),
+            Err(LodError::CheckpointRejected(_))
+        ));
+        // The earlier checkpoint is still an ancestor and stays valid.
+        graph.rollback_checkpoint(&early).unwrap();
+        assert_eq!(graph.node_count(), 0);
+    }
+
+    #[test]
+    fn transact_rolls_back_a_failed_write() {
+        let graph = LodGraph::new();
+        graph.add_node(node("keep", 1)).unwrap();
+        let err = graph
+            .transact(|g| {
+                let a = g.add_node(node("tmp", 2))?;
+                g.add_edge(a, 0, EdgeType::Semantic, 1.0)?;
+                g.flush_edges_to_csr()?;
+                g.add_edge(a, 42, EdgeType::Semantic, 1.0)
+            })
+            .unwrap_err();
+        assert!(matches!(err, LodError::InvalidEdge(_)));
+        assert_eq!(graph.node_count(), 1);
+        assert_eq!(graph.node_for_entity(2), None);
+        assert_eq!(graph.csr_snapshot().num_edges(), 0);
+        assert_eq!(graph.pending_edge_count(), 0);
+    }
+
+    /// Writers, flushes and transactional rollbacks run concurrently. Every
+    /// surviving edge must be exactly once in CSR or buffer, never both.
+    #[test]
+    fn concurrent_add_flush_and_rollback_never_duplicate_edges() {
+        let graph = Arc::new(LodGraph::new());
+        for i in 0..8 {
+            graph.add_node(node("n", i)).unwrap();
+        }
+        let mut handles = Vec::new();
+        for t in 0..4u32 {
+            let g = Arc::clone(&graph);
+            handles.push(std::thread::spawn(move || {
+                for k in 0..200u32 {
+                    let _ = g.transact(|g| {
+                        g.add_edge(t, k % 8, EdgeType::Semantic, 1.0)?;
+                        if k % 3 == 0 {
+                            return Err(LodError::InvalidQuery("forced rollback".into()));
+                        }
+                        Ok(())
+                    });
+                }
+            }));
+        }
+        let g = Arc::clone(&graph);
+        handles.push(std::thread::spawn(move || {
+            for _ in 0..200 {
+                match g.flush_edges_to_csr() {
+                    Ok(_) | Err(LodError::FlushConflict) => {}
+                    Err(e) => panic!("flush failed: {e}"),
+                }
+            }
+        }));
+        for h in handles {
+            h.join().unwrap();
+        }
+        graph.flush_edges_to_csr().unwrap();
+        assert_eq!(graph.pending_edge_count(), 0);
+        // 4 writers x 200 attempts, 67 of each forced to roll back.
+        assert_eq!(graph.csr_snapshot().num_edges(), 4 * (200 - 67));
+        graph.csr_snapshot().validate().unwrap();
     }
 }

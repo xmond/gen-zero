@@ -23267,6 +23267,10 @@
     },
     {
       "from": "crates/gen-zero-service/src/lib.rs",
+      "to": "crates/gen-zero-service/src/graph_verb.rs"
+    },
+    {
+      "from": "crates/gen-zero-service/src/lib.rs",
       "to": "crates/gen-zero-service/src/imagine.rs"
     },
     {
@@ -23419,6 +23423,7 @@
     "crates/gen-zero-service/src/closed_loop.rs",
     "crates/gen-zero-service/src/cognitive.rs",
     "crates/gen-zero-service/src/error.rs",
+    "crates/gen-zero-service/src/graph_verb.rs",
     "crates/gen-zero-service/src/imagine.rs",
     "crates/gen-zero-service/src/lib.rs",
     "crates/gen-zero-service/src/mount.rs",
@@ -23554,7 +23559,7 @@
     {
       "file": "crates/gen-zero-lod/src/graph.rs",
       "declared_modules": [],
-      "public_symbols": 24
+      "public_symbols": 38
     },
     {
       "file": "crates/gen-zero-lod/src/lib.rs",
@@ -23582,7 +23587,7 @@
     {
       "file": "crates/gen-zero-lod/src/ppr.rs",
       "declared_modules": [],
-      "public_symbols": 1
+      "public_symbols": 2
     },
     {
       "file": "crates/gen-zero-lod/src/semiring.rs",
@@ -23701,7 +23706,7 @@
     {
       "file": "crates/gen-zero-planner/src/pipeline.rs",
       "declared_modules": [],
-      "public_symbols": 26
+      "public_symbols": 28
     },
     {
       "file": "crates/gen-zero-planner/src/router.rs",
@@ -23759,6 +23764,11 @@
       "public_symbols": 1
     },
     {
+      "file": "crates/gen-zero-service/src/graph_verb.rs",
+      "declared_modules": [],
+      "public_symbols": 4
+    },
+    {
       "file": "crates/gen-zero-service/src/imagine.rs",
       "declared_modules": [],
       "public_symbols": 7
@@ -23770,6 +23780,7 @@
         "closed_loop",
         "cognitive",
         "error",
+        "graph_verb",
         "imagine",
         "mount",
         "pipeline_verb",
@@ -23833,7 +23844,7 @@
     {
       "file": "crates/gen-zero-service/src/zero.rs",
       "declared_modules": [],
-      "public_symbols": 32
+      "public_symbols": 33
     },
     {
       "file": "crates/gen-zero-storage/src/error.rs",

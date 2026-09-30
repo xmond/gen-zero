@@ -33,7 +33,7 @@ use gen_zero_core::{
     ActionId, CoreError, FullLatent, LocalActionFrame, NormalizedEntropy, WorldModelDynamics,
 };
 use gen_zero_gate::{PolicyGate, PolicyTier};
-use gen_zero_lod::LodGraph;
+use gen_zero_lod::{EpistemicStatus, LodGraph};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::{
@@ -290,6 +290,41 @@ pub struct DecideRequest<'a> {
     pub horizon: usize,
 }
 
+/// PPR restart probability, iteration cap, L1 tolerance and fact count used for
+/// [`Decision::graph_context`].
+const GRAPH_CONTEXT_ALPHA: f32 = 0.15;
+const GRAPH_CONTEXT_MAX_ITERS: usize = 100;
+const GRAPH_CONTEXT_TOLERANCE: f32 = 1e-6;
+const GRAPH_CONTEXT_TOP: usize = 8;
+
+/// One live graph node near the chosen action.
+#[derive(Clone, Debug, PartialEq)]
+pub struct GraphFact {
+    pub entity_id: u64,
+    pub label: String,
+    pub status: EpistemicStatus,
+    /// Personalized PageRank mass from the seeds.
+    pub score: f32,
+}
+
+/// Topological facts around the chosen action, from Personalized PageRank over
+/// the live graph. Advisory only: it is computed after the choice and no engine,
+/// gate check or tier reads it.
+#[derive(Clone, Debug, PartialEq)]
+pub enum GraphContext {
+    /// Diffusion seeded at the entity nodes of the chosen action and of the
+    /// active-context actions that have one. `facts` holds the highest-scoring
+    /// non-seed live nodes with nonzero mass.
+    Diffused {
+        seed_entities: Vec<u64>,
+        facts: Vec<GraphFact>,
+        iterations: usize,
+        converged: bool,
+    },
+    /// No diffusion ran; `reason` says why.
+    Unavailable { reason: String },
+}
+
 #[derive(Clone, Debug)]
 pub struct Decision {
     /// Search was cut short; entropy is conservatively unknown (ONE), and no
@@ -313,6 +348,8 @@ pub struct Decision {
     pub feasible: Vec<ActionId>,
     pub pruned: Vec<PrunedAction>,
     pub trajectory: Option<Rollout>,
+    /// Advisory graph neighborhood of `action`; see [`GraphContext`].
+    pub graph_context: GraphContext,
 }
 
 /// Unified simulate / what-if / audit / decide entry for Rust production callers.
@@ -876,6 +913,9 @@ impl ProductionPipeline {
                     feasible: feasible.clone(),
                     pruned: pruned.clone(),
                     trajectory: None,
+                    graph_context: GraphContext::Unavailable {
+                        reason: "timed-out incumbent: graph context not computed".into(),
+                    },
                 };
                 let decision = Arc::new(decision);
                 if budget.check().is_ok() {
@@ -968,6 +1008,7 @@ impl ProductionPipeline {
             None
         };
 
+        let graph_context = self.graph_context(action, &req.active_context);
         budget.check()?;
         Ok(Decision {
             timed_out: false,
@@ -986,7 +1027,66 @@ impl ProductionPipeline {
             feasible,
             pruned,
             trajectory,
+            graph_context,
         })
+    }
+
+    /// PPR over the live graph from the chosen action's entity node (entity id ==
+    /// action id, the key the gate's revocation check uses) plus the
+    /// active-context actions that have nodes. A PPR error is reported in the
+    /// context, never swallowed.
+    fn graph_context(&self, action: ActionId, active_context: &[ActionId]) -> GraphContext {
+        let entity = u64::from(action.0);
+        let Some(root) = self.graph.node_for_entity(entity) else {
+            return GraphContext::Unavailable {
+                reason: format!("action {} has no node in the live graph", action.0),
+            };
+        };
+        let mut seed_entities = vec![entity];
+        let mut seeds = vec![(root, 1.0)];
+        for ctx in active_context {
+            let e = u64::from(ctx.0);
+            if seed_entities.contains(&e) {
+                continue;
+            }
+            if let Some(node) = self.graph.node_for_entity(e) {
+                seed_entities.push(e);
+                seeds.push((node, 1.0));
+            }
+        }
+        let ranking = match self.graph.query_ppr(
+            &seeds,
+            GRAPH_CONTEXT_ALPHA,
+            GRAPH_CONTEXT_MAX_ITERS,
+            GRAPH_CONTEXT_TOLERANCE,
+        ) {
+            Ok(r) => r,
+            Err(e) => {
+                return GraphContext::Unavailable {
+                    reason: format!("graph PPR failed: {e}"),
+                }
+            }
+        };
+        let facts = ranking
+            .ranked
+            .iter()
+            .filter(|(id, score)| *score > 0.0 && !seeds.iter().any(|(s, _)| s == id))
+            .filter_map(|&(id, score)| {
+                self.graph.get_node(id).map(|n| GraphFact {
+                    entity_id: n.entity_id,
+                    label: n.label,
+                    status: n.status,
+                    score,
+                })
+            })
+            .take(GRAPH_CONTEXT_TOP)
+            .collect();
+        GraphContext::Diffused {
+            seed_entities,
+            facts,
+            iterations: ranking.iterations,
+            converged: ranking.converged,
+        }
     }
 
     /// Gate tier, violated rule ids and reason at entropy 0 (hard constraints and

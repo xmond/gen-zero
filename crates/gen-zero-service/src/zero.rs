@@ -46,6 +46,7 @@ use crate::cognitive::{
     ENGINE_COGNITIVE,
 };
 use crate::error::ServiceError;
+use crate::graph_verb::{execute_graph, load_seed, GraphOp};
 use crate::imagine::{
     run_lookahead, BridgeOracle, LookaheadConfig, RootNoise, DEFAULT_C_PUCT, MAX_HORIZON,
     MAX_SIMULATIONS,
@@ -113,12 +114,31 @@ pub enum ZeroVerb {
     WhatIf,
     /// Shadow risk review of one planned action.
     Audit,
+    /// Append nodes and edges to the live LodGraph in one transaction and flush them.
+    GraphDeposit,
+    /// Two-stage HDC + manifold recall over the live LodGraph.
+    GraphRecall,
+    /// Personalized PageRank diffusion over the live LodGraph.
+    GraphPpr,
+    /// Causal cascade prune (or dry run) on the live LodGraph.
+    GraphPrune,
 }
 
 impl ZeroVerb {
     /// Verbs that run on the latent world model and take numeric `state`.
     fn is_worldmodel(self) -> bool {
         matches!(self, Self::Simulate | Self::WhatIf | Self::Audit)
+    }
+
+    /// The graph verb this is, if any.
+    fn graph_op(self) -> Option<GraphOp> {
+        match self {
+            Self::GraphDeposit => Some(GraphOp::Deposit),
+            Self::GraphRecall => Some(GraphOp::Recall),
+            Self::GraphPpr => Some(GraphOp::Ppr),
+            Self::GraphPrune => Some(GraphOp::Prune),
+            _ => None,
+        }
     }
 
     /// Inferred or parsed verb from input JSON.
@@ -142,6 +162,10 @@ impl ZeroVerb {
                 "entail" | "entailment" | "boolq" => return Ok(Self::Entail),
                 "causal_fold" | "fold" => return Ok(Self::CausalFold),
                 "pipeline" => return Ok(Self::Pipeline),
+                "graph_deposit" => return Ok(Self::GraphDeposit),
+                "graph_recall" => return Ok(Self::GraphRecall),
+                "graph_ppr" => return Ok(Self::GraphPpr),
+                "graph_prune" => return Ok(Self::GraphPrune),
                 _ => {}
             }
         }
@@ -732,17 +756,28 @@ pub struct ZeroEngineConfig {
     /// Optional checksummed MMR snapshot path. When set, startup loads the key, root and
     /// retained proof material from this path, and every decision append is synced there.
     pub mmr_persist_path: Option<PathBuf>,
+    /// Optional graph seed file (`graph_deposit` JSON shape, `axiomatic` allowed).
+    /// Loaded into the live LodGraph at startup; a bad file fails startup.
+    pub graph_seed_path: Option<PathBuf>,
 }
 
 impl ZeroEngineConfig {
     /// Read the optional audit snapshot path from the process environment.
     pub fn from_env() -> Result<Self, ServiceError> {
-        let path = std::env::var_os("GENZERO_MMR_PERSIST_PATH")
-            .filter(|value| !value.to_string_lossy().trim().is_empty())
-            .map(PathBuf::from);
+        let var = |name: &str| {
+            std::env::var_os(name)
+                .filter(|value| !value.to_string_lossy().trim().is_empty())
+                .map(PathBuf::from)
+        };
         Ok(Self {
-            mmr_persist_path: path,
+            mmr_persist_path: var("GENZERO_MMR_PERSIST_PATH"),
+            graph_seed_path: var("GENZERO_GRAPH_SEED"),
         })
+    }
+
+    pub fn with_graph_seed_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.graph_seed_path = Some(path.into());
+        self
     }
 
     pub fn with_mmr_persist_path(mut self, path: impl Into<PathBuf>) -> Self {
@@ -880,15 +915,34 @@ impl PolymorphicZeroEngine {
             gen_zero_nanocore::DEFAULT_RAM_BUDGET_BYTES,
         ));
         load_configured_nanocores(&nano_fleet);
+        let graph = Arc::new(LodGraph::new());
+        let graph_asset = match &config.graph_seed_path {
+            Some(path) => {
+                let report = load_seed(&graph, path).map_err(ServiceError::Core)?;
+                tracing::info!(
+                    "live graph seeded from {}: {} node(s), {} CSR edge(s)",
+                    path.display(),
+                    graph.node_count(),
+                    graph.csr_snapshot().num_edges()
+                );
+                format!("seed/{}", report["digest"].as_str().unwrap_or_default())
+            }
+            None => {
+                tracing::info!(
+                    "live graph starts empty (GENZERO_GRAPH_SEED unset); graph_deposit fills it"
+                );
+                "empty".to_string()
+            }
+        };
         Ok(Self {
             cpu_slots: Arc::new(tokio::sync::Semaphore::new(
                 std::thread::available_parallelism().map_or(2, |n| n.get().saturating_mul(2)),
             )),
             gate: Arc::new(PolicyGate::default()),
-            graph: Arc::new(LodGraph::new()),
+            graph,
             world_model: Arc::new(LatentDynamicsWorldModel::default()),
             bridge: SemanticBridgeClient::from_env().map(Arc::new),
-            mounts: Arc::new(default_mounts()),
+            mounts: Arc::new(default_mounts(&graph_asset)),
             runtime: Arc::new(CognitiveRuntime::new()),
             golden_snapshots: Mutex::new(GoldenSnapshotManager::new(3, rand::random(), 16)),
             nano_fleet,
@@ -913,10 +967,11 @@ pub const DEFAULT_TENANT: &str = "default";
 pub const DEFAULT_WORKSPACE: &str = "default";
 
 /// Registry holding the built-in generation of the default key. Its digests
-/// name what this binary actually serves today: the compiled engine, and no
-/// atlas, geometry or graph asset (none is loaded yet). They are identities,
-/// not measurements of a trained model.
-fn default_mounts() -> AtomicMountRegistry {
+/// name what this binary actually serves today: the compiled engine, no atlas
+/// or geometry asset, and `graph_asset` (`empty`, or `seed/<blake3>` of the
+/// seed file). Later deposits change the live graph, not this startup identity.
+/// They are identities, not measurements of a trained model.
+fn default_mounts(graph_asset: &str) -> AtomicMountRegistry {
     let label = |slot: &str, what: &str| -> [u8; 32] {
         use sha2::{Digest, Sha256};
         Sha256::digest(format!("gen-zero/genesis/{slot}/{what}").as_bytes()).into()
@@ -928,7 +983,7 @@ fn default_mounts() -> AtomicMountRegistry {
         ),
         geometry: label("geometry", "none-loaded"),
         atlas: label("atlas", "empty"),
-        graph: label("graph", "empty"),
+        graph: label("graph", graph_asset),
         policy: label("policy", "builtin-gate"),
     };
     let registry = AtomicMountRegistry::new();
@@ -1507,6 +1562,20 @@ impl PolymorphicZeroEngine {
             return Ok(ZeroToolOutcome::rejected(verb, rej, meta));
         }
 
+        // Only the graph verbs read `graph`; elsewhere it would be dropped silently.
+        // There is no implicit graph verb: the op must be named.
+        if arguments.get("graph").is_some() && verb.graph_op().is_none() {
+            let rej = Rejection::invalid(
+                "request",
+                format!(
+                    "`graph` is only accepted by graph_deposit, graph_recall, graph_ppr and \
+                     graph_prune (name one in `action`), not {verb:?}"
+                ),
+            );
+            let meta = json!({"mount": mount_meta(binding.snapshot())});
+            return Ok(ZeroToolOutcome::rejected(verb, rej, meta));
+        }
+
         // Only pipeline reads `pipeline`; elsewhere it would be dropped silently.
         if arguments.get("pipeline").is_some() && verb != ZeroVerb::Pipeline {
             let rej = Rejection::invalid(
@@ -1612,6 +1681,17 @@ impl PolymorphicZeroEngine {
                 self.spawn_cpu(move || Self::handle_pipeline(model, gate, graph, &args))?
                     .await
                     .map_err(|e| ServiceError::Core(format!("pipeline task failed: {e}")))?
+            }
+            ZeroVerb::GraphDeposit
+            | ZeroVerb::GraphRecall
+            | ZeroVerb::GraphPpr
+            | ZeroVerb::GraphPrune => {
+                let op = verb.graph_op().expect("matched a graph verb");
+                let args = arguments.clone();
+                let graph = Arc::clone(&self.graph);
+                self.spawn_cpu(move || Self::handle_graph(verb, op, &graph, &args))?
+                    .await
+                    .map_err(|e| ServiceError::Core(format!("graph task failed: {e}")))?
             }
             ZeroVerb::Simulate => {
                 self.run_worldmodel(verb, arguments, worldsim::simulate)
@@ -2815,10 +2895,18 @@ impl PolymorphicZeroEngine {
         }
 
         let feasible_mask = self.request_feasibility(&candidates, safety);
+        // The planner engines see only the gate, not the graph; drop revoked
+        // actions here so no engine can spend its search on one.
+        let revoked = |c: &String| {
+            gen_zero_core::GraphFactProvider::is_revoked(
+                self.graph.as_ref(),
+                u64::from(action_id(c).0),
+            )
+        };
         let feasible: Vec<String> = candidates
             .iter()
             .zip(&feasible_mask)
-            .filter(|(_, ok)| **ok)
+            .filter(|(c, ok)| **ok && !revoked(c))
             .map(|(c, _)| c.clone())
             .collect();
         let infeasible: Vec<&String> = candidates
@@ -2827,16 +2915,27 @@ impl PolymorphicZeroEngine {
             .filter(|(_, ok)| !**ok)
             .map(|(c, _)| c)
             .collect();
+        let graph_revoked: Vec<&String> = candidates
+            .iter()
+            .zip(&feasible_mask)
+            .filter(|(c, ok)| **ok && revoked(c))
+            .map(|(c, _)| c)
+            .collect();
         if feasible.is_empty() {
             return Ok(Self::gated_outcome(
                 ZeroVerb::Ask,
                 PolicyTier::Tier3HardStop,
                 &risk,
-                json!({"engine": "formal_filter", "formally_infeasible": infeasible}),
+                json!({
+                    "engine": "formal_filter",
+                    "formally_infeasible": infeasible,
+                    "graph_revoked": graph_revoked,
+                }),
                 String::new(),
             ));
         }
         meta["formally_infeasible"] = json!(infeasible);
+        meta["graph_revoked"] = json!(graph_revoked);
 
         let gate = Arc::clone(&self.gate);
         let planned = {
@@ -2860,11 +2959,12 @@ impl PolymorphicZeroEngine {
         meta["candidates"] = json!(feasible);
         if want_trajectory {
             let gate = Arc::clone(&self.gate);
+            let graph = Arc::clone(&self.graph);
             let (latent, chosen, feasible) = (latent.clone(), chosen.clone(), feasible.clone());
             let trajectory = self
                 .spawn_cpu(move || {
                     worldsim::trajectory_for_choice(
-                        dynamics, &gate, &latent, &chosen, &feasible, horizon,
+                        dynamics, &gate, &graph, &latent, &chosen, &feasible, horizon,
                     )
                 })?
                 .await
@@ -2893,12 +2993,13 @@ impl PolymorphicZeroEngine {
         &self,
         verb: ZeroVerb,
         arguments: &Value,
-        op: fn(&PolicyGate, &Value) -> worldsim::WorldResult,
+        op: fn(&PolicyGate, &LodGraph, &Value) -> worldsim::WorldResult,
     ) -> Result<ZeroToolOutcome, ServiceError> {
         let gate = Arc::clone(&self.gate);
+        let graph = Arc::clone(&self.graph);
         let args = arguments.clone();
         let done = self
-            .spawn_cpu(move || op(&gate, &args))?
+            .spawn_cpu(move || op(&gate, &graph, &args))?
             .await
             .map_err(|e| ServiceError::Core(format!("world model task failed: {e}")))?;
         let risk = json!({
@@ -2917,10 +3018,11 @@ impl PolymorphicZeroEngine {
             .assess_risk(first_text(arguments, &["target_action"]))
             .await;
         let gate = Arc::clone(&self.gate);
+        let graph = Arc::clone(&self.graph);
         let args = arguments.clone();
         let (tier, risk_meta) = (risk.tier(), risk.meta());
         let done = self
-            .spawn_cpu(move || worldsim::audit(&gate, &args, tier, risk_meta))?
+            .spawn_cpu(move || worldsim::audit(&gate, &graph, &args, tier, risk_meta))?
             .await
             .map_err(|e| ServiceError::Core(format!("world model task failed: {e}")))?;
         let dynamics = worldsim::parse_dynamics(arguments.get("dynamics")).ok();
@@ -3473,6 +3575,35 @@ impl PolymorphicZeroEngine {
     /// relation survives at the root and refuses when two or more do; it
     /// never picks among survivors. `meta.causal_fold.conflict_keys` counts
     /// the conflict keys in the table so a caller can see one was present.
+    /// Graph verbs: `graph_deposit`, `graph_recall`, `graph_ppr`, `graph_prune`
+    /// on this engine's live graph. See [`crate::graph_verb`].
+    fn handle_graph(
+        verb: ZeroVerb,
+        op: GraphOp,
+        graph: &LodGraph,
+        arguments: &Value,
+    ) -> ZeroToolOutcome {
+        let meta = json!({"engine": "lod_graph"});
+        let Some(block) = arguments.get("graph") else {
+            let rej = Rejection::invalid("graph", format!("{} needs a `graph` object", op.name()));
+            return ZeroToolOutcome::rejected(verb, rej, meta);
+        };
+        match execute_graph(graph, op, block) {
+            Ok((summary, result)) => {
+                let mut meta = meta;
+                meta["graph_op"] = result;
+                ZeroToolOutcome {
+                    verb,
+                    is_error: false,
+                    content: text_block(summary),
+                    meta,
+                    rejection: None,
+                }
+            }
+            Err(rej) => ZeroToolOutcome::rejected(verb, rej, meta),
+        }
+    }
+
     /// Verb 9: `pipeline`. Runs the planner's `ProductionPipeline` on this engine's
     /// world model and gate. Every refusal is a typed outcome, never a default answer.
     fn handle_pipeline(

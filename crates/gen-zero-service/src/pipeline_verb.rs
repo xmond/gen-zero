@@ -10,7 +10,7 @@ use gen_zero_core::{ActionId, CoreError, FullLatent, NormalizedEntropy, WorldMod
 use gen_zero_gate::PolicyGate;
 use gen_zero_lod::LodGraph;
 use gen_zero_planner::{
-    AuditReport, DecideMode, DecideRequest, Decision, PlannerConfig, PlannerError,
+    AuditReport, DecideMode, DecideRequest, Decision, GraphContext, PlannerConfig, PlannerError,
     ProductionPipeline, PrunedAction, Rollout, WhatIfReport, DEFAULT_WARN_RISK,
 };
 use serde_json::{json, Map, Value};
@@ -442,5 +442,39 @@ fn decision_json(d: &Decision) -> Value {
         "feasible": ids(&d.feasible),
         "pruned": pruned_json(&d.pruned),
         "trajectory": d.trajectory.as_ref().map(rollout_json),
+        "graph_context": graph_context_json(&d.graph_context),
     })
+}
+
+/// Advisory PPR neighborhood of the chosen action. Flagged so no caller reads
+/// it as part of the decision: no engine, gate check or tier used it.
+fn graph_context_json(c: &GraphContext) -> Value {
+    match c {
+        GraphContext::Diffused {
+            seed_entities,
+            facts,
+            iterations,
+            converged,
+        } => json!({
+            "status": "diffused",
+            "advisory": true,
+            "used_in_choice": false,
+            "method": "personalized_pagerank",
+            "seed_entities": seed_entities,
+            "iterations": iterations,
+            "converged": converged,
+            "facts": facts.iter().map(|f| json!({
+                "entity_id": f.entity_id,
+                "label": f.label,
+                "status": f.status,
+                "score": f.score,
+            })).collect::<Vec<_>>(),
+        }),
+        GraphContext::Unavailable { reason } => json!({
+            "status": "unavailable",
+            "advisory": true,
+            "used_in_choice": false,
+            "reason": reason,
+        }),
+    }
 }

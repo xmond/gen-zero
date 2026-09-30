@@ -18,16 +18,18 @@ fn engine() -> Arc<PolymorphicZeroEngine> {
 #[tokio::test]
 async fn live_graph_revocation_blocks_http_pipeline_action() {
     let graph = Arc::new(LodGraph::new());
-    graph.add_node(
-        LodNode::new(
-            0,
-            LodBand::Lod0Atomic,
-            MixedCurvatureCoord::origin(),
-            "revoked action",
-            2,
+    graph
+        .add_node(
+            LodNode::new(
+                0,
+                LodBand::Lod0Atomic,
+                MixedCurvatureCoord::origin(),
+                "revoked action",
+                2,
+            )
+            .with_status(EpistemicStatus::Falsified),
         )
-        .with_status(EpistemicStatus::Falsified),
-    );
+        .unwrap();
     let engine = Arc::new(
         PolymorphicZeroEngine::new()
             .with_bridge(None)

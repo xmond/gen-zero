@@ -8,9 +8,11 @@ Personalized PageRank flow, and Pearl causal cascading pruning.
 
 - `error`: crate error type (`LodError`).
 - `graph`: dynamic graph topology, epistemic lifecycle, and Pearl causal
-  cascading pruning. Lock-free double-buffered CSR snapshots (`ArcSwap<CsrGraph>`),
-  a dynamic ticket-sequenced edge append buffer, 2-stage HDC+Fisher/manifold
-  recall, and causal cascade pruning with virtual loss rollback.
+  cascading pruning. Lock-free CSR snapshots (`ArcSwap<CsrGraph>`), a
+  ticket-ordered pending edge buffer that each flush merges into the snapshot
+  and drains, 2-stage HDC + manifold recall, causal cascade pruning, and atomic
+  checkpoints (`create_checkpoint` / `rollback_checkpoint` / `transact`). No
+  MCTS virtual loss is involved: the planner's MCTS is sequential.
 - `manifold`: Spec 25 mixed-curvature product manifolds,
   `M = H_{-c}^{d_h} x R^{d_e} x S_R^{d_s}` with product metric
   `g = alpha_h g_H + alpha_e g_E + alpha_s g_S`.
@@ -29,14 +31,16 @@ Personalized PageRank flow, and Pearl causal cascading pruning.
 ## Key exports
 
 - `LodError`: crate error type.
-- `BufferedEdge`, `CsrGraph`, `EdgeType`, `LodGraph`: graph topology.
+- `BufferedEdge`, `CsrGraph`, `EdgeType`, `FlushReport`, `GraphCheckpoint`,
+  `LodGraph`, `PprRanking`, `PruneOutcome`: graph topology and transactions.
 - `ContainmentCriteria`, `ContainmentScore`, `Digest`, `Epochs`, `FiberId`,
   `GeometryParams`, `Layout`, `MixedCurvatureCoord`, `Point`, `ProductGeometry`,
   `ProductManifold`, `Reject`, `GeometryResult`, `Tangent`, `TopologyPreset`,
   `Version`, `MAX_PRESET_DIM`: mixed-curvature product geometry.
 - `hdc_hamming_distance_256`, `EpistemicStatus`, `LodBand`, `LodNode`: node
   representation.
-- `compute_ppr_csr`: Personalized PageRank over a CSR graph.
+- `compute_ppr_csr`, `PprScores`: Personalized PageRank over a CSR graph; bad
+  inputs are errors, never clamped.
 - `AssociativityReport`, `AssociativityViolation`, `FoldOutcome`, `Gender`,
   `RelId`, `RelationKey`, `RelationSemiring`, `ResultSet`,
   `BUDGET_EXCEEDED_REASON`, `DEFAULT_CHART_STEP_BUDGET`: learned relation

@@ -390,16 +390,18 @@ fn full_graph_revocation_cannot_be_bypassed_by_anytime() {
     use gen_zero_lod::{EpistemicStatus, LodBand, LodGraph, LodNode, MixedCurvatureCoord};
     let _serial = TIMING.lock().unwrap_or_else(|poison| poison.into_inner());
     let graph = Arc::new(LodGraph::new());
-    graph.add_node(
-        LodNode::new(
-            0,
-            LodBand::Lod0Atomic,
-            MixedCurvatureCoord::origin(),
-            "revoked",
-            1,
+    graph
+        .add_node(
+            LodNode::new(
+                0,
+                LodBand::Lod0Atomic,
+                MixedCurvatureCoord::origin(),
+                "revoked",
+                1,
+            )
+            .with_status(EpistemicStatus::Falsified),
         )
-        .with_status(EpistemicStatus::Falsified),
-    );
+        .unwrap();
     let state = FullLatent::zeros();
     for mode in MODES {
         let (p, _) = pipeline(usize::MAX, 1);
