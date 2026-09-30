@@ -98,6 +98,13 @@ impl SseSessionManager {
             .expect("SSE session lock poisoned")
             .remove(session_id);
     }
+
+    fn contains(&self, session_id: &str) -> bool {
+        self.sessions
+            .lock()
+            .expect("SSE session lock poisoned")
+            .contains_key(session_id)
+    }
 }
 
 struct SseSessionGuard {
@@ -1066,14 +1073,37 @@ fn extract_query_token(query_str: &str) -> Option<&str> {
     None
 }
 
+fn extract_query_session_id(query_str: &str) -> Option<&str> {
+    for pair in query_str.split('&') {
+        if let Some((key, val)) = pair.split_once('=') {
+            if key == "session_id" {
+                return Some(val);
+            }
+        }
+    }
+    None
+}
+
 async fn auth_middleware(
     Extension(auth): Extension<AuthConfig>,
+    Extension(sessions): Extension<SseSessionManager>,
     req: Request,
     next: Next,
 ) -> Result<Response, Response> {
     let path = req.uri().path();
     if matches!(path, "/health" | "/healthz" | "/ready") {
         return Ok(next.run(req).await);
+    }
+
+    // Active SSE sessions were already authenticated during initial GET /sse.
+    // Subsequent POST /message or /messages requests associated with an active
+    // session are permitted.
+    if matches!(path, "/message" | "/messages") {
+        if let Some(session_id) = req.uri().query().and_then(extract_query_session_id) {
+            if sessions.contains(session_id) {
+                return Ok(next.run(req).await);
+            }
+        }
     }
 
     if let Some(expected) = &auth.expected_token {
@@ -1216,9 +1246,13 @@ fn now_ms() -> u64 {
 // Handlers for Axum routes
 async fn sse_handler(
     Extension(sessions): Extension<SseSessionManager>,
+    auth: Option<Extension<AuthConfig>>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let (session_id, receiver) = sessions.create();
-    let endpoint = format!("/message?session_id={session_id}");
+    let endpoint = match auth.and_then(|a| a.0.expected_token) {
+        Some(token) => format!("/message?session_id={session_id}&token={token}"),
+        None => format!("/message?session_id={session_id}"),
+    };
     let cancelled = sessions.shutdown.subscribe();
     let guard = SseSessionGuard {
         manager: sessions,
@@ -2452,6 +2486,58 @@ mod tests {
             .unwrap();
         let resp = app.clone().oneshot(wrong_token_req).await.unwrap();
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        // 8. Connecting with valid token propagates token into endpoint URI
+        let sse_req = Request::builder()
+            .uri(format!("/sse?token={}", secret))
+            .method("GET")
+            .body(Body::empty())
+            .unwrap();
+        let sse_resp = app.clone().oneshot(sse_req).await.unwrap();
+        assert_eq!(sse_resp.status(), StatusCode::OK);
+        let mut sse_body = sse_resp.into_body().into_data_stream();
+        let chunk = futures_util::StreamExt::next(&mut sse_body)
+            .await
+            .unwrap()
+            .unwrap();
+        let event_text = std::str::from_utf8(&chunk).unwrap();
+        let endpoint = event_text
+            .lines()
+            .find_map(|l| l.strip_prefix("data: "))
+            .expect("SSE must emit endpoint event");
+        assert!(
+            endpoint.contains(&format!("&token={}", secret)),
+            "Endpoint must include token for standard MCP clients: {endpoint}"
+        );
+
+        // 9. POST to /message using active session without token header/param passes auth
+        let session_id = endpoint
+            .split("session_id=")
+            .nth(1)
+            .and_then(|s| s.split('&').next())
+            .expect("session_id must be present");
+        let post_req = Request::builder()
+            .uri(format!("/message?session_id={}", session_id))
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).to_string(),
+            ))
+            .unwrap();
+        let post_resp = app.clone().oneshot(post_req).await.unwrap();
+        assert_eq!(post_resp.status(), StatusCode::ACCEPTED);
+
+        // 10. POST to /message with non-existent session and no token fails auth
+        let fake_post_req = Request::builder()
+            .uri("/message?session_id=deadbeefcafebabe")
+            .method("POST")
+            .header("content-type", "application/json")
+            .body(Body::from(
+                json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}).to_string(),
+            ))
+            .unwrap();
+        let fake_resp = app.clone().oneshot(fake_post_req).await.unwrap();
+        assert_eq!(fake_resp.status(), StatusCode::UNAUTHORIZED);
     }
 }
 
@@ -2485,7 +2571,7 @@ mod transport_regression_tests {
     #[tokio::test]
     async fn shutdown_closes_sse_even_with_sender_clones_and_late_clients() {
         let sessions = SseSessionManager::default();
-        let response = sse_handler(Extension(sessions.clone()))
+        let response = sse_handler(Extension(sessions.clone()), None)
             .await
             .into_response();
         let mut stream = response.into_body().into_data_stream();
@@ -2504,7 +2590,7 @@ mod transport_regression_tests {
             .unwrap()
             .is_none());
         assert!(sender.is_closed());
-        let late = sse_handler(Extension(sessions.clone()))
+        let late = sse_handler(Extension(sessions.clone()), None)
             .await
             .into_response();
         assert!(to_bytes(late.into_body(), 1024).await.unwrap().is_empty());
@@ -2516,7 +2602,7 @@ mod transport_regression_tests {
         let sessions = SseSessionManager::default();
         let mut streams = Vec::new();
         for _ in 0..3 {
-            let mut stream = sse_handler(Extension(sessions.clone()))
+            let mut stream = sse_handler(Extension(sessions.clone()), None)
                 .await
                 .into_response()
                 .into_body()
