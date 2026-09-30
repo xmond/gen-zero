@@ -626,3 +626,250 @@ async fn http_decide_requires_explicit_astar_goal_and_forwards_budget() {
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
 }
+
+#[tokio::test]
+async fn reflection_closes_http_simulation_to_policy_gate_loop() {
+    use gen_zero_core::GraphFactProvider;
+    use gen_zero_lod::EdgeType;
+    let graph = Arc::new(LodGraph::new());
+    let action = graph
+        .add_node(
+            LodNode::new(
+                0,
+                LodBand::Lod0Atomic,
+                MixedCurvatureCoord::origin(),
+                "action zero",
+                0,
+            )
+            .with_prior(0.9),
+        )
+        .unwrap();
+    let engine = Arc::new(
+        PolymorphicZeroEngine::new()
+            .with_bridge(None)
+            .with_lod_graph(graph.clone()),
+    );
+    assert!(!graph.is_revoked(0));
+    let (status, before) = post(
+        &engine,
+        "/v1/pipeline/decide",
+        json!({"state": zeros(), "candidates": [0], "mode": "reflex", "entropy": 0.0}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{before}");
+    let (status, body) = post(
+        &engine,
+        "/v1/pipeline/simulate",
+        json!({"state": trap_state(), "actions": [0], "auto_reflect": true}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let result = meta_pipeline(&body);
+    assert_eq!(result["simulation"]["terminated_early"], true);
+    let reflection = &result["graph_reflection"]["observations"][0];
+    assert_eq!(reflection["evolution"]["converged"], true);
+    assert_eq!(reflection["revoked_entities"], json!([0]));
+    let evidence = reflection["evidence_node_id"].as_u64().unwrap() as u32;
+    let node = graph.get_node(evidence).unwrap();
+    assert!(node.timestamp_ns > 0);
+    assert!(node.payload.unwrap().contains("model diagnostic"));
+    graph.flush_edges_to_csr().unwrap();
+    assert!(graph
+        .csr_snapshot()
+        .neighbors(evidence)
+        .any(|(to, ty, _)| to == action && ty == EdgeType::Falsifies));
+    assert!(graph.get_node(action).unwrap().confidence < 0.3);
+    assert!(graph.is_revoked(0));
+    let (status, after) = post(
+        &engine,
+        "/v1/pipeline/decide",
+        json!({"state": zeros(), "candidates": [0, 18], "mode": "reflex", "entropy": 0.0}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{after}");
+    let decision = &meta_pipeline(&after)["decision"];
+    assert_eq!(decision["action"], 18);
+    assert_eq!(decision["pruned"][0]["action"], 0);
+    let (status, rejected) = post(
+        &engine,
+        "/v1/pipeline/simulate",
+        json!({"state": zeros(), "actions": [0]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{rejected}");
+}
+
+#[tokio::test]
+async fn reflection_what_if_and_audit_use_real_dynamics() {
+    use gen_zero_core::GraphFactProvider;
+    for (op, fields) in [
+        ("what_if", json!({"candidates": [0, 18]})),
+        ("audit_action", json!({"action": 0})),
+    ] {
+        let graph = Arc::new(LodGraph::new());
+        let engine = Arc::new(
+            PolymorphicZeroEngine::new()
+                .with_bridge(None)
+                .with_lod_graph(graph.clone()),
+        );
+        let mut request = fields;
+        request["state"] = trap_state();
+        request["horizon"] = json!(1);
+        request["auto_reflect"] = json!(true);
+        let (status, body) = post(&engine, &format!("/v1/pipeline/{op}"), request).await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        assert!(graph.is_revoked(0), "{body}");
+        assert!(
+            !graph.is_revoked(18),
+            "safe candidate was incorrectly revoked: {body}"
+        );
+        assert_eq!(
+            meta_pipeline(&body)["graph_reflection"]["observations"][0]["evolution"]["converged"],
+            true
+        );
+    }
+}
+
+#[tokio::test]
+async fn hierarchical_prior_blocks_pending_falsified_successors_and_injects_macro() {
+    use gen_zero_lod::EdgeType;
+    let graph = Arc::new(LodGraph::new());
+    let add = |entity, band, prior, status| {
+        graph
+            .add_node(
+                LodNode::new(
+                    0,
+                    band,
+                    MixedCurvatureCoord::origin(),
+                    format!("node {entity}"),
+                    entity,
+                )
+                .with_prior(prior)
+                .with_status(status),
+            )
+            .unwrap()
+    };
+    let bad = add(0, LodBand::Lod0Atomic, 0.9, EpistemicStatus::Validated);
+    let effect = add(101, LodBand::Lod0Atomic, 0.5, EpistemicStatus::Falsified);
+    let good = add(18, LodBand::Lod0Atomic, 0.9, EpistemicStatus::Validated);
+    let macro_node = add(102, LodBand::Lod2Milestone, 0.9, EpistemicStatus::Validated);
+    add(19, LodBand::Lod0Atomic, 0.2, EpistemicStatus::Hypothesized);
+    graph
+        .add_edge(bad, effect, EdgeType::CausalTransition, 1.0)
+        .unwrap();
+    graph
+        .add_edge(good, macro_node, EdgeType::CoarseGrain, 1.0)
+        .unwrap();
+    let engine = Arc::new(
+        PolymorphicZeroEngine::new()
+            .with_bridge(None)
+            .with_lod_graph(graph),
+    );
+    let request =
+        json!({"state": zeros(), "candidates": [0, 18, 19], "mode": "reflex", "entropy": 0.0});
+    let (status, body) = post(&engine, "/v1/pipeline/decide", request.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let decision = &meta_pipeline(&body)["decision"];
+    assert_eq!(decision["action"], 18);
+    assert_eq!(decision["pruned"].as_array().unwrap().len(), 2);
+    assert_eq!(decision["graph_context"]["facts"][0]["entity_id"], 102);
+    assert_eq!(
+        decision["graph_context"]["facts"][0]["band"],
+        "Lod2Milestone"
+    );
+    let (status, repeated) = post(&engine, "/v1/pipeline/decide", request).await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(decision, &meta_pipeline(&repeated)["decision"]);
+}
+
+#[tokio::test]
+async fn reflection_opt_in_is_strict_and_default_has_no_mutation() {
+    let graph = Arc::new(LodGraph::new());
+    let engine = Arc::new(
+        PolymorphicZeroEngine::new()
+            .with_bridge(None)
+            .with_lod_graph(graph.clone()),
+    );
+    let (status, body) = post(
+        &engine,
+        "/v1/pipeline/simulate",
+        json!({"state": trap_state(), "actions": [0]}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(meta_pipeline(&body)["graph_reflection"]["enabled"], false);
+    assert_eq!(graph.node_count(), 0);
+    let (status, body) = post(
+        &engine,
+        "/v1/pipeline/simulate",
+        json!({"state": trap_state(), "actions": [0], "auto_reflect": "true"}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(graph.node_count(), 0);
+}
+
+#[tokio::test]
+async fn policy_audit_reflection_is_idempotent_and_evolution_conflict_is_explicit() {
+    use gen_zero_core::{ActionId, GraphFactProvider};
+    let graph = Arc::new(LodGraph::new());
+    let mut gate = PolicyGate::default();
+    gate.add_constraint(LinearConstraint::prohibit(
+        RuleId(777),
+        "prohibited",
+        ActionId(7),
+    ));
+    let engine = Arc::new(
+        PolymorphicZeroEngine::new()
+            .with_bridge(None)
+            .with_gate(gate)
+            .with_lod_graph(graph.clone()),
+    );
+    let request = json!({"state": zeros(), "action": 7, "auto_reflect": true});
+    let (status, body) = post(&engine, "/v1/pipeline/audit_action", request.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert!(graph.is_revoked(7));
+    assert_eq!(meta_pipeline(&body)["audit"]["verdict"], "RejectLethal");
+    // Once graph revocation contributes a second policy reason, that distinct
+    // diagnostic may add evidence. Subsequent identical audits must deduplicate.
+    let (status, second) = post(&engine, "/v1/pipeline/audit_action", request.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{second}");
+    let count = graph.node_count();
+    let (status, third) = post(&engine, "/v1/pipeline/audit_action", request).await;
+    assert_eq!(status, StatusCode::OK, "{third}");
+    assert_eq!(graph.node_count(), count);
+    assert_eq!(
+        meta_pipeline(&second)["graph_reflection"]["observations"][0]["evidence_node_id"],
+        meta_pipeline(&third)["graph_reflection"]["observations"][0]["evidence_node_id"]
+    );
+
+    let graph = Arc::new(LodGraph::new());
+    graph
+        .add_node(
+            LodNode::new(
+                0,
+                LodBand::Lod0Atomic,
+                MixedCurvatureCoord::origin(),
+                "axiomatic action",
+                0,
+            )
+            .with_status(EpistemicStatus::Axiomatic),
+        )
+        .unwrap();
+    let engine = Arc::new(
+        PolymorphicZeroEngine::new()
+            .with_bridge(None)
+            .with_lod_graph(graph.clone()),
+    );
+    let (status, body) = post(
+        &engine,
+        "/v1/pipeline/simulate",
+        json!({"state": trap_state(), "actions": [0], "auto_reflect": true}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{body}");
+    assert!(body.to_string().contains("GraphReflectionFailed"));
+    assert!(body.to_string().contains("quarantined"));
+    assert!(graph.is_revoked(0));
+    assert_eq!(graph.node_count(), 1);
+}

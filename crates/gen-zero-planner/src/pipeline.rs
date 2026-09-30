@@ -33,7 +33,7 @@ use gen_zero_core::{
     ActionId, CoreError, FullLatent, LocalActionFrame, NormalizedEntropy, WorldModelDynamics,
 };
 use gen_zero_gate::{PolicyGate, PolicyTier};
-use gen_zero_lod::{EpistemicStatus, LodGraph};
+use gen_zero_lod::{EpistemicStatus, LodBand, LodGraph};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::{
@@ -305,16 +305,19 @@ pub struct GraphFact {
     pub status: EpistemicStatus,
     /// Personalized PageRank mass from the seeds.
     pub score: f32,
+    pub band: LodBand,
+    pub confidence: f32,
+    pub hierarchical_prior: bool,
 }
 
 /// Topological facts around the chosen action, from Personalized PageRank over
-/// the live graph. Advisory only: it is computed after the choice and no engine,
-/// gate check or tier reads it.
+/// the live graph. The hierarchical prior is consumed by candidate gating;
+/// PPR scores describe context and do not replace world-model rewards.
 #[derive(Clone, Debug, PartialEq)]
 pub enum GraphContext {
     /// Diffusion seeded at the entity nodes of the chosen action and of the
     /// active-context actions that have one. `facts` holds the highest-scoring
-    /// non-seed live nodes with nonzero mass.
+    /// non-seed live nodes with nonzero mass, preceded by hierarchical facts.
     Diffused {
         seed_entities: Vec<u64>,
         facts: Vec<GraphFact>,
@@ -348,7 +351,7 @@ pub struct Decision {
     pub feasible: Vec<ActionId>,
     pub pruned: Vec<PrunedAction>,
     pub trajectory: Option<Rollout>,
-    /// Advisory graph neighborhood of `action`; see [`GraphContext`].
+    /// Graph neighborhood and hierarchical prior of `action`; see [`GraphContext`].
     pub graph_context: GraphContext,
 }
 
@@ -799,9 +802,18 @@ impl ProductionPipeline {
         // Atomic snapshot: publication cannot hide a previously certified candidate
         // behind a contended mutex. Never join the blocked dynamics call.
         match incumbent.swap(None) {
-            Some(decision) => Arc::try_unwrap(decision).map_err(|_| {
-                PlannerError::ConvergenceFailure("incumbent unexpectedly shared".into())
-            }),
+            Some(decision) => {
+                if self
+                    .gate_check_with_context(decision.action, &req.active_context, req.entropy)
+                    .0
+                    == PolicyTier::Tier3HardStop
+                {
+                    return Err(PlannerError::NoFeasibleAction);
+                }
+                Arc::try_unwrap(decision).map_err(|_| {
+                    PlannerError::ConvergenceFailure("incumbent unexpectedly shared".into())
+                })
+            }
             None => Err(timeout()),
         }
     }
@@ -879,6 +891,9 @@ impl ProductionPipeline {
 
         let publish = |action: ActionId, engine: &'static str| {
             if incumbent.is_none() || !feasible.contains(&action) {
+                return;
+            }
+            if self.graph.planning_prior(u64::from(action.0)).is_err() {
                 return;
             }
             // Full gate evaluation includes the live graph and request entropy.
@@ -965,16 +980,8 @@ impl ProductionPipeline {
         }
 
         let gate_tier = self
-            .gate
-            .evaluate_with_context(
-                action,
-                &req.active_context,
-                None,
-                req.entropy,
-                Some(self.graph.as_ref()),
-                None,
-            )
-            .map_or(PolicyTier::Tier3HardStop, |v| v.tier);
+            .gate_check_with_context(action, &req.active_context, req.entropy)
+            .0;
         if gate_tier == PolicyTier::Tier3HardStop {
             return Err(PlannerError::NoFeasibleAction);
         }
@@ -1009,6 +1016,13 @@ impl ProductionPipeline {
         };
 
         let graph_context = self.graph_context(action, &req.active_context);
+        if self
+            .gate_check_with_context(action, &req.active_context, req.entropy)
+            .0
+            == PolicyTier::Tier3HardStop
+        {
+            return Err(PlannerError::NoFeasibleAction);
+        }
         budget.check()?;
         Ok(Decision {
             timed_out: false,
@@ -1067,7 +1081,7 @@ impl ProductionPipeline {
                 }
             }
         };
-        let facts = ranking
+        let mut facts: Vec<GraphFact> = ranking
             .ranked
             .iter()
             .filter(|(id, score)| *score > 0.0 && !seeds.iter().any(|(s, _)| s == id))
@@ -1077,10 +1091,41 @@ impl ProductionPipeline {
                     label: n.label,
                     status: n.status,
                     score,
+                    band: n.band,
+                    confidence: n.confidence,
+                    hierarchical_prior: false,
                 })
             })
             .take(GRAPH_CONTEXT_TOP)
             .collect();
+        match self.graph.planning_prior(entity) {
+            Ok(prior) => {
+                for n in prior.into_iter().rev() {
+                    let score = facts
+                        .iter()
+                        .find(|f| f.entity_id == n.entity_id)
+                        .map_or(0.0, |f| f.score);
+                    facts.retain(|f| f.entity_id != n.entity_id);
+                    facts.insert(
+                        0,
+                        GraphFact {
+                            entity_id: n.entity_id,
+                            label: n.label,
+                            status: n.status,
+                            score,
+                            band: n.band,
+                            confidence: n.confidence,
+                            hierarchical_prior: true,
+                        },
+                    );
+                }
+            }
+            Err(e) => {
+                return GraphContext::Unavailable {
+                    reason: e.to_string(),
+                }
+            }
+        }
         GraphContext::Diffused {
             seed_entities,
             facts,
@@ -1109,11 +1154,18 @@ impl ProductionPipeline {
             Some(self.graph.as_ref()),
             None,
         ) {
-            Ok(v) => (
-                v.tier,
-                v.violated_rules.iter().map(|r| r.0).collect(),
-                v.reason,
-            ),
+            Ok(v) => {
+                if v.tier != PolicyTier::Tier3HardStop {
+                    if let Err(error) = self.graph.planning_prior(u64::from(action.0)) {
+                        return (PolicyTier::Tier3HardStop, Vec::new(), error.to_string());
+                    }
+                }
+                (
+                    v.tier,
+                    v.violated_rules.iter().map(|r| r.0).collect(),
+                    v.reason,
+                )
+            }
             Err(e) => (
                 PolicyTier::Tier3HardStop,
                 Vec::new(),

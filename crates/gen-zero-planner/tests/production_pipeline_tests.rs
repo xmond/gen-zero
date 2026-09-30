@@ -89,9 +89,7 @@ fn decision_carries_ppr_graph_context_of_the_chosen_action() {
     graph
         .add_edge(act, effect, EdgeType::CausalTransition, 1.0)
         .unwrap();
-    graph
-        .add_edge(act, dead, EdgeType::CausalTransition, 1.0)
-        .unwrap();
+    graph.add_edge(act, dead, EdgeType::Semantic, 1.0).unwrap();
     graph.flush_edges_to_csr().unwrap();
     let p = pipeline(PolicyGate::default()).with_graph(graph);
     let state = FullLatent::zeros();

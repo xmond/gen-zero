@@ -300,7 +300,7 @@ fn check_edge(num_nodes: usize, source: u32, target: u32, weight: f32) -> Result
 /// Lock order: `txn_lock` -> `flush_lock` -> `state`. The CSR snapshot is stored
 /// only while `state` is write-locked; methods that must see it consistent with
 /// the nodes load it while holding `state`.
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct GraphState {
     nodes: Vec<LodNode>,
     entity_index: HashMap<u64, u32>,
@@ -1866,10 +1866,24 @@ impl LodGraph {
         }
 
         let mut guard = self.state.write();
-        let checkpoint = self.capture(&guard);
-        let snapshot = self.csr_snapshot.load_full();
-        let st = &mut *guard;
+        self.evolve_locked(
+            &mut guard, beta, gamma, tolerance, theta_lo, theta_hi, max_steps,
+        )
+    }
 
+    #[allow(clippy::too_many_arguments)]
+    fn evolve_locked(
+        &self,
+        st: &mut GraphState,
+        beta: f32,
+        gamma: f32,
+        tolerance: f32,
+        theta_lo: f32,
+        theta_hi: f32,
+        max_steps: usize,
+    ) -> Result<FixedPointReport, LodError> {
+        let checkpoint = self.capture(st);
+        let snapshot = self.csr_snapshot.load_full();
         let rows = signed_rows(&st.nodes, &snapshot, &st.edge_buffer, gamma > 0.0);
         let prior: Vec<f64> = st
             .nodes
@@ -2065,6 +2079,172 @@ impl LodGraph {
                     "transaction failed ({error}) and its rollback was refused: {rollback}"
                 ))),
             },
+        }
+    }
+
+    /// Fail-closed prior check over the action, its coarse ancestors and causal
+    /// successors. Reads pending edges as well as CSR under one graph read lock.
+    /// Missing action knowledge is explicitly represented by an empty prior.
+    pub fn planning_prior(&self, entity: u64) -> Result<Vec<LodNode>, LodError> {
+        let st = self.state.read();
+        let fail = |reason: String| LodError::InvalidQuery(reason);
+        if st.revocations.contains(&entity) {
+            return Err(fail(format!("entity {entity} is revoked")));
+        }
+        let Some(&root) = st.entity_index.get(&entity) else {
+            return Ok(Vec::new());
+        };
+        let csr = self.csr_snapshot.load_full();
+        let mut pending = vec![root];
+        let mut visited = HashSet::new();
+        let mut facts = Vec::new();
+        while let Some(id) = pending.pop() {
+            if !visited.insert(id) {
+                continue;
+            }
+            let node = &st.nodes[id as usize];
+            if st.revocations.contains(&node.entity_id)
+                || node.status.is_falsified()
+                || !node.confidence.is_finite()
+                || node.confidence < 0.3
+            {
+                return Err(fail(format!(
+                    "graph prior blocks action {entity}: node {} has status {:?}, confidence {}",
+                    node.entity_id, node.status, node.confidence
+                )));
+            }
+            if id != root
+                && node.confidence >= 0.6
+                && (node.status.is_active_truth()
+                    || matches!(node.band, LodBand::Lod2Milestone | LodBand::Lod3Systemic))
+            {
+                facts.push(node.clone());
+            }
+            if let Some(parent) = node.parent_id {
+                pending.push(parent);
+            }
+            for (target, ty, weight) in csr.neighbors(id).chain(
+                st.edge_buffer
+                    .iter()
+                    .filter(|e| e.source == id)
+                    .map(|e| (e.target, e.edge_type, e.weight)),
+            ) {
+                if weight > 0.0 && matches!(ty, EdgeType::CausalTransition | EdgeType::CoarseGrain)
+                {
+                    pending.push(target);
+                }
+            }
+        }
+        facts.sort_by_key(|n| (std::cmp::Reverse(n.band), n.entity_id));
+        Ok(facts)
+    }
+
+    /// Record a model/policy observation and evolve under one exclusive lock.
+    /// Observation confidence expresses certainty that the diagnostic occurred,
+    /// not calibrated real-world causality. Identical payloads reuse evidence.
+    /// On failure no staged evidence is published; the target is quarantined and
+    /// the caller receives an error. An axiom cannot be silently rewritten.
+    pub fn reflect_failure(
+        &self,
+        action: u32,
+        payload: &str,
+        timestamp_ns: u64,
+    ) -> Result<(u32, u32, FixedPointReport), LodError> {
+        let mut live = self.state.write();
+        let mut staged = live.clone();
+        let result = (|| {
+            let entity = u64::from(action);
+            let target = match staged.entity_index.get(&entity) {
+                Some(&id) => id,
+                None => self.insert_node(
+                    &mut staged,
+                    LodNode::new(
+                        0,
+                        LodBand::Lod0Atomic,
+                        MixedCurvatureCoord::origin(),
+                        format!("action {action}"),
+                        entity,
+                    ),
+                )?,
+            };
+            if staged.nodes[target as usize].status == EpistemicStatus::Axiomatic {
+                return Err(LodError::InvalidQuery(format!(
+                    "cannot evolve axiomatic action {action}; quarantined"
+                )));
+            }
+            let digest = crate::node::payload_digest(&format!("action:{action}\n{payload}"));
+            let evidence_entity =
+                u64::from_le_bytes(digest[..8].try_into().unwrap()) | (1_u64 << 63);
+            let evidence = match staged.entity_index.get(&evidence_entity) {
+                Some(&id) => {
+                    if staged.nodes[id as usize].payload.as_deref() != Some(payload) {
+                        return Err(LodError::InvalidQuery("reflection entity collision".into()));
+                    }
+                    let csr = self.csr_snapshot.load_full();
+                    let has_edge = csr
+                        .neighbors(id)
+                        .chain(
+                            staged
+                                .edge_buffer
+                                .iter()
+                                .filter(|e| e.source == id)
+                                .map(|e| (e.target, e.edge_type, e.weight)),
+                        )
+                        .any(|(to, ty, weight)| {
+                            to == target && ty == EdgeType::Falsifies && weight > 0.0
+                        });
+                    if !has_edge {
+                        return Err(LodError::InvalidQuery(
+                            "existing reflection lacks its falsification edge".into(),
+                        ));
+                    }
+                    id
+                }
+                None => {
+                    let node = LodNode::new(
+                        0,
+                        LodBand::Lod0Atomic,
+                        MixedCurvatureCoord::origin(),
+                        format!("failure observation for action {action}"),
+                        evidence_entity,
+                    )
+                    .with_prior(1.0)
+                    .with_payload(
+                        payload,
+                        Some("pipeline:failure-observation".into()),
+                        timestamp_ns,
+                    )?;
+                    let id = self.insert_node(&mut staged, node)?;
+                    self.push_edge(&mut staged, id, target, EdgeType::Falsifies, 1.0)?;
+                    id
+                }
+            };
+            let report = self.evolve_locked(
+                &mut staged,
+                0.85,
+                1.0,
+                1e-6,
+                0.3,
+                0.6,
+                MAX_FIXED_POINT_STEPS,
+            )?;
+            if !staged.revocations.contains(&entity) {
+                return Err(LodError::InvalidQuery(format!(
+                    "reflection did not revoke action {action}; quarantined"
+                )));
+            }
+            Ok((evidence, target, report))
+        })();
+        match result {
+            Ok(report) => {
+                *live = staged;
+                Ok(report)
+            }
+            Err(error) => {
+                live.revocations.insert(u64::from(action));
+                live.manual_revocations.insert(u64::from(action));
+                Err(error)
+            }
         }
     }
 

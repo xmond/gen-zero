@@ -50,7 +50,7 @@ pub fn execute_pipeline(
             let config = parse_planner_config(obj)?;
             let pipeline = ProductionPipeline::new_with_config(world_model, gate, config)
                 .map_err(planner_rejection)?
-                .with_graph(graph);
+                .with_graph(Arc::clone(&graph));
             match obj.get("astar_goal") {
                 None => pipeline,
                 Some(value) => {
@@ -79,12 +79,18 @@ pub fn execute_pipeline(
                 }
             }
         }
-        _ => ProductionPipeline::new(world_model, gate).with_graph(graph),
+        _ => ProductionPipeline::new(world_model, gate).with_graph(Arc::clone(&graph)),
     };
     let pipeline = &pipeline;
+    let auto_reflect = match obj.get("auto_reflect") {
+        None => false,
+        Some(v) => v
+            .as_bool()
+            .ok_or_else(|| invalid("pipeline.auto_reflect must be a boolean"))?,
+    };
     match op {
         "simulate" => {
-            allow_keys(obj, &["op", "state", "actions", "horizon"])?;
+            allow_keys(obj, &["op", "state", "actions", "horizon", "auto_reflect"])?;
             let state = parse_state(obj)?;
             let actions = parse_actions(obj, "actions")?;
             let horizon = parse_opt_usize(obj, "horizon")?;
@@ -99,11 +105,15 @@ pub fn execute_pipeline(
             );
             Ok((
                 summary,
-                json!({"op": op, "simulation": rollout_json(&roll)}),
+                json!({"op": op, "simulation": rollout_json(&roll),
+                    "graph_reflection": reflect_rollouts(&graph, auto_reflect, op, &state, &[&roll], &[])?}),
             ))
         }
         "what_if" => {
-            allow_keys(obj, &["op", "state", "candidates", "horizon"])?;
+            allow_keys(
+                obj,
+                &["op", "state", "candidates", "horizon", "auto_reflect"],
+            )?;
             let state = parse_state(obj)?;
             let candidates = parse_actions(obj, "candidates")?;
             let horizon = parse_opt_usize(obj, "horizon")?.unwrap_or(DEFAULT_PIPELINE_HORIZON);
@@ -115,7 +125,12 @@ pub fn execute_pipeline(
                 report.best_candidate.0,
                 ids(&report.traps_detected)
             );
-            Ok((summary, json!({"op": op, "what_if": what_if_json(&report)})))
+            Ok((
+                summary,
+                json!({"op": op, "what_if": what_if_json(&report),
+                "graph_reflection": reflect_rollouts(&graph, auto_reflect, op, &state,
+                    &report.outcomes.iter().map(|o| &o.rollout).collect::<Vec<_>>(), &report.gate_blocked)?}),
+            ))
         }
         "audit_action" => {
             allow_keys(
@@ -127,6 +142,7 @@ pub fn execute_pipeline(
                     "horizon",
                     "continuation_actions",
                     "warn_risk",
+                    "auto_reflect",
                 ],
             )?;
             let state = parse_state(obj)?;
@@ -153,7 +169,12 @@ pub fn execute_pipeline(
             );
             Ok((
                 summary,
-                json!({"op": op, "audit": audit_json(&report, horizon, warn_risk)}),
+                json!({"op": op, "audit": audit_json(&report, horizon, warn_risk),
+                    "graph_reflection": reflect_rollouts(&graph, auto_reflect, op, &state,
+                        &report.trajectory.iter().collect::<Vec<_>>(),
+                        &if report.gate_tier == gen_zero_gate::PolicyTier::Tier3HardStop {
+                            vec![PrunedAction { action, tier: report.gate_tier, violated_rules: vec![], reason: report.reasons.join("; ") }]
+                        } else { vec![] })?}),
             ))
         }
         "decide" => {
@@ -232,6 +253,80 @@ pub fn execute_pipeline(
             "unknown pipeline.op {other:?}; expected one of {PIPELINE_OPS:?}"
         ))),
     }
+}
+
+/// Deposits only the actual hazardous transition, not an innocent first action
+/// whose continuation later failed. The full state bits and policy/source are
+/// recorded so deduplication never conflates equal-norm but different states.
+fn reflect_rollouts(
+    graph: &LodGraph,
+    enabled: bool,
+    op: &str,
+    initial: &FullLatent,
+    rolls: &[&Rollout],
+    blocked: &[PrunedAction],
+) -> Result<Value, Rejection> {
+    if !enabled {
+        return Ok(json!({"enabled": false, "observations": []}));
+    }
+    let mut observations = Vec::new();
+    for roll in rolls {
+        if let Some(step) = roll.steps.iter().find(|s| s.hazard) {
+            let before = if step.step_idx == 1 {
+                initial
+            } else {
+                &roll.steps[step.step_idx - 2].state
+            };
+            let payload = json!({"kind": "model_terminal_observation", "op": op,
+                "action": step.action.0, "step": step.step_idx,
+                "state_before": before.as_slice(), "state_after": step.state.as_slice(),
+                "reward": step.reward, "continuation_policy": roll.continuation_policy,
+                "safety_sources": roll.safety_sources, "calibrated": roll.safety_calibrated,
+                "claim": "model diagnostic; not proof of real-world causality"})
+            .to_string();
+            observations.push(deposit_reflection(graph, step.action, &payload)?);
+        }
+    }
+    for action in blocked {
+        let payload = json!({"kind": "policy_hard_stop", "op": op,
+            "action": action.action.0, "step": 0, "state_before": initial.as_slice(),
+            "reason": action.reason, "rules": action.violated_rules})
+        .to_string();
+        observations.push(deposit_reflection(graph, action.action, &payload)?);
+    }
+    Ok(json!({"enabled": true, "observations": observations}))
+}
+
+fn deposit_reflection(
+    graph: &LodGraph,
+    action: ActionId,
+    payload: &str,
+) -> Result<Value, Rejection> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| invalid(format!("reflection clock error: {e}")))?;
+    let timestamp =
+        u64::try_from(now.as_nanos()).map_err(|_| invalid("reflection timestamp overflow"))?;
+    let (evidence, target, report) = graph
+        .reflect_failure(action.0, payload, timestamp)
+        .map_err(|e| Rejection {
+            code: "GraphReflectionFailed".into(),
+            stage: STAGE.into(),
+            detail: format!("reflection failed; action {} quarantined: {e}", action.0),
+            http_status: 500,
+        })?;
+    Ok(
+        json!({"evidence_node_id": evidence, "action_node_id": target,
+        "falsification_edge": {"source": evidence, "target": target, "type": "Falsifies"},
+        "revoked_entities": [action.0], "newly_revoked_entities": report.revoked_entities,
+        "evolution": {"converged": true, "beta": report.beta, "gamma": report.gamma,
+            "tolerance": report.tolerance, "theta_lo": report.theta_lo, "theta_hi": report.theta_hi,
+            "scc_count": report.scc_count, "cyclic_scc_count": report.cyclic_scc_count,
+            "trivial_scc_count": report.trivial_scc_count, "max_scc_size": report.max_scc_size,
+            "iterations": report.iterations, "residual": report.residual,
+            "error_bound": report.error_bound, "node_updates": report.node_updates,
+            "falsification_edges": report.falsification_edges}}),
+    )
 }
 
 fn invalid(detail: impl Into<String>) -> Rejection {
@@ -446,8 +541,7 @@ fn decision_json(d: &Decision) -> Value {
     })
 }
 
-/// Advisory PPR neighborhood of the chosen action. Flagged so no caller reads
-/// it as part of the decision: no engine, gate check or tier used it.
+/// PPR context plus the hierarchical facts consumed by graph prior gating.
 fn graph_context_json(c: &GraphContext) -> Value {
     match c {
         GraphContext::Diffused {
@@ -459,6 +553,7 @@ fn graph_context_json(c: &GraphContext) -> Value {
             "status": "diffused",
             "advisory": true,
             "used_in_choice": false,
+            "hierarchical_prior_used_in_gate": true,
             "method": "personalized_pagerank",
             "seed_entities": seed_entities,
             "iterations": iterations,
@@ -468,12 +563,16 @@ fn graph_context_json(c: &GraphContext) -> Value {
                 "label": f.label,
                 "status": f.status,
                 "score": f.score,
+                "band": f.band,
+                "confidence": f.confidence,
+                "used_in_gate": f.hierarchical_prior,
             })).collect::<Vec<_>>(),
         }),
         GraphContext::Unavailable { reason } => json!({
             "status": "unavailable",
             "advisory": true,
             "used_in_choice": false,
+            "hierarchical_prior_used_in_gate": true,
             "reason": reason,
         }),
     }

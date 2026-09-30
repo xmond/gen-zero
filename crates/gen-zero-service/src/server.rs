@@ -724,6 +724,7 @@ impl McpServer {
                             "continuation_actions": { "type": "array", "items": { "type": "integer", "minimum": 0 } },
                             "horizon": { "type": "integer", "minimum": 1, "maximum": 128 },
                             "warn_risk": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
+                            "auto_reflect": { "type": "boolean", "description": "Opt in to persistent graph quarantine from simulate, what_if or audit_action failure observations; default false." },
                             "mode": { "type": "string", "enum": ["auto", "mcts", "mpc_cem", "astar", "manifold_gflownet", "cfr_nash", "reflex"] },
                             "entropy": { "type": "number", "minimum": 0, "maximum": 1 },
                             "return_trajectory": { "type": "boolean" }

@@ -1,0 +1,825 @@
+   Compiling gen-zero-lod v0.1.0 (/tmp/b1001d-p2-reflex-src/crates/gen-zero-lod)
+   Compiling gen-zero-gate v0.1.0 (/tmp/b1001d-p2-reflex-src/crates/gen-zero-gate)
+   Compiling gen-zero-planner v0.1.0 (/tmp/b1001d-p2-reflex-src/crates/gen-zero-planner)
+   Compiling gen-zero-service v0.1.0 (/tmp/b1001d-p2-reflex-src/crates/gen-zero-service)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 11.58s
+     Running unittests src/lib.rs (/tmp/b1001d-p2-reflex-target/debug/deps/gen_zero_lod-7a0755a53477183b)
+
+running 137 tests
+test graph::tests::add_edge_refuses_unknown_endpoint_and_bad_weight ... ok
+test graph::tests::add_node_refuses_duplicate_entity_and_bad_parent ... ok
+test graph::tests::add_node_refuses_inconsistent_confidence_fields ... ok
+test graph::tests::a_summary_loses_confidence_when_its_members_are_refuted ... ok
+test graph::tests::axiom_survives_direct_falsification_and_evolution ... ok
+test graph::tests::csr_from_edges_keeps_invariants_and_refuses_out_of_range ... ok
+test graph::tests::coarse_grain_edges_must_point_to_a_coarser_band ... ok
+test graph::tests::coarse_grain_cluster_refuses_and_changes_nothing ... ok
+test graph::tests::cyclic_block_iterates_alone_and_feeds_its_dependents_once ... ok
+test graph::tests::coarse_grain_cluster_links_members_to_a_coarser_summary_in_the_csr ... ok
+test graph::tests::edge_weights_decide_which_refutation_propagates ... ok
+test graph::tests::dag_blocks_are_trivial_and_take_one_evaluation_each ... ok
+test graph::tests::cycle_converges_to_the_unique_fixed_point_within_k_max ... ok
+test graph::tests::every_start_reaches_the_same_fixed_point_on_a_pure_cycle ... ok
+test graph::tests::evolution_rebuilds_dependencies_from_flushed_edges ... ok
+test graph::tests::evolution_refuses_out_of_range_arguments ... ok
+test graph::tests::evolution_validates_supported_chain_and_refutation_falsifies_it ... ok
+test graph::tests::falsifier_penalty_scales_with_the_falsifier_confidence ... ok
+test graph::tests::falsifies_edge_presses_its_target_to_falsified_and_revokes_it ... ok
+test graph::tests::flush_drains_the_buffer_and_keeps_every_edge_once ... ok
+test graph::tests::hysteresis_band_keeps_the_status ... ok
+test graph::tests::non_finite_values_fail_closed_in_both_block_kinds ... ok
+test graph::tests::incremental_merge_equals_full_rebuild ... ok
+test graph::tests::graph_curvature_decides_which_coordinates_are_in_domain ... ok
+test graph::tests::migrate_band_to_coord_steps_to_the_coordinate_band ... ok
+test graph::tests::non_contractive_signed_cycle_is_refused_and_commits_nothing ... ok
+test graph::tests::insert_refuses_a_payload_whose_digest_was_tampered ... ok
+test graph::tests::geometry_parameters_reorder_two_stage_recall ... ok
+test graph::tests::ppr_omits_falsified_and_revoked_nodes ... ok
+test graph::tests::out_of_domain_coord_is_refused_at_insert_and_query ... ok
+test graph::tests::ppr_covers_nodes_added_after_the_last_flush ... ok
+test graph::tests::report_checkpoint_undoes_the_evolution_and_an_earlier_one_the_evidence ... ok
+test manifold::tests::coord_distance_responds_to_every_parameter ... ok
+test manifold::tests::coord_rejects_invalid_state_and_parameters ... ok
+test graph::tests::rollback_restores_nodes_edges_csr_and_revocations ... ok
+test graph::tests::transact_rolls_back_a_failed_write ... ok
+test graph::tests::hybrid_search_equals_recall_then_ppr_from_the_same_anchors ... ok
+test graph::tests::test_graph_ppr_query ... ok
+test graph::tests::hybrid_search_fails_closed_on_bad_input_and_is_empty_on_an_empty_graph ... ok
+test graph::tests::hybrid_text_search_returns_anchor_payload_and_diffused_neighbor ... ok
+test graph::tests::zoom_node_keeps_the_coarse_grain_order_and_rolls_back ... ok
+test graph::tests::rollback_refuses_foreign_and_discarded_checkpoints ... ok
+test graph::tests::ppr_refuses_unknown_seed_and_bad_alpha ... ok
+test graph::tests::retracting_evidence_reverses_the_evolution_exactly ... ok
+test manifold::tests::coord_distance_is_zero_at_identity_and_grows ... ok
+test graph::tests::test_lod_graph_workflow ... ok
+test graph::tests::test_two_stage_recall_filters_falsified ... ok
+test manifold::tests::geometry_is_object_safe_and_shareable ... ok
+test graph::tests::rollback_drops_the_payload_nodes_it_removes ... ok
+test manifold::tests::extreme_scale_log_exp_and_transport_round_trip ... ok
+test manifold::tests::large_coordinate_norms_and_layout_additions_fail_closed ... ok
+test manifold::tests::hyperbolic_domain_violation_fails_closed ... ok
+test manifold::tests::extreme_alpha_weights_give_a_finite_confidence_or_a_refusal ... ok
+test manifold::tests::extreme_sphere_radius_stays_scale_free ... ok
+test manifold::tests::non_finite_and_malformed_input_fails_closed ... ok
+test manifold::tests::layouts_store_128_and_256_coordinates ... ok
+test manifold::tests::overflowing_alpha_sum_is_refused_by_validate ... ok
+test manifold::tests::from_preset_with_seals_the_preset_layout_and_a_distinct_frame ... ok
+test manifold::tests::public_kernels_reject_invalid_scalars_and_mismatched_shapes ... ok
+test manifold::tests::subnormal_sphere_validation_and_near_boundary_cancellation ... ok
+test manifold::tests::topology_presets_are_a_closed_whitelist ... ok
+test manifold::tests::tiny_curvature_preserves_small_hyperbolic_displacements ... ok
+test manifold::tests::tiny_tangents_are_not_erased_and_overflow_does_not_become_identity ... ok
+test node::tests::band_from_scale_splits_the_scale_axis_into_four_intervals ... ok
+test graph::tests::zero_gamma_is_the_unsigned_evolution_bit_for_bit ... ok
+test node::tests::derive_band_refuses_a_point_outside_the_ball_and_a_bad_geometry ... ok
+test node::tests::derive_band_is_invariant_under_curvature_rescaling ... ok
+test manifold::tests::sphere_antipode_is_cut_locus ... ok
+test node::tests::derive_band_puts_the_origin_on_top_and_the_boundary_at_the_bottom ... ok
+test manifold::tests::distance_composes_alpha_weighted_factors ... ok
+test manifold::tests::tangent_bound_to_other_fiber_or_epoch_is_rejected ... ok
+test manifold::tests::gyration_closed_form_matches_mobius_definition ... ok
+test node::tests::zoom_steps_are_inverse_and_bounded ... ok
+test ppr::tests::test_ppr_refuses_bad_inputs_instead_of_clamping ... ok
+test manifold::tests::transport_along_multi_point_path_and_back_preserves_norm ... ok
+test ppr::tests::test_ppr_reports_nonconvergence ... ok
+test manifold::tests::coord_distance_equals_product_manifold_distance ... ok
+test projection::tests::unicode_text_without_spaces_still_shares_trigrams ... ok
+test semiring::tests::a_tiny_explicit_budget_trips_inside_chart_fold_core ... ok
+test manifold::tests::sphere_angle_matches_arccos_form ... ok
+test ppr::tests::test_ppr_triangle ... ok
+test semiring::tests::associativity_audit_detects_a_genuine_violation ... ok
+test semiring::tests::a_conflict_key_makes_chart_refuse_and_left_fold_never_picks ... ok
+test semiring::tests::chart_closes_inner_first_bracketing ... ok
+test semiring::tests::associativity_audit_reports_zero_violations_on_an_associative_table ... ok
+test semiring::tests::chart_chain_length_bound_refuses_before_chart_allocation ... ok
+test projection::tests::projection_is_deterministic_and_ignores_case_and_spacing ... ok
+test projection::tests::shared_ngrams_bring_texts_closer_in_both_fingerprint_and_manifold ... ok
+test semiring::tests::chart_closes_a_2plus2_chain_that_left_fold_refuses ... ok
+test semiring::tests::compose_soft_is_linear_in_each_argument ... ok
+test node::tests::payload_carries_its_digest_and_the_gate_refuses_tampering ... ok
+test semiring::tests::chart_fold_sets_agrees_with_fold_left_on_a_single_valued_chain ... ok
+test semiring::tests::compose_soft_is_the_kernel_sum_and_keeps_unclosed_mass ... ok
+test semiring::tests::empty_chain_is_refused_by_every_fold ... ok
+test semiring::tests::fold_chain_soft_concludes_under_the_entropy_gate_and_refuses_above_it ... ok
+test semiring::tests::fold_chain_soft_on_deltas_matches_the_discrete_left_fold ... ok
+test semiring::tests::chart_fold_chain_refuses_when_bracketings_disagree ... ok
+test semiring::tests::gender_length_mismatch_is_refused ... ok
+test semiring::tests::insert_axiom_records_and_clears_conflict_keys ... ok
+test semiring::tests::missing_key_composes_to_empty ... ok
+test semiring::tests::result_set_normalizes_to_canonical_form ... ok
+test semiring::tests::fold_chain_soft_refuses_a_tie_and_a_dominant_unclosed_mass ... ok
+test semiring::tests::fold_chain_soft_refuses_bad_input_and_unweighted_conflict_keys ... ok
+test projection::tests::projection_refuses_empty_punctuation_and_oversized_text ... ok
+test semiring::tests::soft_result_set_validates_and_measures_entropy ... ok
+test semiring::tests::union_is_idempotent_with_empty_zero ... ok
+test weighted::tests::from_counts_computes_negative_log_frequency ... ok
+test weighted::tests::an_exact_tie_refuses_even_at_zero_threshold ... ok
+test weighted::tests::from_counts_rejects_duplicate_relation_and_duplicate_key ... ok
+test weighted::tests::from_counts_rejects_invalid_pseudo_count ... ok
+test weighted::tests::from_counts_rejects_zero_count ... ok
+test weighted::tests::invalid_margin_threshold_refuses_at_step_zero ... ok
+test weighted::tests::from_counts_rejects_an_empty_key ... ok
+test weighted::tests::logprob_plus_matches_probability_sum ... ok
+test projection::tests::projection_stays_inside_the_ball_of_every_curvature ... ok
+test weighted::tests::missing_energy_for_a_table_result_refuses ... ok
+test weighted::tests::tropical_and_logprob_can_pick_different_relations ... ok
+test weighted::tests::margin_above_threshold_refuses_with_all_candidates ... ok
+test weighted::tests::tropical_plus_is_min_with_zero_identity ... ok
+test weighted::tests::unweighted_chart_refuses_the_conflict_key ... ok
+test weighted::tests::margin_resolves_a_false_ambiguity ... ok
+test weighted::tests::nan_propagates_through_plus_in_both_semirings ... ok
+test manifold::tests::arsinh_distance_matches_arcosh_and_mobius_forms ... ok
+test manifold::tests::project_tangent_128_and_256 ... ok
+test graph::tests::concurrent_add_flush_and_rollback_never_duplicate_edges ... ok
+test manifold::tests::log_of_exp_recovers_tangent_inside_injectivity_radius ... ok
+test manifold::tests::log_norm_equals_distance ... ok
+test semiring::tests::budget_is_not_over_tight_for_a_long_associative_chain ... ok
+test graph::tests::exhausted_step_budget_fails_closed_and_commits_nothing ... ok
+test graph::tests::tarjan_lists_components_after_everything_they_reach ... ok
+test semiring::tests::fold_chain_soft_fails_closed_on_budget ... ok
+test semiring::tests::dense_bomb_chart_fold_sets_refuses_on_budget ... ok
+test semiring::tests::dense_bomb_chart_fold_chain_refuses_on_budget ... ok
+test manifold::tests::exp_of_log_recovers_point ... ok
+test manifold::tests::distance_is_symmetric_and_satisfies_triangle_inequality ... ok
+test manifold::tests::transport_is_isometric_and_maps_log_to_negated_log ... ok
+test weighted::tests::dense_bomb_weighted_fold_refuses_on_budget ... ok
+
+test result: ok. 137 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.40s
+
+     Running tests/boolq_busemann_entailment_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/boolq_busemann_entailment_tests-532ec23f7fd90ea7)
+
+running 21 tests
+test a_concept_does_not_strictly_contain_itself ... ok
+test boolq_topology_is_h80_r24_s23_in_16_cache_lines ... ok
+test alpha_weights_are_live_in_confidence_not_dead_knobs ... ok
+test ancestor_entails_descendant_and_never_the_reverse ... ok
+test ball_boundary_and_overflow_are_rejected ... ok
+test collinear_depth_gain_equals_difference_of_origin_distances ... ok
+test cap_bounds_the_aperture_from_above ... ok
+test control_pair_passes ... ok
+test entailment_verdict_flips_once_as_curvature_grows ... ok
+test euclidean_topic_shift_is_measured_and_gated ... ok
+test invalid_cone_angles_are_rejected ... ok
+test extreme_radius_sphere_separation_correctly_blocks_entailment ... ok
+test non_finite_coordinates_are_rejected_in_every_factor ... ok
+test sphere_angle_does_not_overflow_to_zero_at_extreme_radius ... ok
+test cone_aperture_shrinks_monotonically_with_curvature ... ok
+test radial_angle_matches_the_constructed_angle ... ok
+test sphere_factor_absorbs_small_rotations_and_rejects_large_ones ... ok
+test undefined_radial_direction_is_an_error_not_a_verdict ... ok
+test wrong_lengths_are_rejected ... ok
+test violation_energy_is_continuous_evidence_and_never_the_gate ... ok
+test asymmetry_holds_on_a_random_sweep ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
+     Running tests/reflection_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/reflection_tests-f425bc86b2677d97)
+
+running 3 tests
+test axiom_conflict_is_an_error_not_a_fabricated_success ... ok
+test noncontractive_evolution_returns_error_and_quarantines_without_partial_evidence ... ok
+test reflection_is_idempotent_and_atomic_across_concurrent_deposits ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (/tmp/b1001d-p2-reflex-target/debug/deps/gen_zero_planner-99d871278c0ecffa)
+
+running 20 tests
+test config::tests::default_matches_the_engines_own_defaults ... ok
+test config::tests::deserializes_a_partial_object_over_defaults ... ok
+test config::tests::validate_rejects_degenerate_and_inverted_values ... ok
+test engine::tests::cem_uniform_is_deterministic_and_in_unit_interval ... ok
+test engine::tests::cem_excludes_blocked_actions_from_every_rollout_and_entropy ... ok
+test engine::tests::mcts_backup_updates_every_ancestor_with_its_own_discounted_return ... ok
+test engine::tests::cem_discounts_by_depth_and_stops_at_terminal ... ok
+test engine::tests::sample_categorical_follows_cumulative_mass ... ok
+test engine::tests::gflow_entropy_matches_softmax_and_handles_ties_and_singletons ... ok
+test engine::tests::mcts_visits_unexplored_actions_even_with_large_rewards ... ok
+test game::tests::normalization_and_gap_overflow_fail_closed ... ok
+test router::tests::classification_refuses_malformed_entropy_and_hard_stop ... ok
+test router::tests::dispatch_refuses_gate_hard_stop_before_any_engine_call ... ok
+test router::tests::dispatch_refuses_invalid_entropy_before_any_engine_call ... ok
+test router::tests::test_router_tier_classification ... ok
+test engine::tests::cem_learns_different_actions_at_different_positions ... ok
+test engine::tests::blocked_candidates_do_not_change_cfr_baseline_or_entropy ... ok
+test engine::tests::cfr_average_strategy_concentrates_on_best_payoff_and_preserves_ties ... ok
+test engine::tests::test_all_six_engines ... ok
+test game::tests::rectangular_game_updates_both_players_and_preserves_payoff_units ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/astar_multi_step_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/astar_multi_step_tests-7a98a31f2eb748e7)
+
+running 10 tests
+test explicit_goal_and_valid_parameters_are_required ... ok
+test distance_threshold_and_invalid_cost_settings_are_checked ... ok
+test terminal_failure_is_not_a_goal_or_expandable ... ok
+test terminal_and_nonterminal_arrivals_are_not_merged ... ok
+test cheaper_duplicate_replaces_parent_and_stale_frontier_is_ignored ... ok
+test goal_is_accepted_on_pop_not_when_first_generated ... ok
+test three_step_obstacle_path_beats_one_step_ranker_and_expensive_shortcut ... ok
+test deep_model_errors_and_blocked_actions_do_not_become_fallbacks ... ok
+test pipeline_does_not_silently_restore_the_old_ranker_without_a_goal ... ok
+test cycles_and_budget_exhaustion_fail_closed ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/cem_temporal_conditioning_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/cem_temporal_conditioning_tests-51145de81abd5614)
+
+running 3 tests
+test gaussian_shape_and_discount_are_validated ... ok
+test learns_start_exec_finish_with_independent_time_distributions ... ok
+test excludes_divergent_and_gate_blocked_paths_and_handles_16_actions ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.33s
+
+     Running tests/deadline_anytime_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/deadline_anytime_tests-376ee01331357382)
+
+running 13 tests
+test config_rejects_serialized_process_local_deadline ... ok
+test expired_and_invalid_budgets_do_not_call_model ... ok
+test early_numeric_error_is_not_hidden_by_an_incumbent ... ok
+test auto_and_other_modes_obey_the_same_caller_deadline ... ok
+test blocked_action_is_never_promoted_to_incumbent ... ok
+test budgeted_active_context_mutex_prunes_before_screening_model_call ... ok
+test caller_returns_while_model_is_still_blocked_and_reentry_fails_closed ... ok
+test config_budget_cannot_be_extended_by_request ... ok
+test completed_certified_candidate_survives_timeout_in_each_engine ... ok
+test full_graph_revocation_cannot_be_bypassed_by_anytime ... ok
+test incomplete_cem_trajectory_is_not_an_incumbent ... ok
+test three_ms_step_does_not_hold_caller_past_three_ms ... ok
+test trajectory_timeout_returns_explicitly_truncated_decision ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running tests/fail_closed_numeric_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/fail_closed_numeric_tests-2b5cda6b67faac5b)
+
+running 13 tests
+test cpsat_filter_verdicts_preserves_blocked_candidates ... ok
+test cem_zero_parameters_are_rejected_before_sampling ... ok
+test cem_rejects_nonfinite_transitions_and_accumulated_reward ... ok
+test direct_router_rejects_invalid_entropy_instead_of_rerouting ... ok
+test cpsat_rejects_nonfinite_values_before_nan_can_win_best_action ... ok
+test duplicate_actions_cannot_inflate_policy_mass_or_entropy ... ok
+test astar_rejects_nonfinite_input_successor_reward_and_costs ... ok
+test mcts_cfr_and_gflow_reject_invalid_inputs_and_transitions ... ok
+test validated_engines_preserve_world_model_errors ... ok
+test rollout_blocks_later_action_before_evaluating_its_invalid_transition ... ok
+test pipeline_rejects_nonfinite_astar_transition_and_return_overflow ... ok
+test mcts_rejects_invalid_configuration_and_uses_finite_wide_backups ... ok
+test unanimous_committee_reports_zero_vote_entropy_despite_uncertain_input ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/fault_regression_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/fault_regression_tests-1f4e7af3994e9a1c)
+
+running 11 tests
+test f01_large_coefficients_cannot_wrap_or_panic_through_gate ... ok
+test f03_mcts_and_cfr_reject_nonfinite_successor_even_with_finite_reward ... ok
+test f04_occupied_mutex_context_hard_stops_gate_and_pipeline ... ok
+test f06_changed_prediction_at_final_check_is_rejected_without_fallback ... ok
+test f05_registered_topology_requires_certificate_before_model_execution ... ok
+test f08_reflex_never_returns_unvetted_first_action ... ok
+test f07_simulate_separates_policy_allowed_from_hazard_free ... ok
+test f02_all_six_engines_reject_nan_reward_without_fallback ... ok
+test f06_search_cannot_ignore_a_transient_hazard ... ok
+test f06_decide_excludes_high_reward_terminal_hazard_in_every_mode ... ok
+test f09_router_rejects_invalid_entropy_before_dispatch ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/game_theory_and_sampling_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/game_theory_and_sampling_tests-bf68a77a9ee4382f)
+
+running 8 tests
+test cpsat_reports_optimal_feasible_timeout_and_infeasible_statuses ... ok
+test cfr_marks_general_sum_games_and_rejects_malformed_games ... ok
+test cpsat_zero_deadline_is_timeout_and_model_errors_are_not_hidden ... ok
+test gflow_rejects_invalid_flows_and_duplicate_actions ... ok
+test gflow_preserves_direct_flow_proportions_and_excludes_blocked_actions ... ok
+test cfr_converges_on_an_asymmetric_zero_sum_game ... ok
+test cfr_converges_to_rps_and_samples_each_action ... ok
+test gflow_plan_samples_exp_rewards_without_a_distance_penalty ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.97s
+
+     Running tests/latent_world_model_planner_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/latent_world_model_planner_tests-e3274679424a1844)
+
+running 5 tests
+test all_blocked_frame_is_refused_by_every_engine_and_tier ... ok
+test nonfinite_input_is_refused_on_every_tier ... ok
+test nonfinite_input_is_refused_by_every_engine ... ok
+test engines_never_pick_a_blocked_action ... ok
+test latent_world_model_plans_through_router_on_every_tier ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/mcts_multi_step_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/mcts_multi_step_tests-d2e8fdf96278e551)
+
+running 13 tests
+test mcts_defaults_use_a_four_step_horizon_and_099_discount ... ok
+test arena_exhaustion_is_an_error ... ok
+test deeper_world_model_errors_abort_the_search ... ok
+test blocked_actions_are_never_stepped_and_all_blocked_fails_closed ... ok
+test horizon_one_prefers_immediate_reward ... ok
+test nonfinite_inputs_and_transitions_fail_closed ... ok
+test descendant_action_can_change_the_root_decision ... ok
+test zero_and_nonfinite_mcts_parameters_are_rejected ... ok
+test rollout_respects_horizon_and_uses_successor_states ... ok
+test terminal_successors_are_not_stepped_again ... ok
+test default_horizon_uses_delayed_successor_value ... ok
+test planner_config_wires_mcts_horizon_and_discount ... ok
+test zero_discount_in_pipeline_removes_delayed_reward_preference ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running tests/numeric_safety_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/numeric_safety_tests-816cec5e71c1805f)
+
+running 4 tests
+test mcts_wide_accumulation_keeps_finite_f32_max_rewards_valid ... ok
+test all_engines_reject_combined_nan_state_and_reward ... ok
+test all_engines_reject_nonfinite_reward_with_finite_successor ... ok
+test all_engines_reject_each_nonfinite_successor_coordinate_with_finite_reward ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.68s
+
+     Running tests/planner_config_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/planner_config_tests-0afada5349f432fa)
+
+running 6 tests
+test new_with_config_refuses_an_invalid_config ... ok
+test high_c_puct_flips_the_decision_away_from_the_reward_optimum ... ok
+test low_c_puct_converges_to_the_highest_reward_action ... ok
+test high_uncertainty_weight_picks_the_calmer_lower_reward_action ... ok
+test zero_uncertainty_weight_picks_the_higher_reward_despite_displacement ... ok
+test configured_pipeline_selects_gflownet_and_cfr_nash_from_the_request ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/production_pipeline_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/production_pipeline_tests-21cec58083997587)
+
+running 33 tests
+test audit_rejects_the_trap_action_as_lethal ... ok
+test audit_approves_a_calm_action_and_says_the_estimate_is_uncalibrated ... ok
+test audit_refuses_invalid_warn_risk ... ok
+test audit_rejects_a_gate_hard_stop_without_imagining_it ... ok
+test audit_refuses_a_model_without_safety_estimates ... ok
+test decide_mode_parses_all_names_and_refuses_others ... ok
+test audit_continuation_follows_the_greedy_policy_and_drops_blocked_actions ... ok
+test audit_warns_on_a_confirm_tier_action ... ok
+test decide_fails_closed_when_no_action_is_legal ... ok
+test what_if_fails_closed_on_empty_blocked_or_malformed_candidates ... ok
+test audit_warns_when_the_state_hugs_the_boundary ... ok
+test decision_carries_ppr_graph_context_of_the_chosen_action ... ok
+test simulate_truncates_to_a_shorter_horizon ... ok
+test simulate_refuses_bad_horizons_and_empty_plans ... ok
+test simulate_stops_at_death_and_reports_it ... ok
+test decide_refuses_malformed_requests ... ok
+test simulate_replays_the_plan_through_the_real_world_model ... ok
+test what_if_flags_every_candidate_when_all_are_trapped ... ok
+test graph_revocation_prunes_candidate_before_engine_dispatch ... ok
+test every_method_refuses_a_divergent_state ... ok
+test simulate_rejects_gate_blocked_steps ... ok
+test heat_certificate_failure_prunes_high_risk_action ... ok
+test decision_graph_context_names_why_it_is_unavailable ... ok
+test what_if_detects_the_trap_and_picks_the_escape ... ok
+test what_if_excludes_gate_blocked_candidates ... ok
+test decide_reports_a_confirm_tier_choice ... ok
+test decide_excludes_high_reward_hazard_in_every_mode_without_trajectory ... ok
+test decide_excludes_real_worldmodel_divergence_in_every_mode ... ok
+test decide_prunes_hard_stops_before_any_engine_runs ... ok
+test decide_auto_routes_by_entropy ... ok
+test decide_runs_every_mode_on_its_own_engine ... ok
+test decide_returns_the_chosen_actions_trajectory_on_request ... ok
+test decide_preserves_mutex_and_quota_context_in_every_mode ... ok
+
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running unittests src/lib.rs (/tmp/b1001d-p2-reflex-target/debug/deps/gen_zero_service-81483aaf659ad9a2)
+
+running 163 tests
+test bridge::tests::detects_self_loop_on_the_serving_port ... ok
+test bridge::tests::default_endpoint_is_the_dedicated_scorer_port_not_a_server_port ... ok
+test closed_loop::tests::record_and_drain_preserve_fifo_order ... ok
+test closed_loop::tests::patch_metadata_prefers_target_sha256_over_sha256 ... ok
+test closed_loop::tests::buffer_evicts_oldest_once_full ... ok
+test closed_loop::tests::requeue_drops_newest_records_when_over_capacity ... ok
+test closed_loop::tests::requeue_puts_records_back_in_original_order_ahead_of_newer_ones ... ok
+test bridge::tests::unreachable_endpoint_fails_fast_as_transport_error ... ok
+test cognitive::tests::distance_matches_the_origin_closed_form ... ok
+test cognitive::tests::exp0_rejects_an_overflowing_tangent_instead_of_folding_it_to_the_origin ... ok
+test cognitive::tests::log_exp_round_trip_and_boundary_is_rejected ... ok
+test bridge::tests::parses_and_validates_a_well_formed_response ... ok
+test imagine::tests::confident_prior_with_confident_continuation_does_not_starve_the_root ... ok
+test bridge::tests::a_404_is_reported_as_wrong_service_not_as_a_generic_error ... ok
+test bridge::tests::rejects_probabilities_that_do_not_sum_to_one ... ok
+test bridge::tests::bad_requests_do_not_trip_the_breaker ... ok
+test imagine::tests::oracle_failure_aborts_the_search ... ok
+test mount::tests::a_tampered_snapshot_fails_digest_verification ... ok
+test mount::tests::a_change_that_changes_nothing_is_stalled_and_the_watermark_never_regresses ... ok
+test mount::tests::a_request_stays_on_one_generation_and_foreign_epochs_are_refused ... ok
+test mount::tests::every_asset_family_change_bumps_the_version ... ok
+test mount::tests::digest_is_real_sha256 ... ok
+test mount::tests::genesis_refuses_zero_digests_and_empty_keys ... ok
+test imagine::tests::dirichlet_sample_is_a_distribution ... ok
+test mount::tests::snapshot_digest_covers_every_field ... ok
+test imagine::tests::lookahead_prefers_the_sequence_with_higher_joint_likelihood ... ok
+test mount::tests::a_candidate_from_another_generation_or_key_is_refused ... ok
+test imagine::tests::root_noise_is_seeded_and_reported ... ok
+test mount::tests::version_overflow_is_refused_not_wrapped ... ok
+test mount::tests::unknown_keys_and_mismatched_seals_are_refused ... ok
+test mount::tests::validate_rejects_bad_certificates_budgets_and_forgeries ... ok
+test imagine::tests::infeasible_actions_never_enter_the_plan ... ok
+test mount::tests::version_rises_by_one_per_mount_and_old_snapshots_stay_intact ... ok
+test bridge::tests::probe_accepts_only_a_scorer_that_lists_every_route ... ok
+test reflex_adapter::tests::gradient_step_reduces_loss_on_a_toy_batch ... ok
+test imagine::tests::search_explores_every_feasible_root_action ... ok
+test cognitive::tests::gate_relaxation_decreases_and_unstable_step_is_energy_rose ... ok
+test reflex_registry::tests::compare_and_swap_fails_closed_on_stale_hash ... ok
+test reflex_registry::tests::compare_and_swap_replaces_on_matching_hash ... ok
+test reflex_registry::tests::apply_patch_live_fails_closed_on_wrong_base ... ok
+test reflex_registry::tests::apply_patch_live_hot_swaps_and_is_bit_exact ... ok
+test mount::tests::concurrent_registration_of_one_key_has_one_winner ... ok
+test reflex_registry::tests::predict_routes_and_matches_direct_plugin_call ... ok
+test reflex_registry::tests::register_then_route_returns_the_plugin ... ok
+test reflex_registry::tests::route_returns_none_for_unknown_task ... ok
+test server::tests::cpu_overload_returns_service_unavailable ... ok
+test reflex_registry::tests::predict_on_unknown_task_fails_closed ... ok
+test server::gate_status_tests::confirm_tier_plan_maps_to_428_not_200 ... ok
+test mount::tests::cas_has_exactly_one_winner_among_racing_seals ... ok
+test server::tests::test_constant_time_token_match ... ok
+test mount::tests::concurrent_writers_and_readers_keep_one_linear_history ... ok
+test reflex_registry::tests::concurrent_predict_during_apply_patch_live_never_panics_and_is_bit_exact ... ok
+test mount::tests::engine::a_named_mount_is_served_on_its_own_generation ... ok
+test server::transport_regression_tests::shutdown_closes_sse_even_with_sender_clones_and_late_clients ... ok
+test mount::tests::engine::every_request_is_stamped_with_the_generation_it_ran_on ... ok
+test mount::tests::engine::the_http_gateway_carries_the_mount_stamp ... ok
+test cognitive::tests::parallel_prefix_scan_matches_serial_on_every_prefix ... ok
+test snapshot::tests::rollback_refuses_stale_version_wrong_mount_and_missing_id ... ok
+test server::transport_regression_tests::stdio_bounds_unterminated_frames_and_accepts_exact_limit ... ok
+test snapshot::tests::golden_rollback_restores_assets_as_new_generation ... ok
+test tangent_ssm::tests::affine_monoid_is_associative ... ok
+test tangent_ssm::tests::associativity_holds_across_rectangular_fibers ... ok
+test tangent_ssm::tests::compose_matches_closed_form ... ok
+test tangent_ssm::tests::compose_overflow_is_non_finite_state ... ok
+test tangent_ssm::tests::compose_rejects_dimension_mismatch_fail_closed ... ok
+test tangent_ssm::tests::compose_rejects_wrong_fiber_even_with_matching_shapes ... ok
+test tangent_ssm::tests::gpu_and_zero_thread_backends_are_rejected_not_rerouted ... ok
+test tangent_ssm::tests::divergent_generator_is_rejected_as_domain_violation ... ok
+test tangent_ssm::tests::huge_generator_step_is_rejected_before_overflow ... ok
+test tangent_ssm::tests::prepare_rejects_bad_windows ... ok
+test snapshot::tests::snapshots_are_bounded_and_unconfigured_mounts_are_refused ... ok
+test tangent_ssm::tests::state_bound_is_enforced ... ok
+test tangent_ssm::tests::zoh_cache_is_bounded_and_evicts_old_entries ... ok
+test tangent_ssm::tests::zoh_cache_reuses_dt_and_tracks_model_contents ... ok
+test tangent_ssm::tests::zoh_continuous_limit_approaches_the_nilpotent_branch ... ok
+test tangent_ssm::tests::zoh_matches_scalar_closed_form ... ok
+test tangent_ssm::tests::zoh_nilpotent_generator_is_exact ... ok
+test tests::test_service_initialization ... ok
+test worldsim::tests::a_blown_up_state_is_a_hazard_at_step_one ... ok
+test worldsim::tests::audit_never_approves ... ok
+test worldsim::tests::audit_verdict_follows_hazard_then_tier ... ok
+test tangent_ssm::tests::prepare_then_scan_follows_the_continuous_system ... ok
+test worldsim::tests::graph_revocation_reaches_worldsim_rollouts ... ok
+test worldsim::tests::horizon_is_refused_not_clamped ... ok
+test worldsim::tests::names_are_strict ... ok
+test worldsim::tests::non_number_and_overflow_are_refused ... ok
+test worldsim::tests::planner_refuses_more_than_sixteen_candidates ... ok
+test worldsim::tests::short_state_is_refused_not_padded ... ok
+test worldsim::tests::simulate_refuses_a_horizon_beyond_the_plan ... ok
+test worldsim::tests::simulate_replays_the_plan_and_reports_provenance ... ok
+test worldsim::tests::text_state_is_refused ... ok
+test worldsim::tests::what_if_has_no_top_candidate_when_every_rollout_is_hazardous ... ok
+test worldsim::tests::what_if_ranks_safe_before_hazard_and_is_advisory ... ok
+test tangent_ssm::tests::serial_and_parallel_scan_agree_for_many_lengths ... ok
+test server::transport_regression_tests::shutdown_broadcast_reaches_every_sse_receiver ... ok
+test mount::tests::engine::a_tenant_without_a_mount_is_refused_never_served_from_the_default ... ok
+test worldsim::tests::every_planner_mode_picks_a_candidate ... ok
+test server::tests::graceful_shutdown_drains_in_flight_request ... ok
+test zero::provenance_wiring_tests::nanocore_path_list_uses_platform_separator ... ok
+test server::tests::bridge_required_refuses_to_start_without_a_ready_scorer ... ok
+test server::transport_regression_tests::http_shutdown_finishes_with_an_active_sse_client ... ok
+test server::tests::metrics_capture_calls_failures_gates_and_latency ... ok
+test zero::provenance_wiring_tests::caller_core_never_enters_operator_fleet ... ok
+test server::transport_regression_tests::rest_routing_and_missing_proof_errors_are_json ... ok
+test server::transport_regression_tests::malformed_message_query_returns_jsonrpc_error ... ok
+test zero::provenance_wiring_tests::durable_engine_refuses_corrupt_snapshot_and_directory_target ... ok
+test zero::provenance_wiring_tests::operator_and_caller_nanocore_routes_do_not_mix ... ok
+test server::tests::readiness_reports_a_wrong_service_on_the_bridge_port_as_degraded ... ok
+test zero::provenance_wiring_tests::operator_nanocore_path_loader_reads_multiple_files_without_environment_mutation ... ok
+test zero::provenance_wiring_tests::operator_nanocore_mixture_reports_missing_selected_domain ... ok
+test server::tests::metrics_record_real_engine_gate_verdicts ... ok
+test zero::provenance_wiring_tests::durable_engine_does_not_acknowledge_failed_append ... ok
+test zero::provenance_wiring_tests::records_and_verifies_multiple_audit_leaves ... ok
+test server::tests::test_mcp_server_jsonrpc_frame_handling ... ok
+test zero::provenance_wiring_tests::operator_nanocore_selector_errors_are_explicit ... ok
+test zero::provenance_wiring_tests::durable_engine_restarts_with_same_root_and_rejects_second_writer ... ok
+test zero::provenance_wiring_tests::operator_nanocore_path_loader_rejects_duplicate_domains - should panic ... ok
+test zero::tests::ask_without_candidates_is_rejected_not_fabricated ... ok
+test zero::tests::candidate_reps_accepts_subnormal_underflow_in_default_isotropic_head ... ok
+test zero::provenance_wiring_tests::operator_nanocore_mixture_fuses_selected_domains_and_keeps_single_compatibility ... ok
+test zero::provenance_wiring_tests::operator_nanocore_ask_is_permutation_equivariant ... ok
+test zero::tests::ask_enforces_graph_revocations ... ok
+test zero::tests::disabled_bridge_is_reported_as_fallback ... ok
+test reflex_adapter::tests::run_cycle_is_none_when_no_unconsumed_feedback ... ok
+test zero::tests::ask_fallback_is_labeled_and_never_claims_semantics ... ok
+test zero::tests::cpu_job_panic_releases_capacity ... ok
+test zero::tests::etf_head_refuses_missing_or_malformed_candidate_reps ... ok
+test server::tests::probes_separate_liveness_dependencies_and_assets ... ok
+test zero::tests::etf_metric_refuses_malformed_or_misplaced_parameters ... ok
+test zero::tests::grep_counts_real_matches_and_refuses_what_it_cannot_do ... ok
+test zero::tests::lookahead_never_simulates_request_disabled_actions ... ok
+test server::transport_regression_tests::shutdown_deadline_bounds_a_stuck_http_request ... ok
+test zero::tests::requires_confirmation_always_implies_is_error ... ok
+test zero::tests::formally_infeasible_candidates_are_removed_before_scoring ... ok
+test zero::tests::imagine_fallback_with_risky_request_carries_confirmation_code ... ok
+test zero::tests::request_masks_preserve_operator_gate_and_resolve_overlapping_mutexes ... ok
+test zero::tests::malformed_safety_inputs_fail_closed_before_execution ... ok
+test zero::tests::caller_prohibitions_reach_decisions_and_imagine_without_leaking ... ok
+test zero::tests::etf_head_tier_follows_manifold_score_separation ... ok
+test zero::tests::malformed_candidates_are_typed_errors ... ok
+test zero::tests::tier0_request_with_confirm_plan_is_never_a_success ... ok
+test zero::tests::no_literal_keyword_safety_table_remains ... ok
+test zero::tests::specialized_decision_routes_and_fail_closed ... ok
+test zero::tests::imagine_without_oracle_returns_no_reward ... ok
+test zero::tests::specialized_etf_overflow_is_explicitly_rejected ... ok
+test zero::tests::unassessed_request_risk_is_escalated_in_any_language ... ok
+test zero::tests::local_preconditions_are_not_reported_as_bridge_errors ... ok
+test server::transport_regression_tests::rest_extractors_return_json_and_plan_matches_decisions ... ok
+test zero::tests::running_cpu_job_keeps_permit_after_abort ... ok
+test zero::tests::cpu_admission_rejects_heavy_verbs_when_saturated ... ok
+test zero::tests::route_fallback_exposes_no_selection ... ok
+test zero::tests::specialized_nanocore_pruning_keeps_survivor_channels ... ok
+test zero::tests::etf_metric_is_configurable_and_reported ... ok
+test zero::tests::test_polymorphic_zero_engine_verbs ... ok
+test server::tests::test_auth_middleware_flow ... ok
+test reflex_adapter::tests::run_cycle_rejects_non_finite_update_from_a_pathological_learning_rate_and_changes_nothing ... ok
+test reflex_adapter::tests::run_cycle_rejects_label_outside_head_candidates ... ok
+test zero::tests::specialized_scores_are_exactly_invariant_to_candidate_order ... ok
+test reflex_adapter::tests::end_to_end_feedback_to_hot_swapped_prediction ... ok
+test zero::tests::ranked_tools_preserve_confirmation_and_entropy_verdicts ... ok
+test zero::provenance_wiring_tests::audit_ledger_memory_stays_bounded_past_the_window ... ok
+test bridge::tests::retries_server_errors_then_opens_the_circuit ... ok
+test mount::tests::validate_enforces_the_time_budget ... ok
+
+test result: ok. 163 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.29s
+
+     Running tests/causal_fold_service_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/causal_fold_service_tests-33c2bf9bcc2c30ff)
+
+running 27 tests
+test http_chart_sets_success_returns_concluded ... ok
+test http_left_refusal_is_422_with_causal_fold_refused ... ok
+test http_soft_concludes_below_the_entropy_threshold ... ok
+test http_bidirectional_strategy_is_refused_as_retired ... ok
+test http_chart_success_returns_proof_path ... ok
+test http_invalid_strategy_and_length_mismatch_are_400_invalid_params ... ok
+test http_weighted_margin_refusal_when_ambiguous ... ok
+test chart_carries_a_conflict_key_forward_and_reports_it ... ok
+test mcp_tools_call_causal_fold_with_sets_succeeds ... ok
+test mcp_tools_call_zero_action_causal_fold_succeeds ... ok
+test http_soft_refuses_above_the_entropy_threshold_and_on_unclosed_mass ... ok
+test http_tiered_dispatch_resolves_via_band0_when_unambiguous ... ok
+test mcp_tools_call_causal_fold_tool_succeeds_and_refuses ... ok
+test http_weighted_tropical_success_returns_energy_and_margin ... ok
+test mcp_tools_call_weighted_causal_fold_succeeds ... ok
+test http_weighted_logprob_success_returns_marginal_energy ... ok
+test http_text_deposit_then_mcp_graph_rag_returns_the_payload ... ok
+test message_zero_action_causal_fold_succeeds ... ok
+test http_tiered_dispatch_escalates_to_band1_on_ambiguity ... ok
+test tiered_defaults_and_refusals_fail_closed ... ok
+test mcp_tools_list_advertises_causal_fold ... ok
+test tiered_band0_bypasses_scoring_but_not_invalid_input ... ok
+test sets_invalid_inputs_fail_closed ... ok
+test http_soft_request_faults_are_400 ... ok
+test caps_and_malformed_tables_are_400_invalid_params ... ok
+test sets_payload_size_caps_fail_closed_immediately ... ok
+test weighted_invalid_inputs_fail_closed ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.28s
+
+     Running tests/cognitive_e2e.rs (/tmp/b1001d-p2-reflex-target/debug/deps/cognitive_e2e-cfee2636cb2b0e08)
+
+running 15 tests
+test degraded_semantic_outcomes_are_not_http_200_either ... ok
+test entail_without_a_sealed_geometry_is_refused_not_defaulted ... ok
+test stale_publish_is_cas_conflict_and_stale_request_is_epoch_mismatch ... ok
+test mcp_frames_reach_the_same_runtime ... ok
+test rising_energy_is_energy_rose_and_commits_no_action ... ok
+test entail_over_http_is_asymmetric_and_bound_to_the_mount ... ok
+test http_and_mcp_ask_require_measured_sheaf_relaxation ... ok
+test certified_ask_picks_the_descending_candidate_and_refuses_the_rising_one ... ok
+test out_of_ball_state_is_domain_violation_and_http_fails ... ok
+test entail_fails_closed_on_bad_input ... ok
+test overflowing_tangent_input_is_domain_violation_not_folded_to_origin ... ok
+test stream_request_penetrates_the_whole_pipeline_over_http ... ok
+test unmounted_assets_unknown_tenant_and_open_publish_are_refused ... ok
+test contradictory_pins_are_residual_exceeded ... ok
+test contradictory_decision_pins_reject_over_http_and_mcp ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/discrete_presets_cas_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/discrete_presets_cas_tests-4e5c9339fa2f4404)
+
+running 10 tests
+test deep_128d_alias_seals_as_boolq_128d ... ok
+test unlisted_topology_names_are_refused_at_mount ... ok
+test mcp_tools_call_follows_the_mounted_preset ... ok
+test overflow_weights_fail_closed_with_domain_violation ... ok
+test all_four_presets_mount_with_a_deterministic_sha256_seal ... ok
+test runtime_width_mismatch_is_fiber_mismatch ... ok
+test busemann_entailment_runs_end_to_end_on_every_preset ... ok
+test event_width_mismatch_is_fiber_mismatch ... ok
+test fiber_cross_diff_path_runs_on_64d_and_256d ... ok
+test dynamics_must_be_exactly_preset_dim_square ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.91s
+
+     Running tests/fiber_cross_diff_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/fiber_cross_diff_tests-8375aebfbee82d2e)
+
+running 15 tests
+test dimension_and_fiber_mismatches_are_refused ... ok
+test gauge_moves_the_passage_vector_before_the_difference ... ok
+test cross_diff_scan_equals_a_scan_of_the_differenced_events ... ok
+test non_finite_gauges_are_domain_violations ... ok
+test identical_channels_under_identity_gauge_give_zero_diff_and_ground_state_scan ... ok
+test review_empty_gauge_must_be_refused ... ok
+test review_rectangular_transport_must_be_refused ... ok
+test mcp_frames_reach_the_fiber_path ... ok
+test review_gpu_backend_is_explicitly_refused ... ok
+test http_decaying_dynamics_run_the_matrix_exponential_branch ... ok
+test http_transport_between_distinct_points_cancels_the_euclidean_background ... ok
+test review_intermediate_normal_state_must_be_refused ... ok
+test http_zero_difference_leaves_the_question_and_the_verdict_unchanged ... ok
+test http_question_evidence_decides_and_shared_background_cancels ... ok
+test http_fiber_requests_fail_closed ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.75s
+
+     Running tests/graph_verbs_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/graph_verbs_tests-e9a19322532f8cd3)
+
+running 17 tests
+test graph_geometry_configuration_fails_closed ... ok
+test failed_deposit_rolls_back_every_part ... ok
+test deposit_flushes_into_the_csr_and_feeds_recall_and_ppr ... ok
+test coarse_grain_edges_and_requests_fail_closed ... ok
+test graph_rag_answers_a_text_query_with_payload_and_graph_evidence ... ok
+test coarse_grain_and_zoom_run_through_the_zero_entry ... ok
+test configured_graph_geometry_controls_recall_and_coordinate_domain ... ok
+test evolve_fails_closed_on_budget_and_bad_requests ... ok
+test graph_rag_and_text_deposits_fail_closed ... ok
+test seed_file_loads_at_startup_and_a_bad_seed_fails_startup ... ok
+test graph_requests_fail_closed ... ok
+test graph_rag_takes_a_coord_query_and_mixes_bare_and_text_nodes ... ok
+test prune_takes_gamma_and_reports_it ... ok
+test pipeline_decide_carries_advisory_graph_context ... ok
+test evolve_converges_on_a_cycle_and_reverses_a_prune_at_the_gate ... ok
+test prune_revokes_actions_across_pipeline_simulate_and_audit ... ok
+test http_evolve_takes_gamma_and_reports_scc_blocks ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/pipeline_service_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/pipeline_service_tests-867a5a3f5279ea26)
+
+running 23 tests
+test http_decide_refuses_an_invalid_planner_config ... ok
+test decisions_append_to_shared_audit_ledger_and_expose_proof ... ok
+test escalated_pipeline_decision_fails_closed_and_audits_tier_two ... ok
+test hierarchical_prior_blocks_pending_falsified_successors_and_injects_macro ... ok
+test http_decide_requires_explicit_astar_goal_and_forwards_budget ... ok
+test http_decide_preserves_active_context_and_rejects_malformed_context ... ok
+test http_decide_refuses_unknown_planner_config_fields ... ok
+test http_decide_prunes_gated_actions_and_refuses_when_none_remain ... ok
+test zero_refuses_a_pipeline_block_under_another_verb ... ok
+test http_simulate_refuses_a_planner_config_it_cannot_use ... ok
+test live_graph_revocation_blocks_http_pipeline_action ... ok
+test zero_routes_a_pipeline_block_to_the_pipeline_verb ... ok
+test reflection_opt_in_is_strict_and_default_has_no_mutation ... ok
+test reflection_closes_http_simulation_to_policy_gate_loop ... ok
+test policy_audit_reflection_is_idempotent_and_evolution_conflict_is_explicit ... ok
+test http_simulate_returns_the_full_trajectory ... ok
+test http_audit_gives_all_three_verdicts ... ok
+test reflection_what_if_and_audit_use_real_dynamics ... ok
+test http_refuses_malformed_or_divergent_requests ... ok
+test http_what_if_names_the_trap_and_the_escape ... ok
+test mcp_lists_and_calls_the_pipeline_tool ... ok
+test http_decide_planner_config_changes_auto_routing_tier ... ok
+test http_decide_runs_each_mode_and_returns_a_trajectory ... ok
+
+test result: ok. 23 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running tests/protocol_compat.rs (/tmp/b1001d-p2-reflex-target/debug/deps/protocol_compat-66e1681e69fd8c6c)
+
+running 5 tests
+test malformed_jsonrpc_returns_protocol_errors ... ok
+test decision_http_adapter_fails_closed_on_empty_and_forbidden_candidates ... ok
+test http_routes_mcp_frames_and_preserves_request_ids ... ok
+test decision_http_adapter_preserves_the_success_shape ... ok
+test sse_sessions_deliver_only_to_the_owner_and_expire_on_disconnect ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/provenance_nanocore_integration.rs (/tmp/b1001d-p2-reflex-target/debug/deps/provenance_nanocore_integration-55e2207d95c3e986)
+
+running 3 tests
+test unassessed_ask_does_not_claim_committed_provenance ... ok
+test nanocore_without_loaded_weights_refuses ... ok
+test raw_control_delimiter_refuses ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/semantic_bridge_e2e.rs (/tmp/b1001d-p2-reflex-target/debug/deps/semantic_bridge_e2e-60d62b20143245f7)
+
+running 6 tests
+test adversarial_pair_is_separated_through_the_mcp_chain ... ignored, needs a live Python semantic scorer
+test dangerous_requests_are_gated_in_chinese_and_english ... ignored, needs a live Python semantic scorer
+test default_port_8995_is_the_ready_scorer_and_readiness_reports_it ... ignored, needs a live Python semantic scorer
+test imagine_runs_a_multi_step_semantic_search ... ignored, needs a live Python semantic scorer
+test route_ranks_tools_by_intent_over_http ... ignored, needs a live Python semantic scorer
+test route_uses_tool_descriptions_for_opaque_names ... ignored, needs a live Python semantic scorer
+
+test result: ok. 0 passed; 0 failed; 6 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/test_closed_loop.rs (/tmp/b1001d-p2-reflex-target/debug/deps/test_closed_loop-1cbc96e3fb81bb0f)
+
+running 9 tests
+test feedback_syncer_stops_on_shutdown_signal ... ok
+test feedback_endpoint_ingests_records_into_the_buffer ... ok
+test patch_poller_stops_on_shutdown_signal ... ok
+test feedback_endpoint_rejects_a_non_array_body ... ok
+test feedback_syncer_drains_buffer_and_posts_with_bearer_auth ... ok
+test feedback_syncer_requeues_records_on_server_error ... ok
+test patch_poller_downloads_verifies_and_writes_a_new_patch ... ok
+test patch_poller_refuses_a_checksum_mismatch_and_writes_nothing ... ok
+test patch_poller_skips_download_when_already_current ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/test_nanocore_live.rs (/tmp/b1001d-p2-reflex-target/debug/deps/test_nanocore_live-2b93c8d466e18642)
+
+running 5 tests
+test unregistered_domain_is_refused_fail_closed ... ok
+test real_projected_state_decides_between_two_candidates ... ok
+test real_projected_128d_state_drives_a_real_nanocore_decision ... ok
+test non_finite_or_wrong_length_state_is_refused_fail_closed ... ok
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+ModuleNotFoundError: No module named 'numpy'
+test legacy_fixture_artifact_is_rejected_by_the_python_bridge ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.19s
+
+     Running tests/worldmodel_verbs_tests.rs (/tmp/b1001d-p2-reflex-target/debug/deps/worldmodel_verbs_tests-e8d7bd885f9fe73c)
+
+running 33 tests
+test a_simulate_request_shaped_for_imagine_is_refused_not_rerouted ... ok
+test a_hazardous_state_stops_the_rollout_at_the_first_hazard ... ok
+test audit_without_a_scorer_stays_unassessed_and_asks_for_confirmation ... ok
+test simulate_is_its_own_verb_not_an_imagine_alias ... ok
+test audit_never_approves_even_with_a_clean_risk_check ... ok
+test auto_and_reflex_are_the_semantic_ask ... ok
+test damping_is_refused_when_invalid_or_without_contact ... ok
+test bad_world_model_input_is_refused_and_never_repaired ... ok
+test unknown_or_unread_dynamics_is_refused_not_defaulted ... ok
+test world_model_fields_are_refused_on_other_verbs ... ok
+test what_if_ranks_every_candidate_and_stays_advisory ... ok
+test contact_with_zero_damping_conserves_energy_and_matches_symplectic ... ok
+test the_gate_holds_back_a_planner_that_is_unsure ... ok
+test symplectic_what_if_and_audit_report_their_dynamics ... ok
+test caller_nanocore_ask_is_audited_in_the_shared_ledger ... ok
+test audit_reports_a_lethal_rollout ... ok
+test latent_modes_still_fail_closed_without_a_risk_verdict ... ok
+test different_actions_give_different_trajectories ... ok
+test simulate_runs_the_plan_and_says_the_dynamics_are_untrained ... ok
+test simulate_is_deterministic ... ok
+test decide_refuses_mode_and_latent_combinations_it_cannot_honour ... ok
+test symplectic_and_residual_are_different_models ... ok
+test message_endpoint_reaches_the_same_verbs ... ok
+test mcts_on_text_is_the_semantic_lookahead_and_says_so ... ok
+test symplectic_simulate_conserves_energy_over_ten_steps ... ok
+test http_refuses_bad_bodies_with_a_typed_400 ... ok
+test latent_decide_plans_and_rolls_on_symplectic_dynamics ... ok
+test contact_with_positive_damping_contracts_and_dissipates ... ok
+test http_simulate_what_if_and_audit_return_structured_json ... ok
+test mcp_advertises_and_runs_the_new_verbs ... ok
+test every_latent_mode_chooses_a_candidate_and_passes_the_gate ... ok
+test http_routes_carry_dynamics_through ... ok
+test contact_what_if_audit_and_latent_decide_run_on_the_contact_prior ... ok
+
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+   Doc-tests gen_zero_lod
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests gen_zero_planner
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests gen_zero_service
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
