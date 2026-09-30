@@ -1,5 +1,5 @@
-"""Tests for Option Isolation, Input Boundary Sanitization, Causal Synthetic Generation,
-and Locked Calibration & Confident Error Gate.
+"""Tests for Option Isolation, Input Boundary Sanitization, and Locked Calibration &
+Confident Error Gate.
 """
 
 import copy
@@ -21,11 +21,6 @@ from gen_zero.model.option_isolation import (
     build_option_isolation_mask,
     tokenize_option_isolation_sequence,
     OptionIsolationEngine
-)
-from gen_zero.causal.synthetic_generator import (
-    CausalMinimalPairGenerator,
-    CausalInterventionType,
-    CausalMinimalPair
 )
 from gen_zero.gate.locked_evaluator import (
     LockedTestSet,
@@ -154,55 +149,6 @@ class TestOptionIsolation(unittest.TestCase):
         self.assertLess(verification["max_score_diff"], 1e-4)
 
 
-class TestCausalSyntheticGenerator(unittest.TestCase):
-    """Milestone 3: Causal Minimal Policy Pairs & Balanced Distractors."""
-
-    def test_01_relevant_intervention_flips_decision(self):
-        gen = CausalMinimalPairGenerator(seed=123)
-        base_state = {"threshold": 10, "mode": "strict"}
-        cands = ["ACTION_A", "ACTION_B", "ACTION_C"]
-        pair = gen.create_minimal_pair(
-            base_state=base_state,
-            candidates=cands,
-            optimal_action="ACTION_A",
-            intervention_type=CausalInterventionType.RELEVANT,
-            decisive_key="threshold"
-        )
-        self.assertTrue(pair.expected_flip)
-        self.assertNotEqual(pair.base_sample["optimal_action"], pair.counterfactual_sample["optimal_action"])
-        self.assertNotEqual(pair.base_sample["state"]["threshold"], pair.counterfactual_sample["state"]["threshold"])
-
-    def test_02_irrelevant_intervention_preserves_decision(self):
-        gen = CausalMinimalPairGenerator(seed=123)
-        base_state = {"threshold": 10, "mode": "strict", "description": "Checkout process"}
-        cands = ["ACTION_A", "ACTION_B", "ACTION_C"]
-        pair = gen.create_minimal_pair(
-            base_state=base_state,
-            candidates=cands,
-            optimal_action="ACTION_A",
-            intervention_type=CausalInterventionType.IRRELEVANT
-        )
-        self.assertFalse(pair.expected_flip)
-        self.assertEqual(pair.base_sample["optimal_action"], pair.counterfactual_sample["optimal_action"])
-
-    def test_03_balanced_suite_generation_and_distractors(self):
-        gen = CausalMinimalPairGenerator(seed=42)
-        suite = gen.generate_balanced_suite(num_pairs=6, include_distractors=True)
-        self.assertEqual(len(suite), 6)
-
-        relevant_count = sum(1 for p in suite if p.intervention_type == CausalInterventionType.RELEVANT)
-        irrelevant_count = sum(1 for p in suite if p.intervention_type == CausalInterventionType.IRRELEVANT)
-        self.assertEqual(relevant_count, 3)
-        self.assertEqual(irrelevant_count, 3)
-
-        # Distractor 'ABSTAIN' present in candidate sets
-        for p in suite:
-            self.assertIn("ABSTAIN", p.base_sample["candidates"])
-            self.assertIn("ABSTAIN", p.counterfactual_sample["candidates"])
-
-        exported = gen.export_dataset(suite)
-        self.assertEqual(len(exported), 6)
-        self.assertIn("pair_id", exported[0])
 
 
 class TestLockedCalibrationAndConfidentErrors(unittest.TestCase):
@@ -320,17 +266,6 @@ class TestLockedCalibrationAndConfidentErrors(unittest.TestCase):
         self.assertEqual(res["calibration_report"]["confident_error_count"], 0)
         self.assertTrue(res["passed_safety_red_line"])
 
-    def test_07_distractor_positive_prior(self):
-        gen = CausalMinimalPairGenerator(seed=777)
-        pair = gen.create_minimal_pair(
-            base_state={"threshold": 10},
-            candidates=["A", "B"],
-            optimal_action="A",
-            intervention_type=CausalInterventionType.RELEVANT
-        )
-        # With positive_prior=1.0, ABSTAIN must become the optimal action
-        pair_balanced = gen.inject_balanced_distractors(pair, distractor="ABSTAIN", positive_prior=1.0)
-        self.assertEqual(pair_balanced.counterfactual_sample["optimal_action"], "ABSTAIN")
 
     def test_08_sanitizer_preserves_non_string_keys(self):
         state = {0: "action_zero", 1: "action_one", "nested": {42: "answer"}}

@@ -9,13 +9,6 @@ from gen_zero.gateway.modality_router import (
     ModalityType,
     AdaptiveModalityRouter
 )
-from gen_zero.train.replay_buffer import (
-    DomainExperienceBuffer,
-    BrowserExperienceBuffer,
-    VisionExperienceBuffer,
-    IngestionReceipt,
-    SampledBatch
-)
 
 
 class TestMoVVectorRouting(unittest.TestCase):
@@ -116,63 +109,6 @@ class TestMoVVectorRouting(unittest.TestCase):
         self.assertEqual(decision.status, "ROUTED")
 
 
-class TestDomainExperienceBuffers(unittest.TestCase):
-    """Verifies domain experience buffers, physical ownership, receipts, and 1:3 ratio math."""
-
-    def test_browser_buffer_domain_validation(self):
-        """BrowserExperienceBuffer accepts browser records and rejects foreign domains."""
-        buf = BrowserExperienceBuffer(capacity=100)
-        rec = {"state": "click button", "candidate_ids": ["btn_a", "btn_b"]}
-        receipt = buf.append([rec], partition="gold")
-        self.assertIsInstance(receipt, IngestionReceipt)
-        self.assertEqual(receipt.domain, "browser")
-        self.assertEqual(receipt.count, 1)
-        self.assertEqual(len(buf), 1)
-
-        # Rejection of foreign domain
-        foreign_rec = {"state": "click", "domain": "vision"}
-        with self.assertRaises(ValueError):
-            buf.append([foreign_rec], partition="gold")
-
-    def test_receipt_based_rollback(self):
-        """Receipt-based rollback purges exact ingested samples under concurrent additions."""
-        buf = BrowserExperienceBuffer(capacity=100)
-        batch_1 = [{"state": f"sample_{i}", "candidate_ids": ["a"]} for i in range(5)]
-        batch_2 = [{"state": f"sample_{i+5}", "candidate_ids": ["a"]} for i in range(3)]
-
-        r1 = buf.append(batch_1, partition="hard")
-        r2 = buf.append(batch_2, partition="hard")
-        self.assertEqual(len(buf), 8)
-
-        # Rollback batch 1 without affecting batch 2
-        removed = buf.rollback_ingestion(r1)
-        self.assertEqual(removed, 5)
-        self.assertEqual(len(buf), 3)
-        remaining_ids = [s["id"] for s in buf.hard_buffer]
-        self.assertEqual(remaining_ids, r2.sample_ids)
-
-    def test_strict_one_to_three_ratio_sampling(self):
-        """Strict sampling math: m = min(B/4, |H_D|, floor(|G_D|/3)), n_H = m, n_G = 3m."""
-        buf = BrowserExperienceBuffer(capacity=100)
-        # Add 5 hard, 9 gold
-        buf.append([{"state": f"h_{i}", "candidate_ids": ["a"]} for i in range(5)], partition="hard")
-        buf.append([{"state": f"g_{i}", "candidate_ids": ["a"]} for i in range(9)], partition="gold")
-
-        # Request B=16 -> B/4 = 4. len(H)=5, len(G)/3 = 3. So m = min(4, 5, 3) = 3.
-        # Should return 4 * 3 = 12 samples (3 hard, 9 gold)
-        batch_res = buf.sample_training_batch(batch_size=16, strict_ratio=True)
-        self.assertTrue(batch_res.ready)
-        self.assertEqual(batch_res.m, 3)
-        self.assertEqual(batch_res.n_hard, 3)
-        self.assertEqual(batch_res.n_gold, 9)
-        self.assertEqual(len(batch_res), 12)
-
-        # If zero hard samples, m=0 -> ready=False
-        buf_empty_h = BrowserExperienceBuffer(capacity=100)
-        buf_empty_h.append([{"state": "g_0", "candidate_ids": ["a"]}], partition="gold")
-        res_not_ready = buf_empty_h.sample_training_batch(batch_size=4, strict_ratio=True)
-        self.assertFalse(res_not_ready.ready)
-        self.assertEqual(len(res_not_ready), 0)
 
 
 if __name__ == "__main__":

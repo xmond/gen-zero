@@ -48,21 +48,6 @@ class GenZeroConfig:
     td_error_threshold: float = 0.8
     hard_sample_history_steps: int = 5  # Capture 5 steps prior to failure
 
-    # Replay Buffer & Training
-    enable_causal_replay_buffer: bool = True
-    causal_replay_capacity: int = 10000
-    hard_to_gold_ratio: float = 0.25    # 1:3 ratio = 1 hard per 3 gold (25% hard)
-    learning_rate: float = 2e-5
-    value_loss_weight: float = 0.5
-    abstain_loss_weight: float = 0.2
-    max_train_steps: int = 1200
-    batch_size: int = 16
-
-    # Automated Safety Gate & RSI (I-24 Meta^n)
-    gate_min_accuracy_retention: float = 0.995  # Must retain >= 99.5% of base accuracy
-    gate_min_score_gain: float = 0.05           # Positive score gain on long-horizon games
-    metan_convergence_delta: float = 0.005      # Stop if delta < 0.5% for 2 consecutive rounds
-
     # Cloud-Edge GPU Arbiter Fallback
     enable_gpu_arbiter_fallback: bool = True
     arbiter_confidence_threshold: float = 0.40  # Trigger fallback when confidence < 0.40

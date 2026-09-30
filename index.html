@@ -1339,7 +1339,7 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
         <tr>
           <td><b>1. 输入候选无语义</b></td>
           <td>旧训练池中 ARC / MMLU-Pro 的 <code>candidates</code> 只是 <code>A</code>..<code>J</code> 单字母，候选隐状态不携带选项内容。</td>
-          <td><code>rebuild_open_training_pool_natural_text.py</code> 从 context 解析回自然语言选项与答案，输出 <code>open_training_pool_natural_5k.jsonl</code>。</td>
+          <td>Natural-text rebuild of the training pool (script and pool moved to gen-zero-research).</td>
           <td><b style="color:var(--good)">已闭环验证</b>：5,304 条全部自然语言重构，AI Server GPU 提取 104,865 个隐状态完成 4 维蒸馏，930 题实测 Macro 从 32.55% 跃升至 <b>35.88%</b>。</td>
         </tr>
         <tr>

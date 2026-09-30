@@ -4,10 +4,12 @@ Tests:
 1. Shared Vision Prefix KV-Cache & Prefill: Encodes image once, evaluates multi-question batches with >= 70% latency reduction.
 2. Single-Token Stability & TokenFragmentationError: Strictly enforces 1 token ID, catches fragmentation, CanonicalLabelMapper roundtrip.
 3. Discrete Bins Expectation Scorer: Evaluates M=9 bins, expected score E[S], normalized score in [0.01, 0.99], uncertainty variance, calibrated confidence.
-4. RFDT Single-Step Distillation: NumPy & PyTorch loss parity, alpha weighting between CE and KL.
 5. Adaptive Perception Router: Dual-track routing between A11y Tree zero-vision fast path and Vision Multimodal fallback.
 6. SharedVisionPrefixCache Capacity & Eviction: Tests capacity eviction and hit count tracking.
 7. Client Integration: Ensures GenZeroClient exposes vision zero-decoding components seamlessly.
+
+Training-side guarantees (distiller, replay, RSI daemon, promotion) moved to gen-zero-research
+with the code they tested.
 """
 
 import unittest
@@ -28,11 +30,6 @@ from gen_zero.model.token_stability import (
 from gen_zero.vision.discrete_bins_scorer import (
     DiscreteBinsExpectationScorer,
     DiscreteBinsVerdict,
-)
-from gen_zero.train.rfdt_distiller import (
-    compute_rfdt_loss_numpy,
-    compute_rfdt_loss_torch,
-    RFDTDistiller,
 )
 from gen_zero.client import GenZeroClient, GenZero
 
@@ -218,52 +215,6 @@ class TestDiscreteBinsExpectationScorer(unittest.TestCase):
         self.assertEqual(self.scorer.continuous_to_target_bin(1.0), "9")
 
 
-class TestRFDTDistiller(unittest.TestCase):
-    """Test 4: RFDT single-step distillation loss in NumPy and PyTorch."""
-
-    def setUp(self):
-        self.logits = np.array([[2.0, 0.5, -1.0], [0.1, 1.8, 0.3]], dtype=np.float32)
-        self.targets = np.array([0, 1], dtype=np.int64)
-        self.teacher_probs = np.array([[0.7, 0.2, 0.1], [0.15, 0.75, 0.1]], dtype=np.float32)
-
-    def test_rfdt_loss_numpy(self):
-        loss, metrics = compute_rfdt_loss_numpy(
-            model_logits=self.logits,
-            target_indices=self.targets,
-            teacher_probs=self.teacher_probs,
-            alpha=0.6,
-        )
-        self.assertGreater(loss, 0.0)
-        self.assertIn("ce_loss", metrics)
-        self.assertIn("kl_loss", metrics)
-        self.assertEqual(metrics["accuracy"], 1.0)
-
-    def test_rfdt_loss_torch_parity(self):
-        try:
-            import torch
-            loss_t, metrics_t = compute_rfdt_loss_torch(
-                model_logits=torch.tensor(self.logits),
-                target_indices=torch.tensor(self.targets),
-                teacher_probs=torch.tensor(self.teacher_probs),
-                alpha=0.6,
-            )
-            loss_np, metrics_np = compute_rfdt_loss_numpy(
-                model_logits=self.logits,
-                target_indices=self.targets,
-                teacher_probs=self.teacher_probs,
-                alpha=0.6,
-            )
-            self.assertAlmostEqual(metrics_t["ce_loss"], metrics_np["ce_loss"], places=3)
-            self.assertAlmostEqual(metrics_t["kl_loss"], metrics_np["kl_loss"], places=3)
-            self.assertAlmostEqual(loss_t.item(), loss_np, places=3)
-        except ImportError:
-            pass
-
-    def test_rfdt_distiller_step(self):
-        distiller = RFDTDistiller(alpha=0.5)
-        step_metrics = distiller.distillation_step(self.logits, self.targets, self.teacher_probs)
-        self.assertIn("loss", step_metrics)
-        self.assertEqual(len(distiller.history), 1)
 
 
 class TestAdaptivePerceptionRouter(unittest.TestCase):

@@ -21,7 +21,7 @@ valid weights are configured. Grid simulation is symbolic. Neural latent simulat
 requires its own trained dynamics checkpoint. See the [root quickstart](../README.md#quickstart-python)
 and [examples](../examples/README.md) for input contracts and provenance.
 
-Optional extras: `.[train]` (scikit-learn, pyarrow) for the training scripts, `.[vision]` (torch, torchvision) for the vision engine.
+Optional extras: `.[vision]` (torch, torchvision) for the vision engine.
 
 Or install using `requirements.txt` from the repository root:
 

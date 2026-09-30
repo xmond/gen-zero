@@ -128,7 +128,7 @@ def load_runtime(args, *, with_manifold: bool) -> ZeroStandaloneRuntime:
     task_head_path = None
     if with_manifold and args.task_head:
         if not task_head_file.exists():
-            raise SystemExit(f"no task head at {task_head_file}; run gen_zero.train.train_zero_task_head "
+            raise SystemExit(f"no task head at {task_head_file}; build one with the gen-zero-research training pipeline "
                              f"first, or pass --no-task-head for the unsupervised expert path")
         task_head_path = task_head_file
     runtime = ZeroStandaloneRuntime(

@@ -1,7 +1,6 @@
-"""Gen-Zero Layer 5: Automated Safety Gate & Recursive Self-Improvement (RSI)."""
+"""Gen-Zero Layer 5: runtime safety, alignment and perturbation gates."""
 
 from .safety_gate import SafetyGate, GateVerdict, PerturbationStabilityGate
-from .rsi_orchestrator import RSIOrchestrator
 from .evaluate_perturbations import PerturbationEvaluator
 from .locked_evaluator import (
     LockedTestSet,
@@ -96,7 +95,6 @@ __all__ = [
     "SafetyGate",
     "GateVerdict",
     "PerturbationStabilityGate",
-    "RSIOrchestrator",
     "PerturbationEvaluator",
     "LockedTestSet",
     "CalibrationEvaluator",

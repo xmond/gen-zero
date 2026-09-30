@@ -56,10 +56,6 @@ all = [
     "transformers>=4.35.0",
     "huggingface_hub>=0.19.0",
 ]
-train = [
-    "scikit-learn",
-    "pyarrow",
-]
 vision = [
     "torch",
     "torchvision",

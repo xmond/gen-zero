@@ -1,16 +1,18 @@
-"""Gen-Zero: Universal Decision Architecture and Evaluation SDK.
+"""Gen-Zero Python client SDK for the Rust cognitive decision runtime.
 
-A unified decision architecture integrating:
+Inference-side components only:
 - Policy + Value Dual-Head with Permutation-Equivariant Set-Attention
 - Active Abstain safety guardrail & Prefix KV-cache sharing
 - Uncertainty-driven A* & Dual-Head PUCT MCTS planners
 - Text World Model for black-box environments
-- Online Hard Mining & 1:3 Stability Experience Replay
-- Automated Frozen Safety Gate & Meta^n Recursive Self-Improvement
+- Runtime safety, alignment and perturbation gates
+
+Offline training, replay, distillation and self-play are not part of this
+package; they live in gen-zero-research.
 """
 
 __version__ = "0.1.0"
-__author__ = "Google DeepMind pair programming team"
+__author__ = "Gen-Zero Authors"
 
 from .config import GenZeroConfig
 from .client import GenZero

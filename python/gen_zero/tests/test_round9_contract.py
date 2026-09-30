@@ -10,9 +10,7 @@ except ImportError:
     HAS_TORCH = False
 
 from gen_zero.daemon.atomic_container import AtomicModelContainer, ServingSnapshot
-from gen_zero.daemon.daemon_engine import GenZeroRSIDaemon
 from gen_zero.client import GenZeroClient, GenZeroConfig
-from gen_zero.train.replay_buffer import StabilityReplayBuffer
 from gen_zero.rollout.hard_miner import MinedSample
 
 
@@ -74,38 +72,6 @@ class TestRound9Contract(unittest.TestCase):
         self.assertEqual(candidate_scorer.weights["w"], 999.0)
         self.assertEqual(active_scorer.weights["w"], 42.0, "Active scorer must remain completely untouched")
 
-    def test_r9_p03_daemon_promotion_isolation_and_rollback(self):
-        """Probe R9_P03: Failed promotion or rollback never corrupts active serving snapshot."""
-        initial_model = DummyModel(val=1.0)
-        initial_scorer = DummyScorer("initial")
-        container = AtomicModelContainer(initial_model=initial_model, initial_scorer=initial_scorer)
-
-        client = GenZeroClient()
-        client.model = initial_model
-        client.cpu_extreme_scorer = initial_scorer
-
-        daemon = GenZeroRSIDaemon(client=client, cycle_interval_sec=60.0)
-        daemon.container = container
-
-        # Simulate candidate preparation: stage candidate scorer
-        candidate_model = DummyModel(val=2.0)
-        candidate_scorer = copy.deepcopy(container.get_scorer())
-        client.sync_model_to_scorer(candidate_model, target_scorer=candidate_scorer)
-        container.set_pending_scorer(candidate_scorer)
-
-        # Before swap: active container scorer still has val=1.0
-        self.assertEqual(container.get_scorer().weights["w"], 1.0)
-        self.assertEqual(candidate_scorer.weights["w"], 2.0)
-
-        # Swap container
-        container.swap_model(candidate_model, version_tag="v2")
-        self.assertEqual(container.get_model().val, 2.0)
-        self.assertEqual(container.get_scorer().weights["w"], 2.0)
-
-        # Rollback container: should cleanly restore initial snapshot
-        container.rollback()
-        self.assertEqual(container.get_model().val, 1.0)
-        self.assertEqual(container.get_scorer().weights["w"], 1.0)
 
     # --------------------------------------------------------------------------
     # 2. R9-02: All-Invalid Candidate Safety & Single Candidate Forward Validation
@@ -156,45 +122,7 @@ class TestRound9Contract(unittest.TestCase):
     # 3. R9-03: Unified Modality Gateway & Replay Buffer State Preparation
     # --------------------------------------------------------------------------
 
-    def test_r9_i01_replay_buffer_uses_state_preparer(self):
-        """Probe R9_I01: StabilityReplayBuffer normalizes states via state_preparer."""
-        def mock_preparer(raw):
-            if isinstance(raw, dict):
-                return f"normalized_dict_{len(raw)}"
-            return f"normalized_str_{raw}"
 
-        buf = StabilityReplayBuffer(capacity=100, hard_ratio=0.5, state_preparer=mock_preparer)
-        
-        # Add a mined sample with raw dict state
-        raw_state = {"agent": "crawler", "task": "index"}
-        sample = MinedSample(
-            state_id="s1",
-            state_data=raw_state,
-            candidate_ids=["act_a", "act_b"],
-            pi_target={"act_a": 0.8, "act_b": 0.2},
-            value_target=0.7,
-            mining_reason="high_entropy",
-            entropy=0.5,
-            td_error=0.4
-        )
-        buf.add_mined_samples([sample])
-        
-        # Sample batch and verify state was normalized
-        batch = buf.sample_batch(batch_size=1)
-        self.assertEqual(len(batch), 1)
-        self.assertEqual(batch[0]["state"], "normalized_dict_2")
-        self.assertTrue(batch[0]["is_hard_sample"])
-        self.assertEqual(len(batch[0]["leaf_tokens"]), 2)
-
-    def test_r9_i02_client_replay_buffer_matches_inference_normalization(self):
-        """Probe R9_I02: Client replay buffer state preparer matches client.prepare_inference_state."""
-        client = GenZeroClient()
-        self.assertIsNotNone(client.replay_buffer.state_preparer)
-
-        test_state = {"dom": "<div>hello</div>", "goal": "greet"}
-        norm_client = client.prepare_inference_state(test_state)
-        norm_buf = client.replay_buffer.state_preparer(test_state)
-        self.assertEqual(norm_client, norm_buf, "Client inference normalization and replay buffer normalization must match")
 
     def test_r10_p01_pinned_snapshot_consistency(self):
         """Probe R10_P01: decide() pins a single serving snapshot at request start."""
@@ -232,25 +160,6 @@ class TestRound9Contract(unittest.TestCase):
         finally:
             client._execute_expert_distribution = orig_exec
 
-    def test_r10_i01_once_only_unwrapped_preparation(self):
-        """Probe R10_I01 & R10_I02: Dict container {"state": ...} is unwrapped and prepared once only."""
-        client = GenZeroClient()
-        buf = StabilityReplayBuffer(capacity=50, state_preparer=client.prepare_inference_state)
-
-        wrapped_state = {"state": "Goal: choose a"}
-        norm_direct = client.prepare_inference_state("Goal: choose a")
-
-        buf.load_gold_samples([{
-            "id": "g1",
-            "state": wrapped_state,
-            "candidate_ids": ["opt_a", "opt_b"],
-            "pi_target": {"opt_a": 1.0, "opt_b": 0.0},
-            "value_target": 1.0
-        }])
-
-        batch = buf.sample_batch(batch_size=1)
-        self.assertEqual(len(batch), 1)
-        self.assertEqual(batch[0]["state"], norm_direct)
 
 
 if __name__ == "__main__":

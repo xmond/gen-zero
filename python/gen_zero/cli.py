@@ -736,24 +736,6 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_replay_status(args: argparse.Namespace) -> int:
-    import urllib.error
-    import urllib.request
-    endpoint = resolve_endpoint().rstrip("/")
-    url = endpoint.rsplit("/v1/decisions", 1)[0] + "/v1/replay/status"
-    try:
-        token = resolve_api_token()
-        request = urllib.request.Request(url, headers={"Authorization": f"Bearer {token}"})
-        with urllib.request.urlopen(request, timeout=5) as response:
-            stats = json.load(response)
-    except (ValueError, OSError, urllib.error.URLError) as exc:
-        sys.stderr.write(f"Replay status unavailable: {exc}\n")
-        return 1
-    print(json.dumps({"entries": stats["total_transitions"],
-                      "resident_bytes": stats["actual_resident_bytes"]}))
-    return 0
-
-
 # ---------------------------------------------------------------------------
 # Subcommand: harness
 # ---------------------------------------------------------------------------
@@ -957,8 +939,6 @@ Examples:
     p_harness_setup.add_argument("--json", action="store_true", help="Output raw JSON summary")
 
     # status
-    p_replay = subparsers.add_parser("replay", help="Inspect the running service replay buffer")
-    p_replay.add_argument("action", choices=["status"])
     subparsers.add_parser("status", help="Check engine connectivity, model status, and latency")
 
     return parser
@@ -1007,8 +987,6 @@ def main(argv: Optional[List[str]] = None) -> int:
         return cmd_manifold_fuse(args)
     elif args.subcommand == "harness":
         return cmd_harness(args)
-    elif args.subcommand == "replay":
-        return cmd_replay_status(args)
     elif args.subcommand == "status":
         return cmd_status(args)
     else:

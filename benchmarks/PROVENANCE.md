@@ -52,7 +52,7 @@ status as item 1.
 |---|---|
 | SHA-256 | `670539b71f384e17db05e1f1e94c1b8796569d66d83b2c783ecc04289ca52de3` |
 | Size | ~230 KB |
-| Contents | NumPy arrays only (`mean` (896,), `basis` (896, 64), `scale` (64,), plus a `metadata` string): a fitted ZCA whitening/projection from an 896-dim hidden-state space to a 64-dim manifold. Per the embedded metadata it was fit from `zero-qwen2.5-0.5b-trunk:int8:last-token` hidden states over `calibration_clean_16.jsonl` (1,944 samples). See `python/gen_zero/train/extract_zero_calibration_features.py`. |
+| Contents | NumPy arrays only (`mean` (896,), `basis` (896, 64), `scale` (64,), plus a `metadata` string): a fitted ZCA whitening/projection from an 896-dim hidden-state space to a 64-dim manifold. Per the embedded metadata it was fit from `zero-qwen2.5-0.5b-trunk:int8:last-token` hidden states over `calibration_clean_16.jsonl` (1,944 samples). The extraction script lives in `gen-zero-research`. |
 | What's redistributed | Only derived summary statistics of a linear projection (mean/basis/scale), not any Qwen2.5-0.5B model weights. **No third-party model weights are included, copied, or redistributed in this file.** |
 | License | Apache-2.0, same as the rest of this repository. Because no third-party model weights are embedded, this artifact carries no separate upstream model license obligation; running Qwen2.5-0.5B yourself to reproduce the source features is governed by its own publisher's license, not this repository's. |
 

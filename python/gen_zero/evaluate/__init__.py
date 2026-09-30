@@ -13,7 +13,6 @@ from .log_filter_benchmark import (
     TwoStageFilterMetrics,
     TwoStageLogFilterEvaluator
 )
-from .decision_foundation_benchmark import DecisionFoundationBenchmark
 
 __all__ = [
     "SnapshotItem",
@@ -25,6 +24,5 @@ __all__ = [
     "create_multilingual_log_corpus",
     "TwoStageFilterMetrics",
     "TwoStageLogFilterEvaluator",
-    "DecisionFoundationBenchmark",
 ]
 

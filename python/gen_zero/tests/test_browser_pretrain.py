@@ -4,7 +4,6 @@ import unittest
 import os
 import json
 from gen_zero.client import GenZero
-from gen_zero.train.replay_buffer import StabilityReplayBuffer
 from gen_zero.runtime.quantized_engine import QuantizedCandidateScorer
 
 
@@ -13,16 +12,6 @@ class TestBrowserPretrain(unittest.TestCase):
         self.client = GenZero()
         self.dataset_path = "data/browser_dx_pretrain_dataset.jsonl"
 
-    def test_load_browser_dx_dataset(self):
-        buf = StabilityReplayBuffer(capacity=1000)
-        if os.path.exists(self.dataset_path):
-            count = buf.load_browser_dx_dataset(self.dataset_path)
-            self.assertGreater(count, 0)
-            self.assertEqual(len(buf.gold_buffer), count)
-            batch = buf.sample_batch(batch_size=4)
-            self.assertGreater(len(batch), 0)
-            self.assertEqual(batch[0]["type"], "choice")
-            self.assertIn("candidate_descriptions", batch[0])
 
     @unittest.skipUnless(
         os.environ.get("GENZERO_DUAL_HEAD_CHECKPOINT"),

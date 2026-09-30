@@ -4,7 +4,6 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 
-from gen_zero.evaluate.decision_foundation_benchmark import DecisionFoundationBenchmark
 from gen_zero.evaluate.dual_calibrator import DualCalibrator, IsotonicCalibrator
 from gen_zero.evaluate.layer_scaling_benchmark import compute_linear_separability
 from gen_zero.evaluate.log_filter_benchmark import (
@@ -13,33 +12,8 @@ from gen_zero.evaluate.log_filter_benchmark import (
 from gen_zero.evaluate.web_agent_benchmark import WebAgentBenchmarkSuite
 
 
-def test_generated_corpus_stays_synthetic_with_injected_inference(tmp_path):
-    benchmark = DecisionFoundationBenchmark(
-        inference_fn=lambda prompt, candidates: {
-            "choice": "a", "probs": {"a": 0.1, "b": 0.9},
-        }
-    )
-    benchmark.data_pipeline = SimpleNamespace(generate_benchmark_corpus=lambda **kw: [
-        {"domain": "test", "prompt": "fixture", "candidates": ["a", "b"], "target_choice": "a"},
-    ])
-    result = benchmark.run_full_benchmark(1, str(tmp_path))
-    assert result["is_synthetic"] is True
-    assert result["dataset_is_synthetic"] is True
-    assert result["inference_is_synthetic"] is False
-    assert result["acceptance_status"] == "WITHHELD_SYNTHETIC"
-    assert result["calibration"]["ece_10bin"] == pytest.approx(0.9)
-    assert result["tone_invariance"]["meets_2pct_drop_sla"] is False
-    assert result["tone_invariance"]["drop_rate"] is None
-    for path in tmp_path.glob("*.md"):
-        assert "| PASS |" not in path.read_text()
 
 
-def test_empty_decision_corpus_cannot_emit_metrics(tmp_path):
-    benchmark = DecisionFoundationBenchmark()
-    benchmark.data_pipeline = SimpleNamespace(generate_benchmark_corpus=lambda **kw: [])
-    with pytest.raises(ValueError, match="empty"):
-        benchmark.run_full_benchmark(1, str(tmp_path))
-    assert not list(tmp_path.iterdir())
 
 
 @pytest.mark.parametrize("probs,labels", [([], []), ([float("nan")], [1]), ([0.4], []), ([1.5], [1])])

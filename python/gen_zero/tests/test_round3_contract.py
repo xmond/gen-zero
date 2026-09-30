@@ -1,16 +1,15 @@
 """Contract verification tests addressing ChatGPT Round 3 Review Findings.
 
 Guarantees:
-1. Candidate Model Isolation & Lifecycle (Live model untouched during distillation)
-2. Optimizer Parameter Group Binding
-3. Dynamic Benchmark Evaluation (No hardcoded metrics)
-4. Empty Batch Rejection (Zero effective steps trained)
 5. Failure & Exception Injection Clean Rollback
 6. Global Safety Barrier Enforcement across execute_tool()
 7. Uncompensated Transaction Retention on Rollback Failure
 8. Workflow Report Failure Integrity
 9. CPU Quantized Scorer Neural Weight Synchronization & Deterministic Hashing
 10. Arbiter Result Pruning & Probability Normalization Consistency
+
+Training-side guarantees (distiller, replay, RSI daemon, promotion) moved to gen-zero-research
+with the code they tested.
 """
 
 import unittest
@@ -20,9 +19,6 @@ import numpy as np
 from gen_zero.config import GenZeroConfig
 from gen_zero.client import GenZero
 from gen_zero.model.dual_head import GenZeroDualHeadModel
-from gen_zero.daemon.daemon_engine import GenZeroRSIDaemon
-from gen_zero.train.distiller import GenZeroDistiller
-from gen_zero.train.replay_buffer import StabilityReplayBuffer
 from gen_zero.rollout.hard_miner import MinedSample
 from gen_zero.sandbox.tool_registry import ToolRegistry, SideEffectLevel
 from gen_zero.sandbox.causal_sandbox import CausalToolSandbox
@@ -35,49 +31,8 @@ class TestRound3ContractIntegrity(unittest.TestCase):
         self.config = GenZeroConfig()
         self.client = GenZero(self.config)
 
-    def test_candidate_model_isolation_during_distillation(self):
-        """1. Candidate Isolation: Live model parameters MUST NOT change during candidate training."""
-        live_model = self.client.model
-        init_weights = {k: v.copy() for k, v in live_model.export_to_scorer_weights().items()}
 
-        # Clone candidate
-        candidate_model = copy.deepcopy(live_model)
-        candidate_distiller = self.client.distiller.clone_for_candidate(candidate_model)
 
-        # Distiller optimizer should be bound to candidate_model
-        if candidate_distiller.optimizer is not None:
-            opt_params = {id(p) for group in candidate_distiller.optimizer.param_groups for p in group['params']}
-            cand_params = {id(p) for p in candidate_model.parameters()}
-            live_params = {id(p) for p in live_model.parameters()}
-            self.assertEqual(opt_params, cand_params, "Optimizer MUST bind strictly to candidate model parameters")
-            self.assertEqual(len(opt_params.intersection(live_params)), 0, "Optimizer MUST NOT touch live model")
-
-        # Live model weights must remain 100% identical
-        current_weights = live_model.export_to_scorer_weights()
-        for k in init_weights:
-            np.testing.assert_array_equal(init_weights[k], current_weights[k], err_msg=f"Live model weight {k} modified!")
-
-    def test_empty_batch_zero_effective_steps(self):
-        """2. Empty batch MUST report steps_trained=0, mean_loss=0.0 and NO_EFFECTIVE_STEPS."""
-        empty_buf = StabilityReplayBuffer(capacity=10, hard_ratio=0.5)
-        distiller = GenZeroDistiller(model=self.client.model, replay_buffer=empty_buf, lr=1e-3)
-        res = distiller.run_iteration(steps=3, batch_size=2)
-        self.assertEqual(res["steps_trained"], 0)
-        self.assertEqual(res["mean_loss"], 0.0)
-        self.assertEqual(res["status"], "NO_EFFECTIVE_STEPS")
-
-    def test_dynamic_benchmark_evaluation_no_hardcoded_metrics(self):
-        """3. Daemon benchmark evaluation dynamically computes metrics on candidate and baseline."""
-        daemon = GenZeroRSIDaemon(client=self.client, cycle_interval_sec=60.0)
-        suite = [daemon.curriculum.generate_boundary_scenario() for _ in range(3)]
-        metrics = daemon.evaluate_model_on_benchmark(self.client.model, suite)
-
-        self.assertIn("accuracy", metrics)
-        self.assertIn("mean_score", metrics)
-        self.assertIn("collision_rate", metrics)
-        self.assertTrue(0.0 <= metrics["accuracy"] <= 100.0)
-        self.assertTrue(0.0 <= metrics["collision_rate"] <= 1.0)
-        self.assertTrue(np.isfinite(metrics["mean_score"]))
 
     def test_global_safety_barrier_execute_tool(self):
         """4. Direct client.execute_tool() MUST run through PRMSafetyBarrier and block non-ALLOWED."""

@@ -3,8 +3,10 @@
 Validates:
 1. Milestone 1: Shuffled-State Control Benchmark, CAG/CGR computation, 10-bin ECE gap, and causal degradation gate.
 2. Milestone 2: Attention Entropy Diagnostic Module, Shannon entropy normalization, Two-Dimensional Credibility Gate.
-3. Milestone 3: DAgger Expert Relabeling Loop, off-policy drift detection, priority replay buffer injection, and curriculum scheduler.
 4. Milestone 4: Zero-State First-Order Delta Feature Channel, vector/dict discrete differencing, and L2 market momentum sensing.
+
+Training-side guarantees (distiller, replay, RSI daemon, promotion) moved to gen-zero-research
+with the code they tested.
 """
 
 import unittest
@@ -24,13 +26,6 @@ from gen_zero.model.dual_head import (
     DeepSetAttentionHead,
     HAS_TORCH,
 )
-from gen_zero.train.dagger_loop import (
-    DAggerState,
-    DAggerRelabeledSample,
-    DAggerExpertRelabeler,
-    DAggerCurriculumController,
-)
-from gen_zero.train.replay_buffer import StabilityReplayBuffer
 from gen_zero.model.delta_encoder import ZeroStateDeltaEncoder
 from gen_zero.model.market_state import (
     L2OrderBookSnapshot,
@@ -183,91 +178,6 @@ class TestAttentionEntropyDiagnostics(unittest.TestCase):
         self.assertTrue((entropy >= 0.0).all() and (entropy <= 1.0).all())
 
 
-class TestDAggerExpertRelabeling(unittest.TestCase):
-    """Tests for Milestone 3: DAgger Expert Relabeling Loop & Experience Buffer Injection."""
-
-    def setUp(self):
-        def oracle(state, cands):
-            # Deterministic oracle: optimal action is 'recover' if present, else cands[0]
-            gold = "recover" if "recover" in cands else cands[0]
-            dist = {c: (0.90 if c == gold else 0.10 / max(1, len(cands) - 1)) for c in cands}
-            return gold, dist
-
-        self.relabeler = DAggerExpertRelabeler(
-            expert_oracle_fn=oracle,
-            conf_threshold=0.60,
-            entropy_threshold=0.85,
-            base_priority=2.0
-        )
-
-    def test_drift_detection_and_relabeling(self):
-        # Case 1: Stable on-policy state -> No relabeling
-        sample_stable = self.relabeler.relabel_state(
-            state="safe_state",
-            candidates=["recover", "other"],
-            student_action="recover",
-            student_confidence=0.85,
-            student_entropy=0.20
-        )
-        self.assertIsNone(sample_stable)
-
-        # Case 2: Drifting state with low confidence -> Relabeled
-        sample_low_conf = self.relabeler.relabel_state(
-            state="uncertain_state",
-            candidates=["recover", "other"],
-            student_action="other",
-            student_confidence=0.45,
-            student_entropy=0.90
-        )
-        self.assertIsNotNone(sample_low_conf)
-        self.assertEqual(sample_low_conf.gold_action, "recover")
-        self.assertTrue(sample_low_conf.is_dagger_relabeled)
-        self.assertGreater(sample_low_conf.priority_weight, 2.0)
-
-    def test_trajectory_relabeling(self):
-        traj = [
-            {"state": "s0", "candidates": ["recover", "step"], "action": "recover", "confidence": 0.90, "attention_entropy": 0.10},
-            {"state": "s1_drift", "candidates": ["recover", "step"], "action": "step", "confidence": 0.35, "attention_entropy": 0.92},
-        ]
-        relabeled = self.relabeler.relabel_trajectory(traj, only_drifting=True)
-        self.assertEqual(len(relabeled), 1)
-        self.assertEqual(relabeled[0].state, "s1_drift")
-        self.assertEqual(relabeled[0].gold_action, "recover")
-
-    def test_replay_buffer_dagger_ingestion(self):
-        buf = StabilityReplayBuffer(capacity=100, hard_ratio=0.25)
-        # Gold baseline
-        buf.load_gold_samples([
-            {"id": f"gold_{i}", "state": f"g_{i}", "candidate_ids": ["a", "b"], "pi_target": {"a": 1.0}}
-            for i in range(10)
-        ])
-
-        # Relabeled sample
-        relabeled = [
-            DAggerRelabeledSample(
-                id="dag_1",
-                state="drift_pos",
-                candidate_ids=["a", "b"],
-                gold_action="b",
-                pi_target={"b": 1.0, "a": 0.0},
-                priority_weight=3.0
-            )
-        ]
-        buf.add_dagger_samples(relabeled)
-
-        self.assertEqual(buf.stats["dagger_samples"], 1)
-        self.assertEqual(buf.stats["hard_samples"], 1)
-
-        batch = buf.sample_batch(batch_size=4)
-        self.assertTrue(any(s.get("is_dagger_relabeled") for s in batch))
-
-    def test_curriculum_controller_decay(self):
-        ctrl = DAggerCurriculumController(p_student_base=0.80, decay_factor=0.90, p_student_min=0.50)
-        self.assertEqual(ctrl.get_current_student_prob(), 0.80)
-
-        ctrl.advance_iteration(num_rollouts=10, num_drifts=3, num_relabeled=3)
-        self.assertAlmostEqual(ctrl.get_current_student_prob(), 0.72)
-        self.assertEqual(ctrl.stats["total_drift_states"], 3)
 
 
 class TestZeroStateDeltaEncoder(unittest.TestCase):

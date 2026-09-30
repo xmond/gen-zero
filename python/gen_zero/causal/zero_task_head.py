@@ -5,7 +5,7 @@
 ``W`` is the only learned parameter. ``z0``/``zc`` are the same unit-sphere
 manifold coordinates every other Zero component uses (`ZeroManifold.project`,
 fit label-free). Training reads labels from ``benchmarks/data/calibration_clean_16.jsonl``
-(see ``gen_zero.train.train_zero_task_head``), a split that is proven disjoint
+(the trainer lives in gen-zero-research), a split that is proven disjoint
 from the frozen 930-record test set (`benchmarks/data/CALIBRATION_SPLIT.md`).
 
 At inference this module reads nothing but two vectors: no task id, no text,

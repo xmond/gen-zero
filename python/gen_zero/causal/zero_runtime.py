@@ -31,7 +31,7 @@ Honesty notes
     * The optional task head (``ZeroTaskHead``, ``task_head_path``) is a
       supervised bilinear scorer fit offline on the labeled calibration split
       (disjoint from the frozen test set; see benchmarks/data/CALIBRATION_SPLIT.md
-      and gen_zero.train.train_zero_task_head). Training reads labels; this
+      and the gen-zero-research task-head trainer). Training reads labels; this
       module's ``decide()`` does not -- it reads two already-computed vectors
       (``z0``, ``zc``) and nothing else, exactly as the unsupervised path does.
 """

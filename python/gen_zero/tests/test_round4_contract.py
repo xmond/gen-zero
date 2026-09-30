@@ -1,13 +1,13 @@
 """Round 4 Contract Tests for Gen-Zero Decision Engine.
 
 Validates complete closure of Round 4 review findings:
-1. Transactional model promotion & rollback integrity (sync_model_to_scorer failure recovery)
-2. Distiller rejection of non-finite targets/loss and non-optimizer steps
 3. Model weight export completeness (val_mlp_0/1, score_mlp_0) & CPU scorer bias mapping
-4. Dynamic benchmark evaluation exception handling & zero-default on empty scenarios
 5. Arbiter backend_reachable propagation and negative/NaN probability sanitization
 6. Uncompensated transaction preservation in sandbox
 7. Self-healing fallback transaction preservation
+
+Training-side guarantees (distiller, replay, RSI daemon, promotion) moved to gen-zero-research
+with the code they tested.
 """
 
 import unittest
@@ -16,8 +16,6 @@ import numpy as np
 import copy
 
 from gen_zero.daemon.atomic_container import AtomicModelContainer
-from gen_zero.daemon.daemon_engine import GenZeroRSIDaemon
-from gen_zero.daemon.curriculum_self_play import CurriculumSelfPlayGenerator
 from gen_zero.client import GenZeroClient, GenZeroConfig
 
 from gen_zero.model.dual_head import GenZeroDualHeadModel
@@ -91,66 +89,7 @@ class TestRound4Contract(unittest.TestCase):
         self.assertEqual(container.get_model(), "model_v1")
         self.assertEqual(container.get_status()["active_version"], 1)
 
-    def test_02_daemon_hot_reload_failure_transactional_rollback(self):
-        """Verify that when scorer sync fails during promotion, full transactional rollback occurs."""
-        daemon = self.client.rsi_daemon
-        init_version = daemon.container.get_status()["active_version"]
-        baseline_model = daemon.container.get_model()
 
-        # Mock sync_model_to_scorer to fail on promotion (1st call) but succeed on rollback recovery (2nd call)
-        orig_sync = getattr(daemon.client, "sync_model_to_scorer", None)
-        orig_eval = daemon.evaluate_model_on_benchmark
-        sync_calls = []
-        def mock_sync(model=None, target_scorer=None):
-            sync_calls.append(True)
-            return False if len(sync_calls) == 1 else True
-        daemon.client.sync_model_to_scorer = mock_sync
-
-        # Ensure training step succeeds so cycle proceeds to gate evaluation and hot-reload
-        orig_clone = daemon.client.distiller.clone_for_candidate
-        mock_trainer = type("MockTrainer", (), {"run_iteration": lambda self, **k: {"steps_trained": 1, "mean_loss": 0.05}})()
-        daemon.client.distiller.clone_for_candidate = lambda m: mock_trainer
-
-        # Construct dynamic evaluation where candidate model improves over baseline live model
-        live_model = daemon.container.get_model()
-        def mock_eval(model, suite):
-            if model is live_model:
-                return {"accuracy": 85.0, "mean_score": 20.0, "collision_rate": 0.05, "is_valid": True}
-            else:
-                return {"accuracy": 95.0, "mean_score": 30.0, "collision_rate": 0.0, "is_valid": True}
-        daemon.evaluate_model_on_benchmark = mock_eval
-        
-        try:
-            report = daemon.run_single_evolution_cycle()
-            self.assertFalse(report["gate_passed"])
-            self.assertEqual(report["reload_status"], "REJECTED_ROLLED_BACK")
-            self.assertIn("sync_model_to_scorer returned False", report["gate_reason"])
-            
-            # Verify container state rolled back cleanly
-            self.assertEqual(daemon.container.get_status()["active_version"], init_version)
-            self.assertEqual(daemon.client.model, baseline_model)
-        finally:
-            daemon.client.distiller.clone_for_candidate = orig_clone
-            daemon.evaluate_model_on_benchmark = orig_eval
-            if orig_sync is not None:
-                daemon.client.sync_model_to_scorer = orig_sync
-
-    def test_03_distiller_rejects_unbound_optimizer_and_empty_batches(self):
-        """Verify distiller does not report effective optimization on empty batches or unbound optimizer."""
-        from gen_zero.train.distiller import HAS_TORCH
-        distiller = self.client.distiller
-        
-        # 1. Empty batch must always return optimized = False
-        res_empty = distiller.train_step([])
-        self.assertFalse(res_empty["optimized"])
-        self.assertEqual(res_empty["status"], "EMPTY_BATCH")
-
-        # 2. Unbound optimizer when torch is available must return optimized = False
-        if HAS_TORCH:
-            distiller.optimizer = None
-            res = distiller.train_step([{"leaf_tokens": [[1]], "candidate_ids": ["a"], "type": "choice"}])
-            self.assertFalse(res["optimized"])
-            self.assertEqual(res["status"], "NO_OPTIMIZER_OR_MODEL")
 
 
     def test_04_dual_head_export_weights_and_cpu_scorer_bias_mapping(self):
@@ -175,25 +114,6 @@ class TestRound4Contract(unittest.TestCase):
         self.assertAlmostEqual(float(scorer.biases["val_mlp_0"][0]), 0.85, places=4)
         self.assertAlmostEqual(float(scorer.biases["val_mlp_0_bias"][0]), 0.85, places=4)
 
-    def test_05_benchmark_eval_fails_on_exception_and_empty_scenarios(self):
-        """Verify dynamic benchmark returns 0.0 accuracy on exceptions or empty suites."""
-        daemon = self.client.rsi_daemon
-
-        # 1. Empty scenarios
-        res_empty = daemon.evaluate_model_on_benchmark(DummyDualHead(), [])
-        self.assertEqual(res_empty["accuracy"], 0.0)
-        self.assertEqual(res_empty["collision_rate"], 1.0)
-
-        # 2. Forward exception
-        scenarios = [{
-            "state_repr": "test_state",
-            "candidate_actions": ["ACTION_A", "ACTION_B"],
-            "ground_truth_safe_action": "ACTION_A"
-        }]
-        failing_model = DummyDualHead(should_fail=True)
-        res_fail = daemon.evaluate_model_on_benchmark(failing_model, scenarios)
-        self.assertEqual(res_fail["accuracy"], 0.0)
-        self.assertEqual(res_fail["collision_rate"], 1.0)
 
     def test_06_arbiter_backend_reachable_and_negative_probability_sanitization(self):
         """Verify backend_reachable field is retained and negative/NaN probs are safely normalized."""

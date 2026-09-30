@@ -11,7 +11,6 @@ Run these utilities from the repository root with `python3 scripts/<name>.py`. U
 | `analyze_flash_next_shard_layout.py` | Estimate model shard and layer sizes from remote safetensors headers; `python3 scripts/analyze_flash_next_shard_layout.py --help`. |
 | `inspect_gguf_layer_bytes.py` | Inspect GGUF tensor and layer byte sizes; `python3 scripts/inspect_gguf_layer_bytes.py model.gguf`. |
 | `prototype_layer_streaming.py` | Benchmark CUDA layer streaming strategies with synthetic weights; `python3 scripts/prototype_layer_streaming.py --help`. |
-| `rebuild_open_training_pool_natural_text.py` | Rebuild the open training pool with answer text; `python3 scripts/rebuild_open_training_pool_natural_text.py --help`. |
 | `slice_gguf_layers.py` | Write a GGUF slice containing the first K transformer blocks; `python3 scripts/slice_gguf_layers.py --model-path model.gguf --max-layers 16 --output-path sliced.gguf`. |
 | `download_benchmark_features.py` | Locate and verify the 26 pinned Qwen2.5-72B + LLaMA-3.1-70B feature files (13 tasks x 2 models, ~2.2 GB) for the dual-70B manifold reproduction; there is no public mirror, it only locates and hash-verifies local files. `python3 scripts/download_benchmark_features.py --help`. |
 

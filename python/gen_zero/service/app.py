@@ -130,34 +130,6 @@ class QuestionSpec(BaseModel):
     criteria: Union[Dict[str, str], List[str], Any] = Field(..., description="Criteria options or scale")
 
 
-class ObservedTransitionRequest(BaseModel):
-    state: List[float]
-    action: str
-    reward: float
-    next_state: List[float]
-    done: bool = False
-
-
-@app.post("/v1/replay/transitions", dependencies=[Depends(verify_api_token)])
-def record_observed_transition(req: ObservedTransitionRequest):
-    """Ingest a transition after the caller has executed an action in its environment."""
-    try:
-        client.record_transition(req.state, req.action, req.reward, req.next_state, req.done)
-    except (ValueError, TypeError) as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return {"recorded": True, "entries": client.causal_replay_buffer.total_transitions}
-
-
-@app.get("/v1/replay/status", dependencies=[Depends(verify_api_token)])
-def replay_status():
-    buffer = client.causal_replay_buffer
-    if buffer is None:
-        raise HTTPException(status_code=503, detail="causal replay buffer is disabled")
-    return buffer.get_memory_stats().to_dict()
-
-
 class DecisionsRequest(BaseModel):
     model: str = Field("typesafe/zero-1.13", description="Target model name")
     state: Optional[Union[str, Dict[str, Any]]] = Field(None, description="Context, environment observation, or task state")

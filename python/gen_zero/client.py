@@ -251,15 +251,8 @@ class UniversalParadigmRouter:
 DecisionMoERouter = UniversalParadigmRouter
 from .model.prm import ProcessRewardModel
 from .causal.counterfactual_engine import CounterfactualEngine, StructuralCausalModel
-from .causal.synthetic_generator import CounterfactualSyntheticGenerator
 from .causal.nanocore_bridge import NanocoreAnchorBridge
 from .rollout.hard_miner import HardSampleMiner
-from .rollout.runner import UnifiedEnvironmentRunner
-from .train.replay_buffer import StabilityReplayBuffer
-from .train.distiller import GenZeroDistiller
-from .train.invariant_distiller import InvariantCausalDistiller
-from .gate.safety_gate import SafetyGate, GateVerdict
-from .gate.rsi_orchestrator import RSIOrchestrator
 from .gate.alignment_gate import (
     StateAlignmentGate,
     AlignmentVerdict,
@@ -421,7 +414,6 @@ from .model.token_stability import (
 )
 from .world_model.streaming_engine import StreamingWorldModelEngine
 from .runtime import QuantizedCandidateScorer
-from .daemon import GenZeroRSIDaemon
 
 # Expert statuses meaning "this expert found no admissible action": any one forces ABSTAIN.
 EXPERT_ABSTAIN_STATUSES = frozenset({
@@ -565,44 +557,15 @@ class GenZero:
         self.prm_verifier = ProcessRewardModel()
         self.moe_router = UniversalParadigmRouter()
         self.causal_engine = CounterfactualEngine()
-        self.synthetic_generator = CounterfactualSyntheticGenerator(
-            scm=self.causal_engine.scm,
-            prm=self.prm_verifier
-        )
 
-        # Layer 3 & 4: Miner, Replay & Distillers
+        # Layer 3: hard-sample miner (feeds the arbiter bridge's escalation telemetry)
         self.miner = HardSampleMiner(
             entropy_threshold=self.config.exploration_entropy_threshold,
             td_error_threshold=self.config.td_error_threshold,
             history_window=self.config.hard_sample_history_steps
         )
-        self.runner = UnifiedEnvironmentRunner(miner=self.miner)
-        from .train.compact_replay_buffer import CompactCausalReplayBuffer
-        self.causal_replay_buffer = (
-            CompactCausalReplayBuffer(capacity=self.config.causal_replay_capacity, latent_dim=self.config.embed_dim)
-            if self.config.enable_causal_replay_buffer else None
-        )
-        self.replay_buffer = StabilityReplayBuffer(
-            capacity=10000,
-            hard_ratio=self.config.hard_to_gold_ratio,
-            state_preparer=self.prepare_inference_state
-        )
-        self.distiller = GenZeroDistiller(
-            model=self.model,
-            replay_buffer=self.replay_buffer,
-            lr=self.config.learning_rate
-        )
-        self.invariant_distiller = InvariantCausalDistiller(
-            model=self.model,
-            replay_buffer=self.replay_buffer,
-            lr=self.config.learning_rate
-        )
 
-        # Layer 5: Gate & Orchestrator
-        self.gate = SafetyGate(
-            min_acc_retention=self.config.gate_min_accuracy_retention,
-            min_score_gain=self.config.gate_min_score_gain
-        )
+        # Layer 5: Gates
         self.alignment_gate = StateAlignmentGate()
         self.guardrail = DualGateGuardrail()
         self.tool_interlock = AgentToolInterlock(guardrail=self.guardrail)
@@ -633,13 +596,6 @@ class GenZero:
         # themselves: self.nanocore_choice_head (and any other core) can be shared
         # across multiple domains, each potentially bound to a different manifest.
         self.nanocore_space_manifests: Dict[int, Dict[str, Any]] = {}
-        self.orchestrator = RSIOrchestrator(
-            config=self.config,
-            runner=self.runner,
-            replay_buffer=self.replay_buffer,
-            distiller=self.distiller,
-            gate=self.gate
-        )
 
         # Layer 6: Enterprise Tool Sandbox & Multi-Step Orchestration
         self.tool_registry = ToolRegistry()
@@ -747,17 +703,12 @@ class GenZero:
         )
         self._sync_scorer_after_checkpoint() if self.weights_loaded_from_checkpoint else self.sync_model_to_scorer()
 
-        # Direction 3: 24/7 Autonomous Continuous RSI Daemon & Atomic Serving Container
+        # Atomic serving container: each request pins one model/scorer snapshot.
         from .daemon.atomic_container import AtomicModelContainer
         self.container = AtomicModelContainer(
             initial_model=self.model,
             initial_scorer=getattr(self, "cpu_extreme_scorer", None)
         )
-        self.rsi_daemon = GenZeroRSIDaemon(
-            client=self,
-            cycle_interval_sec=60.0
-        )
-        self.rsi_daemon.container = self.container
 
         # Issue #8: Composite Decision, Policy Gate & Candidate Governance
         from .runtime.composite_decision import CompositeDecisionEngine
@@ -1221,23 +1172,6 @@ class GenZero:
         meta["valid_set"] = survivors
         return visit_dist, res["expected_value"], res["best_action"], meta
 
-    def record_transition(self, state: Any, action: str, reward: float,
-                          next_state: Any, done: bool = False) -> None:
-        """Record an observed environment step. Inputs must be numeric latent vectors."""
-        if self.causal_replay_buffer is None:
-            raise RuntimeError("causal replay buffer is disabled")
-        state_vec = np.asarray(state, dtype=np.float32).reshape(-1)
-        next_vec = np.asarray(next_state, dtype=np.float32).reshape(-1)
-        expected = self.causal_replay_buffer.latent_dim
-        if state_vec.shape != (expected,) or next_vec.shape != (expected,):
-            raise ValueError(f"causal replay requires state and next_state vectors of dimension {expected}")
-        if not np.isfinite(state_vec).all() or not np.isfinite(next_vec).all() or not np.isfinite(reward):
-            raise ValueError("causal replay requires finite vectors and reward")
-        if not isinstance(action, str) or not action:
-            raise ValueError("causal replay requires a non-empty action string")
-        self.causal_replay_buffer.add(state_vec, action, reward, next_vec, done,
-                                      metadata={"provenance": "observed"})
-
     def decide(
         self,
         state: Any,
@@ -1640,7 +1574,6 @@ class GenZero:
             "k_experts": executed_k,
             "adaptive_horizon": adaptive_horizon,
             "complexity_score": round(complexity, 3),
-            "replay_hard_ratio": self.replay_buffer.hard_ratio,
             "arbiter_fallback": arbiter_report,
             "experts_meta": all_adaptive_meta,
             "fusion": {
@@ -2016,23 +1949,6 @@ class GenZero:
             get_forward_neighbors_fn=get_forward_neighbors_fn,
             get_backward_neighbors_fn=get_backward_neighbors_fn,
             heuristic_fn=heuristic_fn
-        )
-
-    def evolve_round(
-        self,
-        round_idx: int,
-        env: Any,
-        policy_fn: Any,
-        eval_fn: Any,
-        baseline_metrics: Dict[str, float]
-    ) -> Dict[str, Any]:
-        """Executes one round of self-evolution flywheel."""
-        return self.orchestrator.execute_flywheel_round(
-            round_idx=round_idx,
-            env=env,
-            policy_fn=policy_fn,
-            eval_fn=eval_fn,
-            baseline_metrics=baseline_metrics
         )
 
     def decide_continuous(
@@ -2482,25 +2398,6 @@ class GenZero:
                 r["degraded_reason"] = ";".join(dict.fromkeys(reason for reason in reasons if reason))
         return fallback
 
-    # ---- Direction 3: 24/7 Autonomous Continuous RSI Daemon APIs ----
-    def start_rsi_daemon(self, interval_sec: Optional[float] = None) -> None:
-        """Starts the continuous 24/7 background self-evolution daemon."""
-        if interval_sec is not None:
-            self.rsi_daemon.cycle_interval_sec = max(1.0, interval_sec)
-        self.rsi_daemon.start_background()
-
-    def stop_rsi_daemon(self) -> None:
-        """Safely stops the continuous background daemon."""
-        self.rsi_daemon.stop_background()
-
-    def run_daemon_cycle(self) -> Dict[str, Any]:
-        """Runs a single autonomous self-evolution cycle synchronously."""
-        return self.rsi_daemon.run_single_evolution_cycle()
-
-    def get_daemon_telemetry(self) -> Dict[str, Any]:
-        """Returns live autonomous self-evolution telemetry and version status."""
-        return self.rsi_daemon.get_telemetry()
-
     def attribute_counterfactual(
         self,
         trajectory: List[Dict[str, Any]],
@@ -2542,31 +2439,6 @@ class GenZero:
             "root_cause_ite": round(root_cause.individual_treatment_effect, 4) if root_cause else 0.0,
             "has_decision_culprit": root_cause is not None
         }
-
-    def run_invariant_distillation(self, steps: int = 50, batch_size: int = 16) -> Dict[str, Any]:
-        """Runs Invariant Risk Minimization (IRM) Causal Distillation on the replay buffer.
-        
-        Minimizes empirical risk with an IRM penalty across environments and
-        ITE-based sample weights; this does not establish OOD invariance.
-        """
-        return self.invariant_distiller.run_iteration(steps=steps, batch_size=batch_size)
-
-    def augment_synthetic_counterfactuals(
-        self,
-        trajectory: List[Dict[str, Any]],
-        final_outcome: str,
-        final_score: float
-    ) -> Dict[str, Any]:
-        """Synthesizes PRM-verified counterfactual twin samples and injects them into replay buffer.
-        
-        Doubles sample efficiency by generating valid 'What-If' scenarios under locked historical noise.
-        """
-        return self.synthetic_generator.augment_and_inject(
-            replay_buffer=self.replay_buffer,
-            trajectory=trajectory,
-            final_outcome=final_outcome,
-            final_score=final_score
-        )
 
     def register_tool(
         self,
@@ -3397,36 +3269,6 @@ class GenZero:
             compression_level=compression_level,
         )
         return NanoCoreFleetScheduler(config)
-
-    def create_compact_replay_buffer(
-        self,
-        capacity: int = 100000,
-        chunk_size: int = 64,
-        latent_dim: int = 1024,
-        compression_level: int = 3,
-        max_cached_chunks: int = 8,
-    ) -> Any:
-        """Instantiates a CompactCausalReplayBuffer for high-density trajectory replay (RFC-069 & Issue #75)."""
-        from .train.compact_replay_buffer import CompactCausalReplayBuffer
-        return CompactCausalReplayBuffer(
-            capacity=capacity,
-            chunk_size=chunk_size,
-            latent_dim=latent_dim,
-            compression_level=compression_level,
-            max_cached_chunks=max_cached_chunks,
-        )
-
-    def create_golden_snapshot_manager(
-        self,
-        storage_dir: Optional[str] = None,
-        max_snapshots: int = 5,
-    ) -> Any:
-        """Instantiates a GoldenSnapshotManager for sub-16ms rollback recovery (RFC-069 & Issue #75)."""
-        from .train.compact_replay_buffer import GoldenSnapshotManager
-        return GoldenSnapshotManager(
-            storage_dir=storage_dir,
-            max_snapshots=max_snapshots,
-        )
 
     def create_constraint_compiler(
         self,

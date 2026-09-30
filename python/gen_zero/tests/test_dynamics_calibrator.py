@@ -96,29 +96,6 @@ def test_fail_closed_inputs_and_export(tmp_path):
         c.fit(x, y, **kw)
 
 
-def test_cli_emits_loadable_weights(tmp_path):
-    import json
-    import os
-    import subprocess
-    import sys
-    x, y = numeric_problem(50, 32)
-    features = tmp_path / 'mathematical-features.npz'
-    artifact = tmp_path / 'mathematical-weights.npz'
-    np.savez(features, features=x, labels=y, sample_ids=np.arange(32),
-             metadata=json.dumps(dict(source='mathematical-test-only', split='train',
-                                      encoder_id='numeric', label_free_encoder_input=True)))
-    from pathlib import Path
-    env = os.environ.copy()
-    python_dir = str(Path(__file__).resolve().parent.parent.parent)
-    env["PYTHONPATH"] = f"{python_dir}:{env.get('PYTHONPATH', '')}"
-    result = subprocess.run([sys.executable, '-m', 'gen_zero.train.calibrate_causal_dynamics',
-                             '--features', str(features), '--out', str(artifact),
-                             '--dim', '8', '--epochs', '2'],
-                            env=env, capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
-    report = json.loads(result.stdout)
-    assert report['provenance']['split'] == 'train'
-    assert CalibratedDynamics.load(artifact, encoder_id='numeric').certify()['rho'] <= .55
 
 
 def test_projection_handles_large_nonnormal_transient():

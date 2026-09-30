@@ -304,60 +304,6 @@ def test_decide_fails_closed():
         CausalMCTSRNN(_runtime()).decide(codes[0], ro)               # no dynamics
 
 
-# --------------------------------------------------------------------------- real grid + timing
-
-GRID_ART = REPO / "benchmarks" / "artifacts" / "zero"
-
-
-@pytest.fixture(scope="module")
-def grid():
-    blc = pytest.importorskip("benchmark_laya_comparison")
-    if not (blc.PRIOR_NPZ.exists() and blc.DYN_NPZ.exists() and blc.CALIB_JSON.exists()):
-        pytest.skip("grid artifacts missing: run benchmark_laya_comparison.py --stage train")
-    world, codes, rt, dyn, calib = blc.load_models()
-    traps, regs = blc.test_items(world)
-    return blc, world, codes, rt, dyn, calib, traps, regs
-
-
-def test_grid_trap_single_step_walks_in_and_mcts_survives(grid):
-    blc, world, codes, rt, dyn, calib, traps, _ = grid
-    eng = blc.make_engine(rt, dyn, codes, calib)
-    lay = next(l for l in traps if l.depth == 5)
-    ctx = blc.GridContext(world, codes, lay)
-    s = lay.start
-    assert int(np.argmax(rt.score(ctx.G[s], ctx.G[world.next[s]]))) == 1   # straight into the corridor
-    outcome = blc.run_trap(world, lay, ctx, blc.policy_full(codes, eng, "mcts"))
-    assert outcome["outcome"] == "survived"
-
-
-def test_cpu_latency_is_milliseconds(grid):
-    blc, world, codes, rt, dyn, calib, traps, regs = grid
-    eng = blc.make_engine(rt, dyn, codes, calib)
-    lay = traps[0]
-    ctx = blc.GridContext(world, codes, lay)
-    z = codes[lay.start].astype(np.float32)
-
-    def med(fn, n):
-        fn()
-        ts = []
-        for _ in range(n):
-            t0 = time.perf_counter()
-            fn()
-            ts.append((time.perf_counter() - t0) * 1e3)
-        return statistics.median(ts)
-
-    fast = med(lambda: eng.decide(z, ctx.ro, mode="adaptive_entropy_only"), 50)
-    gated = med(lambda: eng.decide(z, ctx.ro, mode="adaptive"), 20)
-    mcts = med(lambda: eng.decide(z, ctx.ro, mode="mcts"), 20)
-    step = med(lambda: dyn.step(z, 1), 2000) * 1e3
-    print(f"\nfast {fast:.3f} ms | gated {gated:.3f} ms | mcts {mcts:.3f} ms | lie step {step:.2f} us (d={dyn.dim})")
-    # Generous bounds: this host is shared and heavily loaded; the benchmark reports real numbers.
-    assert fast < 5.0
-    assert gated < 50.0
-    assert mcts < 200.0
-    assert step < 500.0
-
-
 # --------------------------------------------------------------------------- real Qwen features
 
 QWEN_ADAPTER = REPO / "artifacts" / "qwen35_9b" / "zero_rnn_set_adapter_qwen35_9b.npz"

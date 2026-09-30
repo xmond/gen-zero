@@ -313,7 +313,7 @@ def compile_from_task_schemas(
     data_dir = Path(data_dir)
     task_files = sorted(
         p for p in data_dir.glob("*.jsonl")
-        if p.stem not in {"all_benchmarks", "bespoke", "hans", "calibration_clean_16", "open_training_pool_natural_5k"}
+        if p.stem not in {"all_benchmarks", "bespoke", "hans", "calibration_clean_16"}
         and not p.stem.startswith("bbh_")
     )
     if len(task_files) != 13:

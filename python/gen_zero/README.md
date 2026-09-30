@@ -5,7 +5,7 @@
 ![Status](https://img.shields.io/badge/status-experimental-yellow.svg)
 ![Hardware](https://img.shields.io/badge/hardware-NVIDIA%20A100%20%2F%20CPU-orange.svg)
 
-> **Gen-Zero** 是一个集成了 **Set-Attention 置换等变性网络**、**PUCT 双头树搜索 (MCTS)**、**不确定性 A\* 规划器**、**文字/动力学世界模型** 以及 **RSI 自动自博弈进化飞轮** 的通用下一代决策引擎。支持在业务工单审批、连续/离散图搜索、零和对抗博弈以及局部受限物理控制等多任务中实现**结构化候选评分、多样性探索与约束决策**。
+> **Gen-Zero** 是一个集成了 **Set-Attention 置换等变性网络**、**PUCT 双头树搜索 (MCTS)**、**不确定性 A\* 规划器**、**文字/动力学世界模型** 的通用下一代决策引擎。支持在业务工单审批、连续/离散图搜索、零和对抗博弈以及局部受限物理控制等多任务中实现**结构化候选评分、多样性探索与约束决策**。
 
 ---
 
@@ -33,32 +33,23 @@ flowchart TD
     end
 
     subgraph L3["Layer 3: 对弈与主动挖掘 (Rollout Layer)"]
-        Runner["Unified Environment Runner"]
         Miner["Hard Sample Miner (碰撞倒推 / 高熵 / TD-Error 挖掘)"]
     end
 
-    subgraph L4["Layer 4: 稳定性经验与蒸馏 (Learning Layer)"]
-        Replay["1:3 Stability Replay Buffer (防突触漂移与遗忘)"]
-        Distiller["Multi-Task Distiller (Soft Policy KL + Value MSE)"]
+    subgraph L5["Layer 5: Runtime Gates (Governance Layer)"]
+        Gate["Alignment / Perturbation / Policy Gates"]
     end
 
-    subgraph L5["Layer 5: 安全闸门与递归自律 (Governance Layer)"]
-        Gate["Frozen Benchmark Safety Gate (99.5% 基准保留率安全阈值)"]
-        MetaN["I-24 Meta^n 动态收敛探测器 (自动休眠)"]
-    end
-
-    L1 --> L2 --> L3 --> L4 --> L5 --> L1
+    L1 --> L2 --> L3 --> L5
 ```
 
 1. **候选集合等变结构**：Set-Attention 的结构性质不等于端到端决策不变性；编码、并列分数和动作选择仍需单独验证。
 2. **System 1 与 System 2 动态双模态**：
    - **System 1 (Reflex)**：单步候选评分；当前无可复现的端到端 <0.1ms 测量。
    - **System 2 (Lookahead/MCTS)**：模型驱动规划；陷阱规避结果仅适用于对应评测环境，不能推广为普遍安全保证。
-3. **无人值守安全进化闭环（RSI Flywheel）**：
-   - 在线长程自博弈；
-   - 困难样本前溯捕捉；
-   - 1:3 经验回放（缓解遗忘的实验配置，不保证消除遗忘）；
-   - 冻结基准安全闸门自动仲裁热部署（`DEPLOY_HOT_UPDATE`）。
+3. **Offline learning is out of scope**: replay buffers, distillation, self-play and the RSI
+   daemon are not part of this package. They live in `gen-zero-research` and are offered
+   through the tuning API (`tuning.gen-zero.ai`).
 
 ---
 
@@ -157,16 +148,14 @@ print("规划动作链:", plan["path"])
 | `mcts_simulations` | `64` | MCTS 树搜索单步虚拟展开次数。需要更强博弈能力可设为 `128` 或 `256`。 |
 | `mcts_depth` | `6` | 虚拟世界模型的前瞻最大深度。深层死胡同迷宫建议 `8`。 |
 | `astar_lambda` | `1.0` | 不确定性边权公式 $1 + \lambda(-\log p)$ 中的惩罚系数。 |
-| `hard_to_gold_ratio`| `0.25` | 回放池中困难样本上限（1:3 黄金配比，防止策略漂移）。 |
 | `hard_sample_history_steps`| `5` | 发生碰撞或低价值事件时向前追溯捕捉的步数。 |
-| `gate_min_accuracy_retention`| `0.995`| 安全闸门允许的基线准确率最低保留率（严禁低于 99.5%）。 |
-| `metan_convergence_delta` | `0.005` | $\text{Meta}^n$ 增益饱和阈值。连续 2 轮增量 $<0.5\%$ 时自动停止飞轮。 |
 
 ---
 
-## 五、自博弈飞轮 (RSI)
+## 五、Training and self-play
 
-`run_flywheel.py` 依赖已不存在的 `snake_game` 模块，已于 2026-09-26 删除。飞轮组件 (`gate/`, `train/`, `rollout/`) 仍在，需自行编写驱动脚本。
+Removed from this package. Offline training, distillation, replay and self-play live in
+`gen-zero-research`; this package is the runtime client SDK only.
 
 ---
 
@@ -193,7 +182,7 @@ print("规划动作链:", plan["path"])
 ```text
 gen_zero/
 ├── __init__.py               # 公共导出模块 (GenZero, GenZeroConfig)
-├── client.py                 # 统一高层调用接口 (decide, plan_path, evolve_round)
+├── client.py                 # 统一高层调用接口 (decide, plan_path)
 ├── config.py                 # 全局超参数与路径配置
 ├── model/                    # [Layer 1] 模型层
 │   ├── dual_head.py          # Policy + Value 双头网络与 Set-Attention
@@ -203,14 +192,9 @@ gen_zero/
 │   ├── mcts.py               # AlphaZero PUCT MCTS 树搜索
 │   └── world_model.py        # 轻量级文字/动力学世界模型
 ├── rollout/                  # [Layer 3] 交互与采样层
-│   ├── runner.py             # 统一环境长程交互执行器
 │   └── hard_miner.py         # 碰撞倒推与高熵困难样本挖掘器
-├── train/                    # [Layer 4] 学习与沉淀层
-│   ├── replay_buffer.py      # 1:3 黄金锚点防遗忘经验回放池
-│   └── distiller.py          # 多任务双头蒸馏训练器
 ├── gate/                     # [Layer 5] 安全与治理层
-│   ├── safety_gate.py        # 冻结天梯 99.5% 不退化安全闸门
-│   └── rsi_orchestrator.py   # RSI 自博弈长周期总调度器 (含 Meta^n 探测)
+│   └── safety_gate.py        # 冻结天梯 99.5% 不退化安全闸门
 └── evaluate_universal_suite.py # 跨域通用高阶基准评测
 ```
 

@@ -127,7 +127,7 @@ GGUF 格式的张量表带绝对偏移量，`scripts/inspect_gguf_layer_bytes.py
 1. §1 的截断+抽取管线，对每个模型的相变层 K，跑一批覆盖真实任务分布的输入，拿到 `(input, h_K)` 对。
 2. 用修正后的 `StreamingCovarianceAccumulator`（先修数值缺陷，见 §2.4）算出 h_K 的主成分/薄 SVD 字典，或者训练一个保角投影（conformal projection），把 h_K 映射到一个 128 维目标空间——这一步的输出是**一个投影矩阵，作为训练目标生成器，不作为运行时权重加载**。
 3. 用这个投影矩阵，把整批 `(input, h_K)` 转换成 `(input, target_128d)` 监督对。
-4. **离线训练一个 CPU 友好的小编码器**（复用现有 distiller 基础设施：`python/gen_zero/train/distiller.py`），让它直接从原始输入（不经过教师模型）预测 `target_128d`。这个小编码器就是 128 维向量真正的**生产者**——它在运行时跑在 CPU 上，不依赖教师模型，也不依赖 GPU。
+4. **离线训练一个 CPU 友好的小编码器**（复用现有 distiller 基础设施：the distiller in gen-zero-research (moved out of this repo)），让它直接从原始输入（不经过教师模型）预测 `target_128d`。这个小编码器就是 128 维向量真正的**生产者**——它在运行时跑在 CPU 上，不依赖教师模型，也不依赖 GPU。
 
 **这里必须拆成两件不同的产物，不能混为一谈**——`NanoCoreInstance.projection_weights` 的形状是 `(out_dim, 128)`（`core_type.rs:19-31`），即它吃 128 维、吐 `out_dim` 维，跟步骤 4 的"原始输入 → 128 维"编码器方向正好相反，物理上不可能把步骤 4 的编码器直接打包成 `NanoCoreInstance`。真正需要落地的是两个独立产物：
 
@@ -171,7 +171,7 @@ benchmarks/suites/run_{mistral123b,falcon180b,llama405b}_extract.bat  [已存在
   → 修复：StreamingCovarianceAccumulator（先修数值缺陷）                [里程碑0，未完成]
   → 修复：PhaseTransitionLayerExtractor.detect_phase_transitions（换掉 argmin）[未完成]
   → 新建：教师投影字典（SVD/conformal，128维目标空间）                 [未完成，依赖里程碑0]
-  → 复用：python/gen_zero/train/distiller.py（训练产物(a) CPU 小编码器）[已存在框架，需接入新数据源]
+  → 复用：gen-zero-research distiller (moved out of this repo)（训练产物(a) CPU 小编码器）[已存在框架，需接入新数据源]
   → 新建：产物(b) NanoCoreInstance 拟合器（128维目标+决策标签→projection_weights/value_weights）[未完成，缺决策标签数据]
 
 【在线，生产请求路径，CPU only】

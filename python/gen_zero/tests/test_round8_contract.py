@@ -104,26 +104,6 @@ class TestRound8Contract(unittest.TestCase):
         self.assertTrue(all(p == 0.0 for p in probs.values()))
         self.assertEqual(meta.get("status"), "NO_VALID_CANDIDATES")
 
-    def test_r8_e02_unified_modality_pipeline_eval_and_decide(self):
-        """Probes R8_E02, R8_E03: Unified prepare_inference_state handles raw inputs identically."""
-        client = GenZeroClient(GenZeroConfig())
-        
-        raw_dict_state = {"view": "dashboard", "tokens": [1, 2, 3]}
-        prepared_eval = client.prepare_inference_state(raw_dict_state)
-        self.assertIsNotNone(prepared_eval)
-        # normalize_state_repr of prepared_eval must contain the context
-        repr_eval = normalize_state_repr(prepared_eval)
-        self.assertIn("dashboard", repr_eval)
-        
-        # Benchmark eval on daemon must consume prepare_inference_state seamlessly
-        scenarios = [{
-            "state_repr": raw_dict_state,
-            "candidate_actions": ["open", "close"],
-            "ground_truth_safe_action": "open"
-        }]
-        eval_model = client.model if client.model is not None else (lambda s, c: {"best_action": "open"})
-        res = client.rsi_daemon.evaluate_model_on_benchmark(eval_model, scenarios)
-        self.assertTrue(res["is_valid"])
 
     def test_r8_p01_serving_snapshot_atomic_coupling(self):
         """Probes R8_P01, R8_P02: Atomic ServingSnapshot couples model and scorer without intermediate mismatch."""
@@ -173,30 +153,6 @@ class TestRound8Contract(unittest.TestCase):
         self.assertEqual(active.model.tag, "m1")
         self.assertEqual(active.scorer.tag, "s1")
 
-    def test_r8_t01_distiller_premasked_logits(self):
-        """Probe R8_T01: Distiller invalid logits masked with -1e9 before log_softmax."""
-        if not HAS_TORCH:
-            self.skipTest("PyTorch required for Distiller probe")
-
-        import torch.nn.functional as F
-        from gen_zero.train.distiller import GenZeroDistiller
-        from gen_zero.train.replay_buffer import StabilityReplayBuffer
-
-        client = GenZeroClient(GenZeroConfig())
-        distiller = client.distiller
-        
-        # Verify that when logits are masked with -1e9, log_softmax gives 0 probability (-inf / large negative) to invalid positions
-        logits = torch.tensor([[10.0, 5.0, 20.0]], dtype=torch.float32)
-        valid = torch.tensor([[True, True, False]], dtype=torch.bool)
-        
-        masked_logits = logits.masked_fill(~valid, -1e9)
-        log_probs = F.log_softmax(masked_logits, dim=-1)
-        probs = torch.exp(log_probs)
-        
-        # Candidate at index 2 was invalid -> probability must be exactly 0.0
-        self.assertAlmostEqual(probs[0, 2].item(), 0.0, places=5)
-        # Probabilities of valid candidates must sum to 1.0
-        self.assertAlmostEqual((probs[0, 0] + probs[0, 1]).item(), 1.0, places=4)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,6 @@ from gen_zero.config import GenZeroConfig
 from gen_zero.planner.engines import AStarEngine, MctsEngine
 from gen_zero.world_model import GenZeroTextWorldModel
 from gen_zero.rollout.hard_miner import HardSampleMiner
-from gen_zero.train.replay_buffer import StabilityReplayBuffer
 from gen_zero.gate.safety_gate import SafetyGate, GateVerdict
 
 
@@ -55,22 +54,6 @@ class TestGenZeroComponents(unittest.TestCase):
         self.assertEqual(next_s["body"][0], [4, 5])
         self.assertGreater(r, 1.0)
 
-    def test_stability_replay_buffer(self):
-        buf = StabilityReplayBuffer(capacity=100, hard_ratio=0.25)
-        golds = [{"id": f"g_{i}", "gold": True} for i in range(30)]
-        buf.load_gold_samples(golds)
-        from gen_zero.rollout.hard_miner import MinedSample
-        hards = [MinedSample(
-            state_id=f"h_{i}", state_data={}, candidate_ids=["a", "b"],
-            pi_target={"a": 0.5, "b": 0.5}, value_target=1.0,
-            mining_reason="collision", entropy=1.0, td_error=0.8
-        ) for i in range(10)]
-        buf.add_mined_samples(hards)
-
-        batch = buf.sample_batch(batch_size=16)
-        self.assertEqual(len(batch), 16)
-        n_hard = sum(1 for item in batch if item["is_hard_sample"])
-        self.assertEqual(n_hard, 4)  # 25% of 16 = 4
 
     def test_safety_gate(self):
         gate = SafetyGate(min_acc_retention=0.99, min_score_gain=0.0)
@@ -134,14 +117,6 @@ class TestGenZeroComponents(unittest.TestCase):
         self.assertIn("k_experts", res["adaptive_params"])
         self.assertIn(res["action"], candidates)
 
-    def test_elastic_replay_buffer(self):
-        buf = StabilityReplayBuffer(capacity=100, hard_ratio=0.25)
-        # Low retention -> decreases hard ratio to protect anchor
-        new_ratio = buf.update_retention_feedback(0.98)
-        self.assertLess(new_ratio, 0.25)
-        # Rock solid retention -> increases hard ratio to accelerate hard learning
-        new_ratio2 = buf.update_retention_feedback(0.999)
-        self.assertGreater(new_ratio2, new_ratio)
 
 
     def test_opponent_belief_tracker(self):
@@ -204,87 +179,7 @@ class TestGenZeroComponents(unittest.TestCase):
         self.assertEqual(dec["action"], "ABSTAIN")
         self.assertEqual(dec["status"], "INFEASIBLE_ABSTAIN")
 
-    def test_distiller_real_optimization(self):
-        from gen_zero.train.distiller import GenZeroDistiller, HAS_TORCH
-        from gen_zero.train.replay_buffer import StabilityReplayBuffer
-        from gen_zero.rollout.hard_miner import MinedSample
 
-        buf = StabilityReplayBuffer(capacity=50, hard_ratio=0.5)
-        buf.add_mined_samples([MinedSample(
-            state_id="s1", state_data={}, candidate_ids=["a", "b"],
-            pi_target={"a": 1.0, "b": 0.0}, value_target=1.0,
-            mining_reason="test", entropy=0.1, td_error=0.5
-        )])
-
-        if HAS_TORCH:
-            import torch
-            import torch.nn as nn
-            class DummyModel(nn.Module):
-                def __init__(self):
-                    super().__init__()
-                    self.linear = nn.Linear(4, 2)
-                    self.scalar = self.linear
-                def forward(self, examples, pad_token=0, return_value=False):
-                    device = self.linear.weight.device
-                    b_sz = len(examples)
-                    logits = self.linear(torch.ones((b_sz, 4), device=device))
-                    valid = torch.ones((b_sz, 2), dtype=torch.bool, device=device)
-                    vals = logits.mean(dim=-1, keepdim=True)
-                    return (logits, valid, vals) if return_value else (logits, valid)
-            model = DummyModel()
-            distiller = GenZeroDistiller(model=model, replay_buffer=buf, lr=1e-3)
-            res = distiller.run_iteration(steps=3, batch_size=1)
-            self.assertIn("mean_loss", res)
-            self.assertEqual(res["steps_trained"], 3)
-        else:
-            distiller = GenZeroDistiller(model=None, replay_buffer=buf, lr=1e-3)
-            res = distiller.run_iteration(steps=3, batch_size=1)
-            self.assertEqual(res["steps_trained"], 0)
-            self.assertEqual(res["status"], "NO_EFFECTIVE_STEPS")
-
-    def test_rsi_rollback_on_gate_rejection(self):
-        from gen_zero.gate.rsi_orchestrator import RSIOrchestrator
-        from gen_zero.train.distiller import GenZeroDistiller
-        from gen_zero.train.replay_buffer import StabilityReplayBuffer
-
-        class StateDictModel:
-            def __init__(self):
-                self.weights = {"layer": 1.0}
-            def state_dict(self):
-                return copy.deepcopy(self.weights)
-            def load_state_dict(self, d):
-                self.weights = copy.deepcopy(d)
-
-        model = StateDictModel()
-        buf = StabilityReplayBuffer(capacity=50, hard_ratio=0.25)
-        distiller = GenZeroDistiller(model=model, replay_buffer=buf)
-        orchestrator = RSIOrchestrator(replay_buffer=buf, distiller=distiller)
-
-        # Base vs severely degraded candidate
-        base_metrics = {"accuracy": 95.0, "mean_score": 25.0, "collision_rate": 0.02}
-        cand_metrics = {"accuracy": 50.0, "mean_score": 10.0, "collision_rate": 0.30}
-
-        class MockEnv:
-            def reset(self): return {"size": 8, "body": [[0, 0]], "food": [1, 1]}
-            def step(self, a): return {"size": 8, "body": [[0, 0]], "food": [1, 1]}, 0.0, True, {}
-            def get_legal_actions(self, s): return ["north", "south", "east", "west"]
-
-        # Mutate model during training to simulate bad update
-        def eval_fn():
-            model.weights["layer"] = 999.0
-            return cand_metrics
-
-        rec = orchestrator.execute_flywheel_round(
-            round_idx=1,
-            env=MockEnv(),
-            policy_fn=lambda s, l: {"action": "north", "probs": {a: 1.0 / len(l) for a in l}},
-            eval_fn=eval_fn,
-            baseline_metrics=base_metrics
-        )
-        self.assertFalse(rec["gate_verdict"]["passed"])
-        self.assertEqual(rec["gate_verdict"]["action"], "ROLLBACK_ADJUST_HYPERPARAMS")
-        # Ensure weights are restored and buffer purged
-        self.assertEqual(model.weights["layer"], 1.0)
 
     def test_client_astar_routing(self):
         from gen_zero import GenZero
