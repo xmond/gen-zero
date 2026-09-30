@@ -472,15 +472,15 @@ mod tests {
             "target_sha256": "target",
         }))
         .unwrap();
-        assert_eq!(meta.effective_sha256(), Some("target"));
+        assert_eq!(meta.version_id(), Some("target"));
 
         let meta: PatchMetadata = serde_json::from_value(serde_json::json!({
             "sha256": "only-sha256",
         }))
         .unwrap();
-        assert_eq!(meta.effective_sha256(), Some("only-sha256"));
+        assert_eq!(meta.version_id(), Some("only-sha256"));
 
         let meta: PatchMetadata = serde_json::from_value(serde_json::json!({})).unwrap();
-        assert_eq!(meta.effective_sha256(), None);
+        assert_eq!(meta.version_id(), None);
     }
 }

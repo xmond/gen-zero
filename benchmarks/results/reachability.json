@@ -23255,6 +23255,10 @@
     },
     {
       "from": "crates/gen-zero-service/src/lib.rs",
+      "to": "crates/gen-zero-service/src/closed_loop.rs"
+    },
+    {
+      "from": "crates/gen-zero-service/src/lib.rs",
       "to": "crates/gen-zero-service/src/cognitive.rs"
     },
     {
@@ -23412,6 +23416,7 @@
     "crates/gen-zero-provenance/src/lib.rs",
     "crates/gen-zero-provenance/src/mmr.rs",
     "crates/gen-zero-service/src/bridge.rs",
+    "crates/gen-zero-service/src/closed_loop.rs",
     "crates/gen-zero-service/src/cognitive.rs",
     "crates/gen-zero-service/src/error.rs",
     "crates/gen-zero-service/src/imagine.rs",
@@ -23739,6 +23744,11 @@
       "public_symbols": 24
     },
     {
+      "file": "crates/gen-zero-service/src/closed_loop.rs",
+      "declared_modules": [],
+      "public_symbols": 12
+    },
+    {
       "file": "crates/gen-zero-service/src/cognitive.rs",
       "declared_modules": [],
       "public_symbols": 45
@@ -23757,6 +23767,7 @@
       "file": "crates/gen-zero-service/src/lib.rs",
       "declared_modules": [
         "bridge",
+        "closed_loop",
         "cognitive",
         "error",
         "imagine",
@@ -23802,7 +23813,7 @@
     {
       "file": "crates/gen-zero-service/src/server.rs",
       "declared_modules": [],
-      "public_symbols": 13
+      "public_symbols": 14
     },
     {
       "file": "crates/gen-zero-service/src/snapshot.rs",
