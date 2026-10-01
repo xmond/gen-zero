@@ -1,0 +1,10 @@
+luy-dev
+64
+ 03:52:25 up 5 days, 23:55,  3 users,  load average: 1.41, 2.10, 1.32
+               total        used        free      shared  buff/cache   available
+Mem:           92310       25633        2896       15273       79877       66677
+Swap:           8191        8191           0
+Filesystem                        1024-blocks      Used Available Capacity Mounted on
+/dev/mapper/ubuntu--vg-ubuntu--lv   525254200 211851568 286647768      43% /
+rustc 1.98.1 (48a229cea 2026-09-01)
+cargo 1.98.1 (797e8a9bc 2026-08-05)

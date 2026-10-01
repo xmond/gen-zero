@@ -1,0 +1,180 @@
+sample=1
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=42584
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.31s
+
+exit=0
+sample=2
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=42969
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.31s
+
+exit=0
+sample=3
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=34627
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.26s
+
+exit=0
+sample=4
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=41398
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.29s
+
+exit=0
+sample=5
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=43911
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.30s
+
+exit=0
+sample=6
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=42907
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.32s
+
+exit=0
+sample=7
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=42478
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.29s
+
+exit=0
+sample=8
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=42774
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.29s
+
+exit=0
+sample=9
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=42828
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.28s
+
+exit=0
+sample=10
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=34140
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.25s
+
+exit=0
+sample=11
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=42727
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.29s
+
+exit=0
+sample=12
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=42722
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.32s
+
+exit=0
+sample=13
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=34750
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.27s
+
+exit=0
+sample=14
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=43447
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.31s
+
+exit=0
+sample=15
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=42937
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.30s
+
+exit=0
+sample=16
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=42710
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.28s
+
+exit=0
+sample=17
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=43116
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.30s
+
+exit=0
+sample=18
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=42767
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.28s
+
+exit=0
+sample=19
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=34573
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.26s
+
+exit=0
+sample=20
+
+running 1 test
+restore sample: nodes=1024 csr_edges=1 pending_edges=1 elapsed_us=42827
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 141 filtered out; finished in 0.32s
+
+exit=0

@@ -499,6 +499,31 @@ append requires a synced atomic snapshot replacement. Corrupt checkpoints and I/
 are surfaced instead of resetting history. Only one engine may own a checkpoint path at a
 time. The snapshot contains the audit hash key and is created with mode 0600 on Unix.
 
+Set `GENZERO_GRAPH_PERSIST_DIR=/var/lib/gen3/lodgraph` (or
+`ZeroEngineConfig::graph_persist_dir`) to retain the live graph across engine
+restarts. In a MicroVM, `/var/lib/gen3` must be the independently mounted durable
+data disk, not the reflink-reset root disk. Configure the VM/service supervisor
+to refuse startup if that mount is missing; this library does not provision or
+verify a block-device mount. Only one engine can own a graph directory.
+
+Graph transactions (deposit, prune, evolve, coarse-grain and zoom) and automatic
+reflection synchronously commit before returning success. Snapshot version 1
+stores binary node chunks, CSR and mutable metadata in SHA-256-addressed blocks;
+`CURRENT.sha256` contains the checksummed commit manifest. Unchanged blocks are
+reused; serialization/hashing still visits the graph, and changing CSR rewrites
+that CSR block. This is incremental disk output, not an O(delta) write-ahead log.
+Files and directories are synced around the atomic manifest rename. Unreferenced
+blocks are collected after a successful commit. Pending edges, confidence bits,
+payloads/digests, both revocation sets and privileges survive recovery.
+
+A missing block, invalid checksum/version/geometry or incomplete first snapshot
+refuses startup. Commit I/O failure poisons the running engine; further requests
+fail until restart and operator inspection. A failed commit may have reached disk
+if failure occurred after rename, so its outcome is deliberately not acknowledged.
+The seed is loaded only when creating the first snapshot; recovery does not replay
+it. Without the persistence setting, state remains process-local. Recovery timing
+is logged in microseconds; no graph-size-independent latency guarantee is made.
+
 ### Integrated Rust subsystems
 
 The `pipeline` tool and `POST /v1/pipeline/decide` accept

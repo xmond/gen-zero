@@ -45,8 +45,8 @@
 //! `entity_id`, or by `action`, whose entity id is `action_id(action)`: the key
 //! the gate checks, so a pruned action is hard-stopped everywhere.
 //!
-//! The graph lives in process memory. Deposits and prunes are not persisted; a
-//! restart keeps only what the seed file (`GENZERO_GRAPH_SEED`) loads.
+//! GENZERO_GRAPH_PERSIST_DIR mounts durable transaction and reflection commits.
+//! Without it, a restart keeps only the startup seed (GENZERO_GRAPH_SEED).
 
 use crate::cognitive::Rejection;
 use crate::zero::action_id;
@@ -430,7 +430,7 @@ fn graph_meta(graph: &LodGraph) -> Value {
         "csr_edges": graph.csr_snapshot().num_edges(),
         "pending_edges": graph.pending_edge_count(),
         "geometry": graph.geometry(),
-        "persisted": false,
+        "persisted": graph.is_persistent(),
     })
 }
 

@@ -4,6 +4,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum LodError {
+    #[error("Graph persistence refused: {0}")]
+    Persistence(String),
     #[error("Node ID {0} not found in LodGraph")]
     NodeNotFound(u32),
     #[error("Hyperbolic boundary violation: norm squared {norm_sq:.6} >= boundary floor")]
