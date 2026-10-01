@@ -23685,7 +23685,7 @@
     {
       "file": "crates/gen-zero-model/src/qwen.rs",
       "declared_modules": [],
-      "public_symbols": 18
+      "public_symbols": 19
     },
     {
       "file": "crates/gen-zero-model/src/reflex.rs",
