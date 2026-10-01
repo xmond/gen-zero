@@ -9,7 +9,7 @@
 
 use axum::body::Body;
 use axum::http::{header, Request, StatusCode};
-use gen_zero_service::zero::{DEFAULT_TENANT, DEFAULT_WORKSPACE};
+use gen_zero_service::zero::{text_manifold_point, DEFAULT_TENANT, DEFAULT_WORKSPACE};
 use gen_zero_service::{McpServer, MountKey, MountRegistry, PolymorphicZeroEngine, Proposal};
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -81,6 +81,142 @@ async fn text_observation_scans_the_128d_manifold() {
         ask["result"]["meta"]["cognitive_runtime"]["trajectory"]["scan"]["steps"],
         1
     );
+}
+
+fn radius(point: &[f64]) -> f64 {
+    point.iter().map(|x| x * x).sum::<f64>().sqrt()
+}
+
+async fn engine_128() -> Arc<PolymorphicZeroEngine> {
+    let engine = engine();
+    let (status, body) = send(
+        &engine,
+        "/v1/mounts",
+        json!({
+            "base_version": 1, "assets": assets_128(), "reason": "safety radius test"
+        }),
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    engine
+}
+
+#[tokio::test]
+async fn routine_observations_stay_in_the_safe_core_and_are_scanned() {
+    let engine = engine_128().await;
+    for text in [
+        "Water the plants at noon",
+        "Review the weekly report with the team",
+        "Put the clean cups on the shelf",
+    ] {
+        let r = radius(&text_manifold_point(text));
+        assert!((0.1..0.5).contains(&r), "{text}: r = {r}");
+        let (status, body) = send(
+            &engine,
+            "/message",
+            json!({
+                "action": "stream", "observation": text
+            }),
+            Some(TOKEN),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{body}");
+        let meta = &body["result"]["meta"];
+        assert_eq!(meta["cognitive_runtime"]["status"], "engaged");
+        // dh/dt = -h with zero input: the state moves toward the origin.
+        let final_point: Vec<f64> =
+            serde_json::from_value(meta["trajectory"]["final_point"].clone()).unwrap();
+        assert!(radius(&final_point) < r, "{body}");
+    }
+}
+
+#[tokio::test]
+async fn moderate_risk_observations_sit_between_core_and_boundary() {
+    let engine = engine_128().await;
+    let text = "The milk in the fridge smells spoiled";
+    let r = radius(&text_manifold_point(text));
+    assert!((0.5..=0.7).contains(&r), "r = {r}");
+    let (status, body) = send(
+        &engine,
+        "/message",
+        json!({
+            "action": "stream", "observation": text
+        }),
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+#[tokio::test]
+async fn critical_observations_map_near_the_boundary_and_fail_closed() {
+    let engine = engine_128().await;
+    for text in [
+        "The bottle under the sink is toxic poison",
+        "Touch the exposed high voltage cable",
+        "Delete every file and destroy the backups",
+        "The admin account is compromised",
+    ] {
+        let r = radius(&text_manifold_point(text));
+        assert!(r > 0.8 && r < 1.0, "{text}: r = {r}");
+        let (status, body) = send(
+            &engine,
+            "/message",
+            json!({
+                "action": "stream", "observation": text
+            }),
+            Some(TOKEN),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert_eq!(body["error"]["code"], "DomainViolation");
+        assert_eq!(body["error"]["stage"], "geometry_gate");
+        assert_eq!(body["result"]["rejection"]["code"], "DomainViolation");
+        assert!(body["result"]["meta"].get("trajectory").is_none(), "{body}");
+        assert!(
+            body["result"]["meta"].get("cognitive_runtime").is_none(),
+            "{body}"
+        );
+
+        // Other verbs report the same rejection instead of a trajectory.
+        let (_, ask) = send(
+            &engine,
+            "/message",
+            json!({
+                "action": "ask", "context": text, "candidates": ["wait", "review"]
+            }),
+            Some(TOKEN),
+        )
+        .await;
+        let runtime = &ask["result"]["meta"]["cognitive_runtime"];
+        assert_eq!(runtime["status"], "rejected", "{ask}");
+        assert_eq!(runtime["rejection"]["code"], "DomainViolation");
+        assert_eq!(runtime["rejection"]["stage"], "geometry_gate");
+        assert!(runtime.get("trajectory").is_none());
+    }
+}
+
+/// The safety radius binds numeric states too, on entry and inside the window.
+#[tokio::test]
+async fn numeric_state_in_the_critical_zone_is_rejected_by_the_geometry_gate() {
+    let engine = mounted_engine().await;
+    for state in [[0.85, 0.0], [0.0, -0.9]] {
+        let (status, body) = send(&engine, "/message", stream_req(state), Some(TOKEN)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+        assert_eq!(body["error"]["code"], "DomainViolation");
+        assert_eq!(body["error"]["stage"], "geometry_gate");
+        assert!(body["result"]["meta"].get("trajectory").is_none());
+    }
+    // A constant push of 2.0 carries the tangent state to about 1.3: r > 0.85.
+    let mut req = stream_req([0.1, 0.0]);
+    req["cognitive"]["events"] = window([2.0, 0.0], 10);
+    let (status, body) = send(&engine, "/message", req, Some(TOKEN)).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["error"]["code"], "DomainViolation");
+    assert_eq!(body["error"]["stage"], "geometry_gate");
+    let (status, body) = send(&engine, "/message", stream_req([0.84, 0.0]), Some(TOKEN)).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
 }
 
 /// Bridge off: nothing here may depend on the Python scorer.

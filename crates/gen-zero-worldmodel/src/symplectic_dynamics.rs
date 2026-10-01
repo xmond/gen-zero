@@ -69,6 +69,10 @@ pub struct SymplecticWorldModelDynamics {
 }
 
 impl SymplecticWorldModelDynamics {
+    /// Stiffness of the unforced quadratic energy well.
+    pub fn stiffness(&self) -> f32 {
+        self.stiffness
+    }
     pub const DEFAULT_DT: f32 = 0.01;
     pub const DEFAULT_STIFFNESS: f32 = 1.0;
     pub const DEFAULT_ACTION_SCALE: f32 = 0.05;

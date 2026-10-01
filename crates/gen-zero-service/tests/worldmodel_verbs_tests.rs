@@ -1001,6 +1001,58 @@ async fn contact_what_if_audit_and_latent_decide_run_on_the_contact_prior() {
     }
 }
 
+#[tokio::test]
+async fn what_if_contact_energy_verdict_ranks_stabilizing_actions_first() {
+    let engine = engine_without_bridge();
+    let candidates: Vec<String> = (0..16).map(|i| format!("candidate-{i}")).collect();
+    let out = run(
+        &engine,
+        json!({"action": "what_if", "dynamics": "contact", "damping": 0.0,
+        "state": phase_latent(), "candidates": candidates, "horizon": 8}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.rejection);
+    let outcomes = out.meta["outcomes"].as_array().unwrap();
+    let safe: Vec<_> = outcomes
+        .iter()
+        .filter(|o| o["admissible"] == true)
+        .collect();
+    let unsafe_actions: Vec<_> = outcomes
+        .iter()
+        .filter(|o| o["energy_increase"] == true)
+        .collect();
+    assert!(
+        !safe.is_empty() && !unsafe_actions.is_empty(),
+        "{outcomes:?}"
+    );
+    assert!(safe.iter().all(|o| f64_at(&o["energy_change"]) <= 0.0));
+    assert!(unsafe_actions
+        .iter()
+        .all(|o| o["admissible"] == false && o["hazard_detected"] == true));
+    assert_eq!(out.meta["top_candidate"], out.meta["ranking"][0]);
+    let first = out.meta["ranking"][0].as_str().unwrap();
+    assert!(safe.iter().any(|o| o["candidate"] == first));
+}
+
+#[tokio::test]
+async fn what_if_rejects_energy_growth_from_rest() {
+    let engine = engine_without_bridge();
+    let out = run(
+        &engine,
+        json!({"action": "what_if", "dynamics": "contact",
+        "state": latent(0.0), "candidates": ["a", "b"], "horizon": 4}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.rejection);
+    for outcome in out.meta["outcomes"].as_array().unwrap() {
+        assert_eq!(outcome["admissible"], false);
+        assert_eq!(outcome["energy_increase"], true);
+        assert_eq!(outcome["hazard_detected"], true);
+        assert!(f64_at(&outcome["energy_change"]) > 0.0);
+    }
+    assert!(out.meta["top_candidate"].is_null());
+}
+
 /// `damping` is fail-closed: negative, non-finite or non-numeric values are
 /// refused, and the field is refused with any dynamics other than `contact`.
 #[tokio::test]

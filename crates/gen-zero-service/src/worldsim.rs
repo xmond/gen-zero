@@ -458,6 +458,8 @@ struct Rollout {
     first_hazard_step: Option<usize>,
     survival_horizon: usize,
     worst_tier: PolicyTier,
+    initial_energy: f64,
+    final_energy: f64,
 }
 
 impl Rollout {
@@ -472,6 +474,15 @@ impl Rollout {
             "first_hazard_step": self.first_hazard_step,
             "worst_tier": tier_name(self.worst_tier),
             "final_state_norm": self.final_state.l2_norm(),
+            "initial_energy": self.initial_energy,
+            "final_energy": self.final_energy,
+            "energy_change": self.final_energy - self.initial_energy,
+            "energy_increase": self.kind.has_phase_space() && self.final_energy > self.initial_energy,
+            "hazard_detected": self.first_hazard_step.is_some()
+                || (self.kind.has_phase_space() && self.final_energy > self.initial_energy),
+            "admissible": self.first_hazard_step.is_none()
+                && (!self.kind.has_phase_space() || self.final_energy <= self.initial_energy)
+                && self.worst_tier != PolicyTier::Tier3HardStop,
             "trajectory": self.trajectory,
         });
         if with_final_state {
@@ -606,6 +617,7 @@ fn rollout<'a>(
     keep_phase: bool,
     mut pick: impl FnMut(usize, &FullLatent) -> Result<&'a str, Rejection>,
 ) -> Result<Rollout, Rejection> {
+    let initial_energy = stored_energy(model, start);
     let mut current = start.clone();
     let mut trajectory = Vec::with_capacity(horizon);
     let mut phase_states = Vec::new();
@@ -672,6 +684,7 @@ fn rollout<'a>(
     // step is the termination step.
     let first_hazard_step = termination_step;
     let survival_horizon = first_hazard_step.map_or(trajectory.len(), |s| s - 1);
+    let final_energy = stored_energy(model, &current);
     Ok(Rollout {
         kind: model.kind(),
         trajectory,
@@ -686,7 +699,23 @@ fn rollout<'a>(
         first_hazard_step,
         survival_horizon,
         worst_tier,
+        initial_energy,
+        final_energy,
     })
+}
+
+/// Unforced quadratic energy in the model's phase-space well. This common
+/// reference makes energies comparable when different actions shift their wells.
+fn stored_energy(model: &WorldDynamics, state: &FullLatent) -> f64 {
+    let z = state.as_slice();
+    let stiffness = match model {
+        WorldDynamics::Symplectic(m) => f64::from(m.stiffness()),
+        WorldDynamics::Contact(m) => f64::from(m.stiffness()),
+        WorldDynamics::Residual(_) => 1.0,
+    };
+    let half = LATENT_DIM / 2;
+    0.5 * (stiffness * z[..half].iter().map(|&v| f64::from(v).powi(2)).sum::<f64>()
+        + z[half..].iter().map(|&v| f64::from(v).powi(2)).sum::<f64>())
 }
 
 /// Step 1 plays `first`; later steps take the one-step best of `set`:
@@ -778,25 +807,23 @@ pub fn what_if(gate: &PolicyGate, graph: &LodGraph, args: &Value) -> WorldResult
     let model = WorldDynamics::new(spec)?;
     let mut runs = Vec::with_capacity(candidates.len());
     for name in &candidates {
-        let run = rollout(
-            &model,
-            gate,
-            graph,
-            &state,
-            horizon,
-            false,
-            greedy_pick(&model, name, &candidates),
-        )?;
+        let run = rollout(&model, gate, graph, &state, horizon, false, |_, _| {
+            Ok(name.as_str())
+        })?;
         runs.push(run);
     }
-    // Safe before trapped, gate-clear before gate-blocked, then longer
+    // Energy-admissible before trapped, gate-clear before gate-blocked, then longer
     // survival, then higher return. Stable on ties.
+    let is_admissible = |r: &Rollout| {
+        r.first_hazard_step.is_none()
+            && (!r.kind.has_phase_space() || r.final_energy <= r.initial_energy)
+    };
     let mut order: Vec<usize> = (0..runs.len()).collect();
     order.sort_by(|&a, &b| {
         let key = |i: usize| {
             let r = &runs[i];
             (
-                r.first_hazard_step.is_none(),
+                is_admissible(r),
                 r.worst_tier != PolicyTier::Tier3HardStop,
                 r.survival_horizon,
                 r.cumulative_return,
@@ -809,9 +836,10 @@ pub fn what_if(gate: &PolicyGate, graph: &LodGraph, args: &Value) -> WorldResult
             .then(kb.3.total_cmp(&ka.3))
     });
     let ranking: Vec<&str> = order.iter().map(|&i| candidates[i].as_str()).collect();
-    let top = order.first().copied().filter(|&i| {
-        runs[i].first_hazard_step.is_none() && runs[i].worst_tier != PolicyTier::Tier3HardStop
-    });
+    let top = order
+        .first()
+        .copied()
+        .filter(|&i| is_admissible(&runs[i]) && runs[i].worst_tier != PolicyTier::Tier3HardStop);
     let outcomes: Vec<Value> = candidates
         .iter()
         .zip(&runs)
@@ -839,7 +867,7 @@ pub fn what_if(gate: &PolicyGate, graph: &LodGraph, args: &Value) -> WorldResult
     let mut meta = provenance_meta(spec);
     meta["engine"] = json!(ENGINE_WORLDMODEL);
     meta["horizon"] = json!(horizon);
-    meta["continuation_policy"] = json!("greedy_one_step_over_candidates");
+    meta["continuation_policy"] = json!("repeat_candidate");
     meta["outcomes"] = json!(outcomes);
     meta["ranking"] = json!(ranking);
     meta["top_candidate"] = json!(top.map(|i| candidates[i].as_str()));

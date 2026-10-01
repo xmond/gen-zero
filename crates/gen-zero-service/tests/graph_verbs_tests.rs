@@ -20,7 +20,7 @@ const DIM: usize = 1024;
 const REVOCATION_RULE: u32 = u32::MAX;
 
 fn engine() -> PolymorphicZeroEngine {
-    PolymorphicZeroEngine::new().with_bridge(None)
+    PolymorphicZeroEngine::new().with_semantic(None)
 }
 
 fn origin() -> Value {
@@ -299,7 +299,7 @@ async fn seed_file_loads_at_startup_and_a_bad_seed_fails_startup() {
         ZeroEngineConfig::default().with_graph_seed_path(&seed),
     )
     .unwrap()
-    .with_bridge(None);
+    .with_semantic(None);
     let ppr = run(
         &engine,
         json!({"action": "graph_ppr", "graph": {"seeds": [{"entity_id": 11, "weight": 1.0}], "top_k": 2}}),
@@ -342,7 +342,7 @@ async fn engine_with_cycle() -> (PolymorphicZeroEngine, tempfile::TempDir) {
         ZeroEngineConfig::default().with_graph_seed_path(&seed),
     )
     .unwrap()
-    .with_bridge(None);
+    .with_semantic(None);
     let edge = |source: Value, target: Value| json!({"source": source, "target": target, "type": "depends_on", "weight": 1.0});
     let out = run(
         &engine,
@@ -612,7 +612,7 @@ async fn recall_under(params: GeometryParams) -> (Vec<String>, Value) {
         ZeroEngineConfig::default().with_graph_geometry(params),
     )
     .unwrap()
-    .with_bridge(None);
+    .with_semantic(None);
     let out = run(
         &engine,
         json!({"action": "graph_deposit", "graph": {"nodes": [
@@ -673,7 +673,7 @@ async fn configured_graph_geometry_controls_recall_and_coordinate_domain() {
             ZeroEngineConfig::default().with_graph_geometry(params),
         )
         .unwrap()
-        .with_bridge(None);
+        .with_semantic(None);
         let out = run(
             &engine,
             json!({"action": "graph_deposit", "graph": {"nodes": [coord_node(1, "x", norm, 0.0)]}}),

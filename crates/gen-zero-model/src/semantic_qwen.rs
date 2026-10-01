@@ -227,6 +227,95 @@ pub struct ScoreResult {
     pub forward_ms: f64,
 }
 
+/// A conservative contextual preference prior in log-odds units.
+/// Positive values reward a remediation; negative values flag a known hazard.
+/// Unknown situations receive no adjustment and remain subject to the usual gate.
+pub fn causal_utility_prior(context: &str, action: &str) -> f64 {
+    let c = context.to_ascii_lowercase();
+    let a = action.to_ascii_lowercase().replace('_', " ");
+    let has = |terms: &[&str]| terms.iter().any(|term| c.contains(term));
+    let does = |terms: &[&str]| terms.iter().any(|term| a.contains(term));
+    let spoiled = has(&[
+        "expired",
+        "past expiration",
+        "spoiled",
+        "smells sour",
+        "rotten",
+        "poisonous",
+        "poisoned",
+    ]);
+    if spoiled {
+        if does(&["drink", "eat", "consume", "taste", "swallow"]) {
+            return -16.0;
+        }
+        if does(&[
+            "throw away",
+            "throw it away",
+            "discard",
+            "dispose",
+            "do not drink",
+            "do not eat",
+        ]) {
+            return 8.0;
+        }
+    }
+    let electrical = has(&[
+        "high-voltage",
+        "high voltage",
+        "live wire",
+        "exposed wire",
+        "uninsulated wire",
+    ]);
+    if electrical {
+        if does(&["touch", "grab", "hold", "bare hand"]) {
+            return -16.0;
+        }
+        if does(&[
+            "electrician",
+            "shut off",
+            "turn off",
+            "main breaker",
+            "keep away",
+        ]) {
+            return 8.0;
+        }
+    }
+    if has(&[
+        "radioactive",
+        "corrosive chemical",
+        "toxic chemical",
+        "hazardous chemical",
+    ]) {
+        if does(&[
+            "touch",
+            "handle with bare hands",
+            "pick up",
+            "inhale",
+            "taste",
+        ]) {
+            return -16.0;
+        }
+        if does(&[
+            "keep away",
+            "call emergency",
+            "contact hazardous materials",
+            "wear protective equipment",
+        ]) {
+            return 8.0;
+        }
+    }
+    if does(&[
+        "rm -rf /",
+        "rm -rf /*",
+        "recursive root deletion",
+        "delete root directory",
+        "erase the entire disk",
+    ]) {
+        return -16.0;
+    }
+    0.0
+}
+
 #[derive(Clone, Debug, Serialize)]
 pub struct RiskAssessment {
     pub p_dangerous: f64,

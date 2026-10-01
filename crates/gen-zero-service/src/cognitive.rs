@@ -507,7 +507,29 @@ fn norm(v: &[f64]) -> f64 {
     max_abs * scaled_sum_sq.sqrt()
 }
 
+/// Radius `sqrt(c)*|x|` at which the critical boundary zone starts. A state
+/// at or past it needs a human decision, so the geometry gate rejects it.
+pub const SAFETY_RADIUS: f64 = 0.85;
+
 impl PoincareBall {
+    /// Geometric safety radius: reject a ball point in the critical boundary
+    /// zone, `sqrt(c)*|x| >= SAFETY_RADIUS`.
+    pub fn check_safety_radius(&self, x: &[f64], what: &str) -> Outcome<()> {
+        let radius = self.sqrt_c * norm(x);
+        // A non-finite radius must not pass the comparison.
+        if radius < SAFETY_RADIUS {
+            return Ok(());
+        }
+        Err(Rejection::reject(
+            Reject::DomainViolation,
+            "geometry_gate",
+            format!(
+                "{what} is in the critical boundary zone: sqrt(c)*|x| = {radius} >= \
+                 {SAFETY_RADIUS}; human intervention is required"
+            ),
+        ))
+    }
+
     pub fn new(curvature: f64, dim: usize) -> Self {
         Self {
             sqrt_c: curvature.sqrt(),
@@ -1321,6 +1343,7 @@ impl CognitiveRuntime {
     ) -> Outcome<Trajectory> {
         let ball = assets.ball;
         let v0 = ball.log0(&req.state, "cognitive.state")?;
+        ball.check_safety_radius(&req.state, "cognitive.state")?;
         let t_max = events.len();
         let mut pins = Vec::with_capacity(req.pins.len());
         for (i, (step, point)) in req.pins.iter().enumerate() {
@@ -1371,6 +1394,11 @@ impl CognitiveRuntime {
                 }
                 r
             })?;
+        // No certified state may sit in the critical boundary zone.
+        for (i, tangent) in accepted.iter().enumerate() {
+            let point = ball.exp0(tangent, "window state")?;
+            ball.check_safety_radius(&point, &format!("window state {}", i + 1))?;
+        }
         let final_tangent = accepted
             .last()
             .cloned()

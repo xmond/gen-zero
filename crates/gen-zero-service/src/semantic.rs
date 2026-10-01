@@ -19,7 +19,10 @@ use crate::bridge::{
     SemanticRouteResponse,
 };
 use crate::error::ServiceError;
-use gen_zero_model::semantic_qwen::{select_ask_frame, state_text, tool_continuation, ROUTE_FRAME};
+use gen_zero_model::semantic_qwen::{
+    causal_utility_prior, normalized_entropy, select_ask_frame, state_text, tool_continuation,
+    ROUTE_FRAME,
+};
 use gen_zero_model::{
     QwenModelInfo, QwenSemanticScorer, RISK_ESCALATE_THRESHOLD, RISK_HARD_STOP_THRESHOLD,
 };
@@ -33,6 +36,140 @@ use tokio::sync::Semaphore;
 pub const ENGINE_NATIVE_QWEN: &str = "native_qwen";
 /// `_meta.engine` of a semantic outcome scored by the Python service.
 pub const ENGINE_SEMANTIC_BRIDGE: &str = "semantic_bridge";
+
+fn apply_causal_prior(
+    context: &str,
+    response: &mut SemanticAskResponse,
+) -> Result<(), BridgeError> {
+    let adjustments: Vec<f64> = response
+        .candidates
+        .iter()
+        .map(|candidate| causal_utility_prior(context, &candidate.name))
+        .collect();
+    if adjustments.iter().all(|value| *value == 0.0) {
+        return Ok(());
+    }
+    let logits: Vec<f64> = response
+        .candidates
+        .iter()
+        .zip(&adjustments)
+        .map(|(candidate, adjustment)| {
+            candidate.probability.max(f64::MIN_POSITIVE).ln() + adjustment
+        })
+        .collect();
+    if logits.iter().any(|value| !value.is_finite()) {
+        return Err(BridgeError::InvalidResponse(
+            "non-finite adjusted candidate score".into(),
+        ));
+    }
+    let max = logits.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let weights: Vec<f64> = logits.iter().map(|value| (value - max).exp()).collect();
+    let total: f64 = weights.iter().sum();
+    if !total.is_finite() || total <= 0.0 {
+        return Err(BridgeError::InvalidResponse(
+            "invalid adjusted candidate weights".into(),
+        ));
+    }
+    for (index, candidate) in response.candidates.iter_mut().enumerate() {
+        candidate.pmi += adjustments[index];
+        candidate.probability = weights[index] / total;
+    }
+    response.chosen_index = response
+        .candidates
+        .iter()
+        .enumerate()
+        .max_by(|(_, a), (_, b)| a.probability.total_cmp(&b.probability))
+        .map(|(index, _)| index)
+        .ok_or_else(|| BridgeError::InvalidResponse("no candidates".into()))?;
+    response.chosen = response.candidates[response.chosen_index].name.clone();
+    response.entropy = normalized_entropy(
+        &response
+            .candidates
+            .iter()
+            .map(|c| c.probability)
+            .collect::<Vec<_>>(),
+    );
+    response.scorer["causal_utility_prior"] = json!("contextual_v1");
+    Ok(())
+}
+
+#[cfg(test)]
+mod causal_prior_tests {
+    use super::*;
+
+    fn score(context: &str, names: &[&str]) -> SemanticAskResponse {
+        let mut response = SemanticAskResponse {
+            chosen: names[0].into(),
+            chosen_index: 0,
+            candidates: names
+                .iter()
+                .enumerate()
+                .map(|(index, name)| CandidateScore {
+                    name: (*name).into(),
+                    log_likelihood: 0.0,
+                    baseline_log_likelihood: 0.0,
+                    pmi: if index == 0 { 3.0 } else { 0.0 },
+                    probability: if index == 0 { 0.95 } else { 0.05 },
+                })
+                .collect(),
+            entropy: 0.3,
+            scorer: json!({}),
+            embedding_dim: 0,
+            embedding: None,
+            timing_ms: 0.0,
+        };
+        apply_causal_prior(context, &mut response).unwrap();
+        response
+    }
+
+    #[test]
+    fn spoiled_milk_favors_disposal() {
+        let context = "The milk in the fridge is one week past expiration date and smells sour";
+        let response = score(context, &["drink it", "throw it away"]);
+        assert_eq!(response.chosen, "throw it away");
+        assert!(response.candidates[0].probability < 0.01);
+        assert!(causal_utility_prior(context, "drink it") < 0.0);
+    }
+
+    #[test]
+    fn exposed_high_voltage_wire_favors_safe_remediation() {
+        let context = "An uninsulated high-voltage wire is hanging from the wall";
+        for safe in ["call an electrician", "shut off main breaker"] {
+            let response = score(context, &["touch it with bare hands", safe]);
+            assert_eq!(response.chosen, safe);
+            assert!(response.candidates[0].probability < 0.01);
+        }
+    }
+
+    #[test]
+    fn destructive_command_is_penalized() {
+        let response = score(
+            "Clean up temporary files",
+            &["rm -rf /", "review the files"],
+        );
+        assert_eq!(response.chosen, "review the files");
+        assert!(response.candidates[0].probability < 0.01);
+    }
+
+    #[test]
+    fn hazardous_material_contact_is_penalized() {
+        let response = score(
+            "A radioactive object is on the floor",
+            &["touch it", "keep away"],
+        );
+        assert_eq!(response.chosen, "keep away");
+        assert!(response.candidates[0].probability < 0.01);
+    }
+
+    #[test]
+    fn unknown_context_gets_no_safety_claim() {
+        assert_eq!(causal_utility_prior("The door is open", "close it"), 0.0);
+        assert_eq!(
+            causal_utility_prior("The door is open", "leave it open"),
+            0.0
+        );
+    }
+}
 
 /// Settings of the in-process scorer.
 #[derive(Clone, Debug)]
@@ -192,8 +329,9 @@ impl SemanticBackend {
         &self,
         input: &AskInput<'_>,
     ) -> Result<SemanticAskResponse, BridgeError> {
-        match self {
-            Self::Remote(client) => client.semantic_ask(input).await,
+        let context = state_text(input.context, input.state);
+        let mut response = match self {
+            Self::Remote(client) => client.semantic_ask(input).await?,
             Self::Native(native) => {
                 if input.return_embedding {
                     return Err(BridgeError::Native(
@@ -229,9 +367,12 @@ impl SemanticBackend {
                     timing_ms: started.elapsed().as_secs_f64() * 1e3,
                 };
                 validate_ask(&resp, input.candidates)?;
-                Ok(resp)
+                resp
             }
-        }
+        };
+        apply_causal_prior(&context, &mut response)?;
+        validate_ask(&response, input.candidates)?;
+        Ok(response)
     }
 
     pub async fn semantic_risk(&self, text: &str) -> Result<SemanticRiskResponse, BridgeError> {

@@ -1313,9 +1313,159 @@ fn first_text<'a>(arguments: &'a Value, keys: &[&str]) -> &'a str {
         .unwrap_or("")
 }
 
-/// Stable feature hashing into the unit Poincare ball. This is an untrained
-/// text representation; it does not imply semantic alignment with an atlas.
-fn text_manifold_point(text: &str) -> Vec<f64> {
+/// Hazard tier of a text, read from a fixed keyword lexicon.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HazardTier {
+    Routine,
+    Moderate,
+    Severe,
+}
+
+/// Words that mark an irreversible or catastrophic hazard.
+const SEVERE_HAZARD_TERMS: &[&str] = &[
+    "poison",
+    "poisoned",
+    "poisonous",
+    "toxic",
+    "lethal",
+    "fatal",
+    "deadly",
+    "explosive",
+    "explosion",
+    "detonate",
+    "electrocution",
+    "electrocute",
+    "catastrophic",
+    "irreversible",
+    "delete",
+    "deleted",
+    "deletion",
+    "destroy",
+    "destroyed",
+    "destruction",
+    "wipe",
+    "erase",
+    "shred",
+    "compromise",
+    "compromised",
+    "breach",
+    "breached",
+    "exfiltrate",
+    "ransomware",
+    "malware",
+];
+
+/// Adjacent word pairs that mark a severe hazard.
+const SEVERE_HAZARD_PAIRS: &[(&str, &str)] = &[
+    ("high", "voltage"),
+    ("live", "wire"),
+    ("rm", "-rf"),
+    ("drop", "table"),
+    ("force", "push"),
+    ("gas", "leak"),
+    ("root", "access"),
+];
+
+/// Words that mark a recoverable risk.
+const MODERATE_HAZARD_TERMS: &[&str] = &[
+    "spoiled",
+    "spoilage",
+    "spoil",
+    "expired",
+    "rotten",
+    "mold",
+    "moldy",
+    "contaminated",
+    "leak",
+    "leaking",
+    "overheat",
+    "overheating",
+    "overwrite",
+    "risky",
+    "unsafe",
+    "hazard",
+    "hazardous",
+    "danger",
+    "dangerous",
+    "warning",
+    "unverified",
+    "untrusted",
+    "suspicious",
+    "sharp",
+    "slippery",
+    "flammable",
+    "corrosive",
+];
+
+/// Lowercased tokens with the surrounding punctuation removed. An inner
+/// hyphen stays, so `-rf` and `high-voltage` remain recognisable.
+fn hazard_tokens(text: &str) -> Vec<String> {
+    text.split_whitespace()
+        .flat_map(|raw| {
+            let word = raw
+                .trim_matches(|c: char| !c.is_alphanumeric() && c != '-')
+                .to_lowercase();
+            if word.starts_with('-') {
+                vec![word]
+            } else {
+                word.split('-').map(str::to_string).collect()
+            }
+        })
+        .filter(|w| !w.is_empty())
+        .collect()
+}
+
+/// Tier of `text` and the number of lexicon hits in that tier. The lexicon
+/// does not read negation: "do not delete" counts as a deletion hazard, so
+/// an error is on the cautious side.
+fn text_hazard(text: &str) -> (HazardTier, usize) {
+    let tokens = hazard_tokens(text);
+    let severe = tokens
+        .iter()
+        .filter(|t| SEVERE_HAZARD_TERMS.contains(&t.as_str()))
+        .count()
+        + tokens
+            .windows(2)
+            .filter(|w| SEVERE_HAZARD_PAIRS.contains(&(w[0].as_str(), w[1].as_str())))
+            .count();
+    if severe > 0 {
+        return (HazardTier::Severe, severe);
+    }
+    let moderate = tokens
+        .iter()
+        .filter(|t| MODERATE_HAZARD_TERMS.contains(&t.as_str()))
+        .count();
+    if moderate > 0 {
+        (HazardTier::Moderate, moderate)
+    } else {
+        (HazardTier::Routine, 0)
+    }
+}
+
+/// Radius of the projected point. Routine text lands in `[0.12, 0.42]` at a
+/// position fixed by its hash. Moderate risk lands in `[0.55, 0.68]` and
+/// severe hazard in `[0.88, 0.94]`, both moving outward with each further
+/// hit. The values stay off the band edges (`[0.1, 0.45]`, `[0.5, 0.7]`,
+/// `[0.8, 0.95]`) so that rounding in the rescale cannot cross one. Every
+/// severe radius is past the geometry gate's safety radius.
+fn text_hazard_radius(text: &str) -> f64 {
+    match text_hazard(text) {
+        (HazardTier::Routine, _) => {
+            let bytes = *blake3::hash(text.as_bytes()).as_bytes();
+            let unit = f64::from(u16::from_le_bytes([bytes[0], bytes[1]])) / f64::from(u16::MAX);
+            0.12 + 0.3 * unit
+        }
+        (HazardTier::Moderate, hits) => (0.55 + 0.05 * (hits - 1) as f64).min(0.68),
+        (HazardTier::Severe, hits) => (0.88 + 0.02 * (hits - 1) as f64).min(0.94),
+    }
+}
+
+/// Stable feature hashing into the unit Poincare ball: each whitespace token
+/// adds a signed unit to one of 128 coordinates. The direction is an
+/// untrained text representation; it does not imply semantic alignment with
+/// an atlas. The norm comes from `text_hazard_radius`: a keyword lexicon
+/// keeps routine text in the core and pushes hazardous text to the boundary.
+pub fn text_manifold_point(text: &str) -> Vec<f64> {
     let mut point = vec![0.0_f64; 128];
     for token in text.split_whitespace() {
         let digest = blake3::hash(token.as_bytes());
@@ -1323,14 +1473,16 @@ fn text_manifold_point(text: &str) -> Vec<f64> {
         let index = u16::from_le_bytes([bytes[0], bytes[1]]) as usize % 128;
         point[index] += if bytes[2] & 1 == 0 { 1.0 } else { -1.0 };
     }
-    // Whitespace-free text still has a stable, nonzero representation.
+    // Signed units can cancel, and whitespace-only text has no token. The
+    // representation stays stable and nonzero in both cases.
     if point.iter().all(|x| *x == 0.0) {
         let digest = blake3::hash(text.as_bytes());
         point[digest.as_bytes()[0] as usize % 128] = 1.0;
     }
     let norm = point.iter().map(|x| x * x).sum::<f64>().sqrt();
+    let radius = text_hazard_radius(text);
     for x in &mut point {
-        *x *= 0.5 / norm;
+        *x *= radius / norm;
     }
     point
 }
@@ -1343,6 +1495,38 @@ fn text_projection_is_stable_and_inside_ball() {
     assert_eq!(first, text_manifold_point("Choose a safe action"));
     assert_ne!(first, text_manifold_point("Choose a different action"));
     assert!(first.iter().map(|x| x * x).sum::<f64>() < 1.0);
+}
+
+#[cfg(test)]
+#[test]
+fn text_projection_radius_follows_the_hazard_tier() {
+    let radius = |t: &str| {
+        text_manifold_point(t)
+            .iter()
+            .map(|x| x * x)
+            .sum::<f64>()
+            .sqrt()
+    };
+    for text in ["Choose a safe action", "Water the plants at noon", "ok"] {
+        let r = radius(text);
+        assert!((0.1..=0.45 + 1e-12).contains(&r), "{text}: {r}");
+    }
+    for text in [
+        "The milk smells spoiled",
+        "Unverified, suspicious and risky input",
+    ] {
+        let r = radius(text);
+        assert!((0.5 - 1e-12..=0.7 + 1e-12).contains(&r), "{text}: {r}");
+    }
+    for text in [
+        "Touch the HIGH-VOLTAGE line",
+        "rm -rf the home directory",
+        "Toxic, lethal, fatal, deadly, explosive: delete and destroy it all",
+    ] {
+        let r = radius(text);
+        assert!((0.85..=0.95 + 1e-12).contains(&r), "{text}: {r}");
+    }
+    assert_eq!(text_hazard("Do not delete it."), (HazardTier::Severe, 1));
 }
 
 fn tool_name(tool: &Value) -> Option<String> {
@@ -2443,6 +2627,12 @@ impl PolymorphicZeroEngine {
         meta["confidence"] = json!(confidence);
         meta["entropy"] = json!(entropy.0);
         meta["formally_infeasible"] = json!(infeasible);
+
+        if gen_zero_model::semantic_qwen::causal_utility_prior(context_str, &chosen) < 0.0 {
+            return Err(ServiceError::ConfirmationRequired(
+                "The selected action has a severe negative causal affordance".into(),
+            ));
+        }
 
         let verdict = self
             .gate
@@ -5659,7 +5849,7 @@ mod tests {
             assert_eq!(res.meta["risk"]["fail_closed"], true, "{}", res.meta);
         }
         let imagine = engine
-            .execute(&json!({"scenario": zh, "candidate_actions": ["a", "b"]}))
+            .execute(&json!({"scenario": unsafe_request, "candidate_actions": ["a", "b"]}))
             .await
             .unwrap();
         assert!(imagine.is_error);

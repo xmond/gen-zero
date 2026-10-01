@@ -646,7 +646,7 @@ async fn reflection_closes_http_simulation_to_policy_gate_loop() {
         .unwrap();
     let engine = Arc::new(
         PolymorphicZeroEngine::new()
-            .with_bridge(None)
+            .with_semantic(None)
             .with_lod_graph(graph.clone()),
     );
     assert!(!graph.is_revoked(0));
@@ -709,7 +709,7 @@ async fn reflection_what_if_and_audit_use_real_dynamics() {
         let graph = Arc::new(LodGraph::new());
         let engine = Arc::new(
             PolymorphicZeroEngine::new()
-                .with_bridge(None)
+                .with_semantic(None)
                 .with_lod_graph(graph.clone()),
         );
         let mut request = fields;
@@ -762,7 +762,7 @@ async fn hierarchical_prior_blocks_pending_falsified_successors_and_injects_macr
         .unwrap();
     let engine = Arc::new(
         PolymorphicZeroEngine::new()
-            .with_bridge(None)
+            .with_semantic(None)
             .with_lod_graph(graph),
     );
     let request =
@@ -787,7 +787,7 @@ async fn reflection_opt_in_is_strict_and_default_has_no_mutation() {
     let graph = Arc::new(LodGraph::new());
     let engine = Arc::new(
         PolymorphicZeroEngine::new()
-            .with_bridge(None)
+            .with_semantic(None)
             .with_lod_graph(graph.clone()),
     );
     let (status, body) = post(
@@ -821,7 +821,7 @@ async fn policy_audit_reflection_is_idempotent_and_evolution_conflict_is_explici
     ));
     let engine = Arc::new(
         PolymorphicZeroEngine::new()
-            .with_bridge(None)
+            .with_semantic(None)
             .with_gate(gate)
             .with_lod_graph(graph.clone()),
     );
@@ -858,7 +858,7 @@ async fn policy_audit_reflection_is_idempotent_and_evolution_conflict_is_explici
         .unwrap();
     let engine = Arc::new(
         PolymorphicZeroEngine::new()
-            .with_bridge(None)
+            .with_semantic(None)
             .with_lod_graph(graph.clone()),
     );
     let (status, body) = post(
