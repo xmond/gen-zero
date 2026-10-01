@@ -1297,6 +1297,40 @@ pub struct PprRanking {
 /// PPR convergence tolerance of [`LodGraph::hybrid_rag_search`].
 pub const HYBRID_PPR_TOLERANCE: f32 = 1e-6;
 
+/// Hard node cap shared by every insertion path, including reflection.
+pub const MAX_GRAPH_NODES: usize = 1 << 20;
+
+fn check_node_capacity(current: usize, additional: usize) -> Result<(), LodError> {
+    if additional > MAX_GRAPH_NODES.saturating_sub(current) || current > MAX_GRAPH_NODES {
+        return Err(LodError::GraphCapacityExceeded {
+            current,
+            additional,
+            max: MAX_GRAPH_NODES,
+        });
+    }
+    Ok(())
+}
+
+/// Normalize each track independently before comparing or weighting anchors.
+/// An all-zero track consists entirely of exact matches and stays zero.
+fn normalize_anchor_distances(anchors: &mut [(u32, f32, AnchorMatch)]) -> Result<(), LodError> {
+    let mut max_distance = 0.0_f32;
+    for &(_, distance, _) in anchors.iter() {
+        if !distance.is_finite() || distance < 0.0 {
+            return Err(LodError::InvalidQuery(
+                "invalid retrieval anchor distance".into(),
+            ));
+        }
+        max_distance = max_distance.max(distance);
+    }
+    if max_distance > 0.0 {
+        for (_, distance, _) in anchors {
+            *distance /= max_distance;
+        }
+    }
+    Ok(())
+}
+
 /// Most nodes that can hold one alias. Each new holder is linked to every
 /// earlier one, so this bounds the edges one insert adds.
 pub const MAX_ALIAS_HOLDERS: usize = 64;
@@ -1369,8 +1403,9 @@ pub struct RagHit {
     pub confidence: f32,
     /// PPR relevance from the anchors; the ranking key.
     pub ppr_score: f32,
-    /// Product-geodesic distance from the query to the node's closest anchor
-    /// when the node is an anchor; `None` when diffusion alone reached it.
+    /// Dimensionless distance: raw geodesic distance divided by the maximum
+    /// of its track's recalled anchors (all-zero tracks remain zero). Minimum
+    /// across tracks for duplicates; `None` when diffusion alone reached it.
     pub anchor_distance: Option<f32>,
     /// Which of the node's anchors that was; `None` with `anchor_distance`.
     pub anchor_match: Option<AnchorMatch>,
@@ -1399,7 +1434,8 @@ pub struct HybridRagResult {
     /// Every anchor plus at most `top_k` diffusion-reached nodes, highest PPR
     /// score first.
     pub hits: Vec<RagHit>,
-    /// Stage 2 anchors `(node id, distance)`, closest first.
+    /// Stage 2 anchors `(node id, normalized distance)`, closest first.
+    /// Distances are dimensionless, normalized independently within each track.
     pub anchors: Vec<(u32, f32)>,
     /// Live nodes kept by the Stage 1 Hamming prefilter.
     pub stage1_candidates: usize,
@@ -1552,6 +1588,7 @@ impl LodGraph {
 
     /// [`Self::add_node`] under a held write lock.
     fn insert_node(&self, st: &mut GraphState, mut node: LodNode) -> Result<u32, LodError> {
+        check_node_capacity(st.nodes.len(), 1)?;
         node.validate_aliases()?;
         let mut alias_keys: Vec<String> = Vec::with_capacity(node.aliases.len());
         node.alias_anchors.clear();
@@ -2136,7 +2173,9 @@ impl LodGraph {
         }
         probe.coord.to_point(&self.manifold)?;
         let (nodes, revs) = (&st.nodes, &st.revocations);
-        let live = |n: &LodNode| !n.status.is_falsified() && !revs.contains(&n.entity_id);
+        let live = |n: &LodNode| {
+            !n.is_internal_evidence() && !n.status.is_falsified() && !revs.contains(&n.entity_id)
+        };
 
         let mut candidates: Vec<(u32, u32)> = nodes
             .iter()
@@ -2212,11 +2251,16 @@ impl LodGraph {
     ///    CRAG neighbor expansion when the top two are within `crag_margin`; the
     ///    `top_k` closest are the anchors.
     /// 3. Personalized PageRank over the committed CSR snapshot, seeded with
-    ///    each anchor at weight `1 / (1 + distance)` (normalized by PPR), teleport
+    ///    each anchor at weight `1 / (1 + normalized_distance)` (normalized by PPR), teleport
     ///    probability `ppr_alpha`, at most `ppr_iters` iterations, tolerance
     ///    [`HYBRID_PPR_TOLERANCE`]. PPR follows every edge type, in the edge's
     ///    direction only: an anchor reaches the targets of its `Semantic`,
     ///    `Validates` and other out-edges, not their sources.
+    ///
+    /// Before fusion, divide each track's anchor distances by its maximum; an
+    /// all-zero track stays zero. This removes multiplicative scale differences,
+    /// but does not calibrate relevance across tracks or across queries.
+    /// Internal reflection evidence is excluded from recall and result hits.
     ///
     /// In stages 1 and 2 a node counts by its closest chart anchor, so a query
     /// that matches an alias makes the node an anchor ([`RagHit::anchor_match`]).
@@ -2258,7 +2302,7 @@ impl LodGraph {
     /// vector is projected with [`Self::project_dense`] and compared with the
     /// embedding anchors only. With both, each track runs stages 1 and 2 on its
     /// own and gives up to `top_k` anchors; a node both tracks found counts
-    /// once, by the closer of the two. So there are at most `2 * top_k` anchors
+    /// once, by the smaller independently normalized distance. So there are at most `2 * top_k` anchors
     /// and `3 * top_k` hits, `stage1_candidates` is the sum over the tracks,
     /// and neither track can crowd the other out.
     ///
@@ -2342,7 +2386,8 @@ impl LodGraph {
         let mut matched: Vec<(u32, f32, AnchorMatch)> = Vec::new();
         let (mut stage1_candidates, mut searchable_nodes) = (0, 0);
         for probe in probes {
-            let recall = self.recall_in(st, probe, top_k, crag_margin)?;
+            let mut recall = self.recall_in(st, probe, top_k, crag_margin)?;
+            normalize_anchor_distances(&mut recall.anchors)?;
             stage1_candidates += recall.stage1_candidates;
             searchable_nodes = recall.searchable_nodes;
             for anchor in recall.anchors {
@@ -2358,7 +2403,11 @@ impl LodGraph {
             searchable_nodes = st
                 .nodes
                 .iter()
-                .filter(|n| !n.status.is_falsified() && !st.revocations.contains(&n.entity_id))
+                .filter(|n| {
+                    !n.is_internal_evidence()
+                        && !n.status.is_falsified()
+                        && !st.revocations.contains(&n.entity_id)
+                })
                 .filter(|n| {
                     probes
                         .iter()
@@ -2386,6 +2435,9 @@ impl LodGraph {
             .ranked
             .iter()
             .filter(|&&(id, score)| {
+                if st.nodes[id as usize].is_internal_evidence() {
+                    return false;
+                }
                 if anchors.iter().any(|a| a.0 == id) {
                     return true;
                 }
@@ -2909,9 +2961,17 @@ impl LodGraph {
         let _txn = self.txn_lock.lock();
         self.check_persistence()?;
         let mut live = self.state.write();
-        let mut staged = live.clone();
         let result = (|| {
             let entity = u64::from(action);
+            let digest = crate::node::payload_digest(&format!("action:{action}\n{payload}"));
+            let evidence_entity =
+                u64::from_le_bytes(digest[..8].try_into().unwrap()) | (1_u64 << 63);
+            let additional = usize::from(!live.entity_index.contains_key(&entity))
+                + usize::from(!live.entity_index.contains_key(&evidence_entity));
+            // Refuse before copying the graph or staging either node. The error
+            // branch below still quarantines the action and persists revocation.
+            check_node_capacity(live.nodes.len(), additional)?;
+            let mut staged = live.clone();
             let target = match staged.entity_index.get(&entity) {
                 Some(&id) => id,
                 None => self.insert_node(
@@ -2930,12 +2990,11 @@ impl LodGraph {
                     "cannot evolve axiomatic action {action}; quarantined"
                 )));
             }
-            let digest = crate::node::payload_digest(&format!("action:{action}\n{payload}"));
-            let evidence_entity =
-                u64::from_le_bytes(digest[..8].try_into().unwrap()) | (1_u64 << 63);
             let evidence = match staged.entity_index.get(&evidence_entity) {
                 Some(&id) => {
-                    if staged.nodes[id as usize].payload.as_deref() != Some(payload) {
+                    if !staged.nodes[id as usize].is_internal_evidence()
+                        || staged.nodes[id as usize].payload.as_deref() != Some(payload)
+                    {
                         return Err(LodError::InvalidQuery("reflection entity collision".into()));
                     }
                     let csr = self.csr_snapshot.load_full();
@@ -2969,7 +3028,7 @@ impl LodGraph {
                     .with_prior(1.0)
                     .with_payload(
                         payload,
-                        Some("pipeline:failure-observation".into()),
+                        Some(crate::node::INTERNAL_EVIDENCE_SOURCE.into()),
                         timestamp_ns,
                     )?;
                     let id = self.insert_node(&mut staged, node)?;
@@ -2996,16 +3055,17 @@ impl LodGraph {
                 staged.manual_revocations.insert(entity);
                 ReflectionRevocation::Quarantine
             };
-            Ok(ReflectionReport {
+            let report = ReflectionReport {
                 evidence,
                 target,
                 revocation,
                 target_confidence: staged.nodes[target as usize].confidence,
                 evolution,
-            })
+            };
+            Ok((staged, report))
         })();
         match result {
-            Ok(report) => {
+            Ok((staged, report)) => {
                 *live = staged;
                 drop(live);
                 self.persist_commit()?;
@@ -3064,6 +3124,22 @@ impl GraphFactProvider for LodGraph {
 mod tests {
     use super::*;
     use crate::node::LodBand;
+
+    #[test]
+    fn normalization_handles_empty_exact_and_invalid_tracks() {
+        normalize_anchor_distances(&mut []).unwrap();
+        let mut exact = [
+            (0, 0.0, AnchorMatch::Primary),
+            (1, 0.0, AnchorMatch::Alias(0)),
+        ];
+        normalize_anchor_distances(&mut exact).unwrap();
+        assert!(exact.iter().all(|a| a.1 == 0.0));
+        for bad in [f32::NAN, f32::INFINITY, -1.0] {
+            assert!(normalize_anchor_distances(&mut [(0, bad, AnchorMatch::Embedding)]).is_err());
+        }
+        assert!(check_node_capacity(MAX_GRAPH_NODES, 0).is_ok());
+        assert!(check_node_capacity(MAX_GRAPH_NODES, 1).is_err());
+    }
 
     fn node(label: &str, entity: u64) -> LodNode {
         LodNode::new(
@@ -4546,8 +4622,14 @@ mod tests {
             .hybrid_rag_search(&coord, &hdc, 2, 0.0, 0.2, 300)
             .unwrap();
         let recall = graph.two_stage_recall(&coord, &hdc, 2, 0.0).unwrap();
-        assert_eq!(result.anchors, recall);
-        let seeds: Vec<(u32, f32)> = recall
+        let max_distance = recall.iter().map(|a| a.1).fold(0.0_f32, f32::max);
+        assert!(max_distance > 0.0);
+        let normalized: Vec<_> = recall
+            .iter()
+            .map(|&(id, d)| (id, d / max_distance))
+            .collect();
+        assert_eq!(result.anchors, normalized);
+        let seeds: Vec<(u32, f32)> = normalized
             .iter()
             .map(|&(id, d)| (id, 1.0 / (1.0 + d)))
             .collect();
@@ -4931,15 +5013,13 @@ mod tests {
         assert_eq!(result.hits[1].anchor_distance, None);
         assert_eq!(result.hits[1].payload.as_deref(), Some(HANDWHEEL));
         assert!(result.hits[1].ppr_score > 0.0);
-        // The anchor distance is the geodesic distance to the dense projection.
+        // A single non-exact anchor is its track's maximum, so normalizes to 1.
         let (qc, _) = graph.project_dense(&query).unwrap();
         let stored = graph.get_node(target).unwrap();
         assert_eq!(stored.placement, Placement::Embedding);
         assert_eq!(Some(stored.coord), stored.embedding_anchor.map(|a| a.coord));
-        assert_eq!(
-            result.anchors[0].1,
-            graph.distance(&stored.coord, &qc).unwrap()
-        );
+        assert!(graph.distance(&stored.coord, &qc).unwrap() > 0.0);
+        assert_eq!(result.anchors[0].1, 1.0);
 
         // Control: without the edge the procedure node is not recalled.
         let (control, target, _) = embedded_graph(&query, false);

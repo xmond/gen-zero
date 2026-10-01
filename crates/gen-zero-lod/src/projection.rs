@@ -11,13 +11,17 @@
 //!
 //! [`TextEmbeddingProjector::project_dense`] takes a dense embedding that an
 //! external model made (16 to 8192 values) and hashes it the same way, each
-//! axis as one feature weighted by its signed value. It adds no meaning: two
-//! vectors land close exactly when their cosine is high, so the result is as
-//! semantic as the model behind the vectors, and no model lives in this crate.
-//! The fingerprint keeps the angle (`256 * theta / pi` expected Hamming bits).
-//! The coordinate is a 16-number sketch of the direction: it orders clearly
-//! different cosines and blurs close ones. Vectors of different dimensions, and
-//! text and dense projections, share no hyperplane and must not be compared.
+//! axis as one feature weighted by its signed value. It adds no learned
+//! semantics or cross-model manifold alignment: the 256-bit fingerprint uses
+//! fixed keyed pseudo-random signs (SimHash), and the coordinate uses fixed
+//! keyed real-valued random-projection rows before mapping into the chart.
+//! Random-hyperplane analysis gives an angular bit-mismatch rate of `theta / pi`
+//! in an ideal ensemble, but this deterministic finite projection has only a
+//! weak statistical relation to the input angle. It is lossy, is not an
+//! isometry, and provides no guarantee for cosine, chart distance, Hamming
+//! distance, or candidate ranking. Vectors of different dimensions, and text
+//! and dense projections, use different feature hashes and must not be
+//! compared.
 //!
 //! The text pipeline:
 //!
@@ -26,10 +30,14 @@
 //!    each word padded with `^` and `$`. Each feature is hashed with keyed
 //!    BLAKE3 (the key is derived from [`PROJECTOR_VERSION`]) and weighted
 //!    `1 + ln(tf)`.
-//! 3. Fingerprint: Charikar SimHash. Every feature hash seeds 256 pseudo-random
-//!    signs; bit `i` is set when the weighted sum of sign `i` is positive. The
-//!    expected Hamming distance of two fingerprints is `256 * theta / pi`,
-//!    `theta` the angle between the two weighted feature vectors.
+//! 3. Fingerprint: Charikar SimHash (a deterministic random-sign projection).
+//!    Every feature hash seeds 256 pseudo-random signs; bit `i` is set when the
+//!    weighted sum of sign `i` is positive. For an ideal independent
+//!    random-hyperplane ensemble, the expected Hamming distance is
+//!    `256 * theta / pi`, where `theta` is the angle between the weighted
+//!    feature vectors. The fixed finite hash used here is only a lossy
+//!    statistical sketch, so that relationship does not guarantee a distance or
+//!    ranking.
 //! 4. Coordinate: a 16-row random projection of the same feature vector with
 //!    entries uniform in `[-1, 1]`, divided by the vector's norm and scaled to
 //!    unit variance (`u`). Then
@@ -58,8 +66,8 @@ use crate::node::{MAX_EMBEDDING_DIM, MAX_PAYLOAD_BYTES, MIN_EMBEDDING_DIM};
 pub const PROJECTOR_VERSION: &str = "gen-zero-lod/lexical-ngram-simhash/v1";
 
 /// Identity of the dense projection, [`TextEmbeddingProjector::project_dense`].
-/// It names the hashing only: which model made the vectors is the caller's to
-/// keep fixed.
+/// It names the deterministic hashing only: which model made the vectors is
+/// the caller's to keep fixed, and no learned alignment is performed.
 pub const DENSE_PROJECTOR_VERSION: &str = "gen-zero-lod/dense-signed-random-projection/v1";
 
 /// Bits in an HDC fingerprint.
@@ -109,10 +117,12 @@ impl TextEmbeddingProjector {
         self.project_features(&self.features(text)?)
     }
 
-    /// Project a dense embedding to a chart coordinate and a 256-bit SimHash
-    /// fingerprint. See the module docs. Refused: a dimension outside
-    /// [`MIN_EMBEDDING_DIM`]..=[`MAX_EMBEDDING_DIM`], a value that is not
-    /// finite, and a vector of norm 0.
+    /// Project a dense embedding to a chart coordinate and a 256-bit
+    /// deterministic random-sign (SimHash) fingerprint. The result is a
+    /// lossy sketch with only a weak statistical relation to input angles; it
+    /// makes no cosine, distance, or ranking guarantee. Refused: a dimension
+    /// outside [`MIN_EMBEDDING_DIM`]..=[`MAX_EMBEDDING_DIM`], a value that is
+    /// not finite, and a vector of norm 0.
     pub fn project_dense(
         &self,
         embedding: &[f32],
@@ -148,9 +158,9 @@ impl TextEmbeddingProjector {
         self.project_features(&features)
     }
 
-    /// Fingerprint and coordinate of one weighted feature vector: SimHash signs
-    /// and the 16-row random projection, both seeded by the feature hashes. The
-    /// sums run in slice order.
+    /// Fingerprint and coordinate of one weighted feature vector: deterministic
+    /// SimHash signs and the 16-row random projection, both seeded by the
+    /// feature hashes. The sums run in slice order.
     fn project_features(
         &self,
         features: &[(u64, f64)],
@@ -484,7 +494,7 @@ mod tests {
     }
 
     #[test]
-    fn dense_fingerprint_keeps_the_angle_between_vectors() {
+    fn dense_fingerprint_has_a_weak_angular_statistical_signal() {
         let p = TextEmbeddingProjector::new(1.0).unwrap();
         for dim in [128, 256, 512] {
             for cos in [0.95_f64, 0.8, 0.5, 0.0, -0.5] {
@@ -503,8 +513,9 @@ mod tests {
                     .sum::<f64>()
                     / trials as f64;
                 println!("dim {dim} cos {cos}: mean hamming {mean:.2}, expected {expected:.2}");
-                // One fingerprint pair has a standard deviation of at most 8
-                // bits, so the mean of 64 has 1; allow 4 of those.
+                // This aggregate sanity check exercises the angular tendency
+                // of the fixed hash; it is not a per-pair distance or ranking
+                // guarantee.
                 assert!(
                     (mean - expected).abs() < 4.0,
                     "dim {dim} cos {cos}: {mean} vs {expected}"
@@ -514,7 +525,8 @@ mod tests {
     }
 
     /// How often each stage puts a vector at cosine `near` ahead of one at
-    /// cosine `far`, over 400 triples of 256 dimensions.
+    /// cosine `far`, over 400 triples of 256 dimensions. This reports a
+    /// synthetic statistical sanity check, not a ranking guarantee.
     fn ordering_rates(near: f64, far: f64) -> (f64, f64) {
         let p = TextEmbeddingProjector::new(1.0).unwrap();
         let trials = 400_u64;
@@ -540,13 +552,13 @@ mod tests {
     }
 
     #[test]
-    fn dense_stages_order_clear_cosine_gaps_and_blur_close_ones() {
+    fn dense_stages_show_statistical_tendency_without_a_ranking_guarantee() {
         let (hamming, geodesic) = ordering_rates(0.9, 0.3);
         println!("cos 0.9 vs 0.3: hamming {hamming:.3}, geodesic {geodesic:.3}");
         assert!(hamming >= 0.99, "hamming {hamming}");
         assert!(geodesic >= 0.95, "geodesic {geodesic}");
         // The 16-number coordinate cannot split close cosines reliably. This
-        // records the limit; it is not a target.
+        // records a synthetic limit, not a target or a per-query guarantee.
         let (hamming, geodesic) = ordering_rates(0.8, 0.7);
         println!("cos 0.8 vs 0.7: hamming {hamming:.3}, geodesic {geodesic:.3}");
         assert!(hamming > geodesic, "hamming {hamming} geodesic {geodesic}");

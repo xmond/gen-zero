@@ -74,7 +74,7 @@ const STAGE: &str = "graph";
 /// caller must not be able to exhaust memory.
 pub const MAX_DEPOSIT_NODES: usize = 1024;
 pub const MAX_DEPOSIT_EDGES: usize = 4096;
-pub const MAX_GRAPH_NODES: usize = 1 << 20;
+pub use gen_zero_lod::MAX_GRAPH_NODES;
 pub const MAX_TOP_K: usize = 256;
 pub const MAX_PPR_SEEDS: usize = 64;
 pub const MAX_PPR_ITERS: usize = 1000;
@@ -345,6 +345,7 @@ pub(crate) fn graph_rejection(e: LodError) -> Rejection {
         LodError::FixedPointNotContractive { .. } => ("FixedPointNotContractive", 422),
         LodError::FixedPointTooSlow { .. } => ("FixedPointTooSlow", 422),
         LodError::SpineBreatheOutOfBounds { .. } => ("BandOutOfRange", 409),
+        LodError::GraphCapacityExceeded { .. } => ("GraphCapacityExceeded", 409),
         LodError::DuplicateEntity(_) => ("DuplicateEntity", 409),
         LodError::EntityNotFound(_) | LodError::NodeNotFound(_) => ("EntityNotFound", 404),
         LodError::EmptyInput(_) => ("EmptyInput", 400),
@@ -841,6 +842,7 @@ fn rag(graph: &LodGraph, spec: RagSpec) -> Result<(String, Value), Rejection> {
             "anchors": anchors,
             "stage1_candidates": stage1_candidates,
             "searchable_nodes": searchable_nodes,
+            "distance_normalization": "per_track_max",
             "diffusion": diffusion,
             "top_k": spec.top_k,
             "crag_margin": crag_margin,

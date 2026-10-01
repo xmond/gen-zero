@@ -1,0 +1,11 @@
+1912e7b08fbb105aa841b8f86f1e6310cd6e6c34afd033a0c7b2868442a9b3a3  crates/gen-zero-lod/README.md
+e2b5ea902667c3e7853ca2a609575066854708f7a1818a20a58910c82bd91667  crates/gen-zero-lod/src/error.rs
+920d03f05d6d942be40721e8fda2b266aa9241c8b2e73e945ccbb4aa2a044d5a  crates/gen-zero-lod/src/graph.rs
+7950126c970d3aa338660039738171c192384fad099b18fa261d1ca295551b4a  crates/gen-zero-lod/src/graph/persistence.rs
+ceefd4ec3c738161545d1dff3acd99e03a01937714dc0f488476b65ebd099d06  crates/gen-zero-lod/src/lib.rs
+761a6cc586f6b85046d984f77e925757ef07ae8c876661bc8e0a2a6cbf634df6  crates/gen-zero-lod/src/node.rs
+5b5d1a2bf8492db989570d4be205cb11c451c0ceeb2fb4910fe775c39a2d5716  crates/gen-zero-lod/src/projection.rs
+ee49851d36b15764c9f9d70eda08d17d279a0fcbcdeb75cd0ea943fca794c7e7  crates/gen-zero-service/src/graph_verb.rs
+74cf928aa9447c393dc1af04a8ea93064ff8937789fb2367a6bc6bf07f24c9a9  crates/gen-zero-service/src/server.rs
+cca0e5de7b62d28eab513e068e0add5c45b4a70e3a3de930e3f29cb1f10d6aed  crates/gen-zero-service/tests/graph_verbs_tests.rs
+c710e22271abacae732b4bb072eb905cb74b3bfb4de798e3d262d4613b5a4220  crates/gen-zero-lod/tests/rag_boundary_tests.rs

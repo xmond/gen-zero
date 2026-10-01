@@ -219,6 +219,10 @@ pub fn payload_digest(text: &str) -> [u8; 32] {
     *blake3::hash(text.as_bytes()).as_bytes()
 }
 
+/// Reserved provenance property marking internal reflection evidence. Kept in
+/// `source_uri` so existing persisted observations carry the same marker.
+pub(crate) const INTERNAL_EVIDENCE_SOURCE: &str = "pipeline:failure-observation";
+
 /// A node in the LodGraph.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LodNode {
@@ -286,6 +290,13 @@ pub struct LodNode {
 }
 
 impl LodNode {
+    /// Internal observations participate in confidence evolution, but are not
+    /// general knowledge retrieval hits. The reserved source is the persisted
+    /// marker, independent of labels, payload text, and entity-id heuristics.
+    pub fn is_internal_evidence(&self) -> bool {
+        self.source_uri.as_deref() == Some(INTERNAL_EVIDENCE_SOURCE)
+    }
+
     pub fn new(
         id: u32,
         band: LodBand,

@@ -1,0 +1,76 @@
+      ┌─────────┐  mr boxington
+     ╱ ═══════ ╱│
+    ╱─────────╱ │
+    │ •    (◉)│≡│
+    │  ◟▄▄▄◞  │ ╱
+    │   ◀◆▶   │╱
+    └─────────┘
+   Compiling serde_core v1.0.229
+   Compiling syn v3.0.6
+   Compiling serde v1.0.229
+   Compiling cc v1.5.1
+   Compiling syn v2.0.119
+   Compiling smallvec v1.16.2
+   Compiling blake3 v1.8.7
+   Compiling thiserror-impl v1.0.69
+   Compiling hashbrown v0.17.1
+   Compiling thiserror v1.0.69
+   Compiling arrayvec v0.7.8
+   Compiling once_cell v1.21.4
+   Compiling tempfile v3.27.0
+   Compiling parking_lot_core v0.9.12
+   Compiling parking_lot v0.12.5
+   Compiling serde_derive v1.0.229
+   Compiling indexmap v2.14.2
+   Compiling bincode v1.3.3
+   Compiling gen-zero-core v0.1.1 (/ebs/pj/gen-zero-worktree/b1001j-t2-rag/crates/gen-zero-core)
+   Compiling gen-zero-lod v0.1.1 (/ebs/pj/gen-zero-worktree/b1001j-t2-rag/crates/gen-zero-lod)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.87s
+     Running unittests src/lib.rs (target/debug/deps/gen_zero_lod-8930e93a9466ff39)
+
+running 4 tests
+test projection::tests::dense_projection_stays_inside_the_ball_of_every_curvature ... ok
+test projection::tests::dense_projection_is_deterministic_scale_free_and_refuses_bad_vectors ... ok
+dim 128 cos 0.95: mean hamming 25.53, expected 25.88
+dim 128 cos 0.8: mean hamming 52.34, expected 52.44
+dim 128 cos 0.5: mean hamming 84.22, expected 85.33
+dim 128 cos 0: mean hamming 126.75, expected 128.00
+dim 128 cos -0.5: mean hamming 169.17, expected 170.67
+dim 256 cos 0.95: mean hamming 25.58, expected 25.88
+dim 256 cos 0.8: mean hamming 52.52, expected 52.44
+dim 256 cos 0.5: mean hamming 84.67, expected 85.33
+dim 256 cos 0: mean hamming 127.06, expected 128.00
+dim 256 cos -0.5: mean hamming 169.55, expected 170.67
+mbx[progress]: 15s elapsed; 14 hits, 14 misses, 0 bypassed, 2 not looked up; ~8.1s compiler work saved
+cos 0.9 vs 0.3: hamming 1.000, geodesic 0.998
+dim 512 cos 0.95: mean hamming 25.70, expected 25.88
+dim 512 cos 0.8: mean hamming 51.89, expected 52.44
+dim 512 cos 0.5: mean hamming 84.62, expected 85.33
+dim 512 cos 0: mean hamming 127.16, expected 128.00
+dim 512 cos -0.5: mean hamming 170.12, expected 170.67
+test projection::tests::dense_fingerprint_has_a_weak_angular_statistical_signal ... ok
+cos 0.8 vs 0.7: hamming 0.885, geodesic 0.745
+test projection::tests::dense_stages_show_statistical_tendency_without_a_ranking_guarantee ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 156 filtered out; finished in 4.94s
+
+     Running tests/boolq_busemann_entailment_tests.rs (target/debug/deps/boolq_busemann_entailment_tests-b9ff87485263ec56)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 21 filtered out; finished in 0.00s
+
+     Running tests/rag_boundary_tests.rs (target/debug/deps/rag_boundary_tests-fe4e7c5594efc1da)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+
+     Running tests/reflection_tests.rs (target/debug/deps/reflection_tests-40d642d21848b1a0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+mbx[cache]: 14 hits, 14 misses, 2 not looked up; 0 B downloaded, 0 B uploaded, 153.8 MiB stored locally
+mbx[savings]: 2d 7h of compiler time avoided across 7134 builds

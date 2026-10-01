@@ -195,6 +195,7 @@ impl LodGraph {
         }
         for hash in &m.nodes {
             let nodes: Vec<LodNode> = decode(&read_block(dir, hash)?)?;
+            check_node_capacity(st.nodes.len(), nodes.len())?;
             st.nodes.extend(nodes);
         }
         let csr: CsrGraph = decode(&read_block(dir, &m.csr)?)?;
