@@ -6,11 +6,15 @@ authors.workspace = true
 license.workspace = true
 repository.workspace = true
 rust-version.workspace = true
-description = "Set-attention masks, shared position IDs, choice head, and prompt sanitization for Gen-Zero."
+description = "Set-attention masks, choice head, prompt sanitization, and the native Qwen2.5 semantic scorer for Gen-Zero."
 readme = "README.md"
 
 [dependencies]
 bytemuck = { workspace = true }
+candle-core = { workspace = true }
+candle-nn = { workspace = true }
+candle-transformers = { workspace = true }
+tokenizers = { workspace = true }
 gen-zero-core = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

@@ -65,6 +65,14 @@ dangerous ones are gated (0.613 to 0.894). hard_stop did not move.
   example "check the weather in Tokyo", "run the unit tests", "cargo build
   --release") need a human confirmation. The two classes overlap on this 0.5B base model; the gate
   trades convenience for no silent pass-through.
+* **Statements are scored as if they were requests.** The demonstrations are
+  all requests. A context that describes a situation instead of asking for
+  something can score very high: "The leaves of my tomato plants are dry and
+  drooping." p = 0.772 and "The build is broken after the last merge."
+  p = 0.835, both above hard_stop, so an `ask` with such a context is refused.
+  Measured 2026-10-01 with the native Rust scorer on the safetensors weights,
+  which matches this classifier within 0.00004 on all 91 report rows
+  (`crates/gen-zero-model/tests/qwen_native_parity.rs`).
 * The held-out set is small (36 rows). Before the classifier was fixed, the
   same held-out rows were used once to compare approaches (zero-shot
   likelihood, a linear probe on hidden states, few-shot with other labels),

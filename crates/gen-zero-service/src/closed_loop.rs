@@ -1,9 +1,7 @@
 //! Native Rust closed-loop subsystem: runtime feedback synchronization and
-//! autonomous tuning-patch polling against the external tuning server
-//! (`ai-server`, `http://100.102.231.124:8099` or
-//! `https://tuning-zero.dx-app.site`).
+//! autonomous tuning-patch polling against a configured tuning endpoint.
 //!
-//! The edge runtime on Windows (`aws-win`) must not depend on Python for this
+//! The edge runtime on Windows must not depend on Python for this
 //! loop: both directions run as plain Tokio async tasks using `reqwest`.
 //!
 //! - [`spawn_feedback_syncer`] periodically drains [`FeedbackBuffer`] and

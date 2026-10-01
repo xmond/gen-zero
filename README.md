@@ -448,6 +448,30 @@ GENZERO_API_KEY=gz_live_your_token ./target/release/gen-zero serve --mode sse --
 
 Bridge settings: `GENZERO_PYTHON_ENDPOINT` (default `http://127.0.0.1:8995`, `off` disables),
 `GENZERO_BRIDGE_REQUIRED=1` refuses to start without it. Do not run the scorer on the MCP port.
+`ask`, `route`, `imagine` and the request risk check need a semantic backend. There are two;
+the server picks exactly one at startup and never switches:
+
+- **Native (no Python).** `--qwen-model-path <path>` or `GENZERO_QWEN_MODEL_PATH` runs Qwen2.5-0.5B in the
+  Rust process on candle. The path is a GGUF file (e.g. `Qwen2.5-0.5B.Q8_0.gguf`, with
+  `tokenizer.json` beside it or `--qwen-tokenizer`) or a Hugging Face directory with `config.json`,
+  `model.safetensors` and `tokenizer.json`. A model that fails to load stops the server; it does not
+  fall back to the Python bridge. GGUF matrices are dequantized to f32 at load, so RAM is about
+  2.5 GB either way. `RAYON_NUM_THREADS` caps the compute threads (on a shared 24-core host, 4 was
+  faster than 24). Try it without a server:
+  `gen-zero qwen --model <path> risk --text "run rm -rf /"`.
+- **Python bridge.** Without a Qwen path, the CLI calls the Python scorer at
+  `GENZERO_PYTHON_ENDPOINT` (default `http://127.0.0.1:8995`). Start it with
+  `GENZERO_API_KEY=<token> python3 -m gen_zero.cli semantic`.
+
+Both backends implement the same prompts, demonstrations and thresholds. Against the Python fp32
+scorer, the native safetensors path differs by at most 0.00004 in `p_dangerous` over the 91
+calibration and held-out risk rows, and the Q8_0 GGUF path by at most 0.015 (one safe held-out row
+crosses into HardStop). Commands and numbers: `crates/gen-zero-model/tests/qwen_native_parity.rs`.
+
+Without a backend, decisions fail closed with `ConfirmationRequired`. `GENZERO_BRIDGE_REQUIRED=1`
+makes the server refuse to start without one. A working backend does not remove every 428: the risk
+classifier escalates about half of ordinary requests (`python/gen_zero/service/risk_data/README.md`),
+and the gate escalates any decision whose normalized entropy is 0.65 or more.
 
 The Rust HTTP server exposes these operational endpoints:
 
@@ -569,3 +593,134 @@ The private `gen-zero-research` repository contains extraction, offline datasets
 ## Contribute
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), and the [Apache 2.0 license](LICENSE). Issues and pull requests belong at [xmond/gen-zero](https://github.com/xmond/gen-zero).
+
+
+## Two decision pathways
+
+Gen-Zero scores a decision through one of two unrelated pathways, chosen by which
+field a request sets. They share a safety gate; text requests also create a deterministic manifold observation when cognitive coordinates are absent. External reviews that describe "gen-zero" as a 0.5B language model
+picking actions by lexical co-occurrence are describing pathway 1 only; that
+description is accurate for pathway 1 and does not apply to pathway 2.
+
+### 1. Semantic prior pathway: text-level candidate scoring
+
+`zero ask` (`decide` is an alias of `ask`, `crates/gen-zero-service/src/zero.rs:137`),
+`route`, and `imagine` rank discrete textual candidates with the Qwen2.5-0.5B
+foundation model described above, run either natively via candle or through the
+Python bridge; the two backends agree within the parity bounds given earlier
+(`crates/gen-zero-model/tests/qwen_native_parity.rs`). `imagine` also uses this
+model's output as the prior for a Monte Carlo tree search over action sequences
+(`crates/gen-zero-service/README.md:17-19`), so it is a hybrid of this pathway
+and planning, not purely either one.
+
+The scoring rule is domain-conditional PMI (`crates/gen-zero-model/src/semantic_qwen.rs:10`,
+citing Holtzman et al. 2021): for each candidate it computes the log-odds the
+model assigns to that continuation against an empty-context baseline. That is a
+measure of text continuity, not of outcome quality. Qwen2.5-0.5B here is an
+unaligned base foundation model: nothing in this pipeline fine-tunes it on
+decisions or applies RLHF. Raw PMI rewards the candidate that reads as natural
+language after the given context, regardless of whether the action it names is
+sensible. A fluent but unwise candidate (an external review's example: drinking
+expired milk) can out-score a safe one, because lexical co-occurrence has no
+notion of consequence. That is a property of the method, not a bug in its
+implementation; removing it needs either decision-specific fine-tuning or RLHF
+of the backbone (neither exists in this repository today) or moving the
+decision to pathway 2, which does not score text at all.
+
+Because this pathway cannot recognize danger on its own, every `ask`/`route`/`imagine`
+call first runs the request through a risk classifier that fails closed:
+
+- **Escalate** (HTTP 428, human confirmation required) at
+  `p_dangerous >= 0.4494` (`RISK_ESCALATE_THRESHOLD`,
+  `crates/gen-zero-model/src/semantic_qwen.rs:44`).
+- **Hard stop** (refuse outright, no confirmation offered) at
+  `p_dangerous >= 0.7620` (`RISK_HARD_STOP_THRESHOLD`, same file, line 45).
+- Escalate also fires whenever the policy gate's normalized decision entropy is
+  `>= 0.65` (`crates/gen-zero-gate/src/policy.rs`).
+
+These thresholds are deliberately strict, and the cost is visible:
+`python/gen_zero/service/risk_data/README.md` records 9 of 18 ordinary
+held-out requests escalating under them, a measured false-escalation rate
+near one in two. The same file calls this out directly ("False escalations
+are frequent") rather than hiding it. That rate is the intended trade-off,
+not a defect: at this calibration, `rm -rf /` scores only 0.02 above the
+escalate line, so a threshold loose enough to stop annoying every routine
+query would also let destructive commands through. A fail-closed
+gate that is this cautious will ask a human to confirm routine work; a gate
+tuned to stop asking would also sometimes stop refusing. The project chose
+the side that fails safe. Loosening the threshold is a one-line change
+(`RISK_ESCALATE_THRESHOLD`) that any operator can make; it is not the
+default because the held-out evidence for a looser value is not in this
+repository.
+
+### 2. Continuous cognitive manifold and symplectic world-model pathway
+
+The `cognitive` field on `zero ask`/`zero stream`, and the separate `pipeline`
+verb (`pipeline.simulate`/`what_if`/`audit_action`/`decide`,
+`crates/gen-zero-service/src/pipeline_verb.rs`), take an explicit numeric state
+vector, not natural-language text. `pipeline`'s A* goal, for example, requires
+`{"state": [/* exactly 1024 finite numbers */], "tolerance": ...}`
+(`crates/gen-zero-service/README.md:72-76`). The numeric pathway does not compute PMI. Text requests without explicit cognitive coordinates also project into a deterministic 128-dimensional manifold observation; this projection is a hash-based mapping, not a learned semantic representation.
+
+What runs on that state vector:
+
+- **Geometry and a certified action verifier** (`crates/gen-zero-service/src/cognitive.rs`,
+  Spec 25 §1.2/§5.1/§5.5): the state is checked against a Poincare ball,
+  mapped to the tangent space at the origin, advanced through a parallel
+  tangent-space SSM scan, and relaxed by a sheaf-cohomology gate kernel. The
+  gate accepts a candidate only if its geodesic energy to the goal strictly
+  falls (`upper(after) < lower(before)`), and only then emits a
+  `CertifiedAction` with interval bounds — a real, checkable certificate on
+  the chosen geometry, not a probability estimate. The file is explicit that
+  this geometry is fixed, not learned: "No trained atlas or projection"
+  (`crates/gen-zero-service/src/cognitive.rs:46`). The certificate says the
+  candidate strictly reduces distance to the goal under this fixed metric; it
+  does not say the metric represents anything about the real world unless the
+  caller's state vector does.
+- **World-model dynamics** (`gen-zero-worldmodel`): Contact Hamiltonian
+  integrators with Strang splitting, Stormer-Verlet symplectic integrators,
+  and Koopman spectral jump operators for O(1) lookahead
+  (`crates/gen-zero-worldmodel/README.md:3-5`). These give real, provable
+  properties of the integrator itself: the symplectic integrator preserves
+  phase volume exactly; the contact integrator contracts phase volume at a
+  known rate `exp(-2 gamma dt)` and reduces to the symplectic case at
+  `gamma = 0`; the Koopman jump operator keeps spectral radius <= 1.0 by
+  construction. Those guarantees hold for whatever dynamics function is
+  plugged in. The dynamics shipped as the service default,
+  `LatentDynamicsWorldModel`, is a fixed illustrative residual update: each
+  dimension decays toward zero at `residual_scale = 0.95` per step and is
+  nudged by a sine-of-action perturbation scaled by `action_scale = 0.05`
+  (`crates/gen-zero-worldmodel/src/dynamics.rs`), not a model trained on any real environment (`docs/zero/README.md`'s own
+  audit section says the same). The integrator's math is sound; whether the
+  trajectory means anything physically depends on supplying a dynamics model
+  or state encoding that actually represents your domain, which this
+  repository does not ship.
+- **Planners** (`gen-zero-planner`): MCTS (PUCT), uncertainty-penalized A*,
+  and MPC/Cross-Entropy-Method search over the state vector and the chosen
+  dynamics, routed by entropy through a K-MoE router. These engines carry
+  their own documented limits: MCTS "has no learned leaf value or
+  finite-budget optimality guarantee"; the gate verdict "certifies policy
+  admissibility at evaluation time, not calibrated physical safety or
+  optimality" (`crates/gen-zero-planner/README.md:53-56,112-113`). Read those
+  caveats before treating a planner's output as a correctness proof.
+
+### Getting real-world decision performance out of either pathway
+
+Neither pathway above is "finished" without the caller doing one of the
+following. Each changes what the engine is actually scoring, not just a
+setting:
+
+**a. Supply real structured state.** The geometric pathway only reasons about
+the state vector it is given. A caller that encodes real sensor, business, or
+environment state into the `cognitive` or `pipeline` state vectors gets
+geometric guarantees over that real state. A caller that passes the service
+default illustrative dynamics gets a certified result about a toy dynamics
+model, not about their domain.
+
+**b. Use the closed-loop tuning pipeline to adapt reflex weights.** The
+reflex tuning daemon (`services/tuning/tuning_service.py`) retrains the fast
+reflex path from operator feedback: a CUDA online learner updates LoRA
+weights under a contraction-loss penalty, and a Golden gate only publishes a
+patch if accuracy does not regress and every measured contraction ratio stays
+below 1. Real business accuracy and long-running production behavior remain unverified. The Golden gate's loss is an empirical bound on the measured set, not a global Lipschitz certificate. Treat it as an available feedback loop to tune with your own data, not
+as a source of out-of-the-box accuracy.

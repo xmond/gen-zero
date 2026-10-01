@@ -1,0 +1,181 @@
+{
+ "scorer": "zero-qwen2.5-0.5b-trunk:fp32:last-token/tied-lm-head/pmi",
+ "cases": [
+  {
+   "kind": "ask",
+   "context": "The leaves of my tomato plants are dry and drooping.",
+   "candidates": [
+    "water the plants",
+    "file the quarterly tax return",
+    "reboot the router"
+   ],
+   "history": [],
+   "frame": "The first action to take is:",
+   "python": [
+    {
+     "name": "water the plants",
+     "log_likelihood": -5.375322341918945,
+     "baseline_log_likelihood": -11.947049736976624,
+     "pmi": 6.571727395057678,
+     "probability": 0.9999560279151216
+    },
+    {
+     "name": "file the quarterly tax return",
+     "log_likelihood": -42.215495347976685,
+     "baseline_log_likelihood": -26.34534551203251,
+     "pmi": -15.870149835944176,
+     "probability": 1.7930708809572211e-10
+    },
+    {
+     "name": "reboot the router",
+     "log_likelihood": -19.891172766685486,
+     "baseline_log_likelihood": -16.430984497070312,
+     "pmi": -3.4601882696151733,
+     "probability": 4.39719055712483e-05
+    }
+   ]
+  },
+  {
+   "kind": "ask",
+   "context": "The build is broken after the last merge.",
+   "candidates": [
+    "revert_the_merge",
+    "go_home",
+    "read the compiler error output carefully"
+   ],
+   "history": [
+    "open_ci_logs"
+   ],
+   "frame": "The next action to take is:",
+   "python": [
+    {
+     "name": "revert_the_merge",
+     "log_likelihood": -11.688844680786133,
+     "baseline_log_likelihood": -16.695115089416504,
+     "pmi": 5.006270408630371,
+     "probability": 0.9853196649888248
+    },
+    {
+     "name": "go_home",
+     "log_likelihood": -14.829045295715332,
+     "baseline_log_likelihood": -14.688068389892578,
+     "pmi": -0.1409769058227539,
+     "probability": 0.005730018773381348
+    },
+    {
+     "name": "read the compiler error output carefully",
+     "log_likelihood": -42.51355695724487,
+     "baseline_log_likelihood": -42.81855010986328,
+     "pmi": 0.3049931526184082,
+     "probability": 0.008950316237793961
+    }
+   ]
+  },
+  {
+   "kind": "ask",
+   "context": "Question: Is Paris the capital of France?",
+   "candidates": [
+    "yes",
+    "no"
+   ],
+   "history": [],
+   "frame": "The correct answer is:",
+   "python": [
+    {
+     "name": "yes",
+     "log_likelihood": -0.6308509111404419,
+     "baseline_log_likelihood": -5.0198822021484375,
+     "pmi": 4.389031291007996,
+     "probability": 0.825965506478895
+    },
+    {
+     "name": "no",
+     "log_likelihood": -2.676081657409668,
+     "baseline_log_likelihood": -5.507813453674316,
+     "pmi": 2.8317317962646484,
+     "probability": 0.17403449352110498
+    }
+   ]
+  },
+  {
+   "kind": "ask",
+   "context": "服务器磁盘快满了，需要清理空间",
+   "candidates": [
+    "删除旧日志文件",
+    "格式化系统盘",
+    "购买新的显示器"
+   ],
+   "history": [],
+   "state": {
+    "disk": "97%",
+    "host": "web-1"
+   },
+   "frame": "The first action to take is:",
+   "python": [
+    {
+     "name": "删除旧日志文件",
+     "log_likelihood": -17.004970926092938,
+     "baseline_log_likelihood": -28.401506289839745,
+     "pmi": 11.396535363746807,
+     "probability": 0.9977272711766196
+    },
+    {
+     "name": "格式化系统盘",
+     "log_likelihood": -25.873168844729662,
+     "baseline_log_likelihood": -30.25814723968506,
+     "pmi": 4.384978394955397,
+     "probability": 0.0008993553903671158
+    },
+    {
+     "name": "购买新的显示器",
+     "log_likelihood": -25.759109374135733,
+     "baseline_log_likelihood": -30.56743484735489,
+     "pmi": 4.808325473219156,
+     "probability": 0.0013733734330133335
+    }
+   ]
+  },
+  {
+   "kind": "route",
+   "context": "Find every TODO comment in the repository",
+   "tools": [
+    {
+     "name": "grep",
+     "description": "Search file contents for a text pattern"
+    },
+    {
+     "name": "tool_7",
+     "description": "Send an email to a colleague"
+    },
+    {
+     "name": "compact",
+     "description": null
+    }
+   ],
+   "frame": "The tool to use is:",
+   "python": [
+    {
+     "name": "grep",
+     "log_likelihood": -33.20687013864517,
+     "baseline_log_likelihood": -33.992924451828,
+     "pmi": 0.7860543131828308,
+     "probability": 0.9454070266849101
+    },
+    {
+     "name": "tool_7",
+     "log_likelihood": -45.50871667265892,
+     "baseline_log_likelihood": -41.20599579811096,
+     "pmi": -4.302720874547958,
+     "probability": 0.005828970295705548
+    },
+    {
+     "name": "compact",
+     "log_likelihood": -13.692008972167969,
+     "baseline_log_likelihood": -11.513440132141113,
+     "pmi": -2.1785688400268555,
+     "probability": 0.04876400301938432
+    }
+   ]
+  }
+ ]
+}

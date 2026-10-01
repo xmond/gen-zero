@@ -2,8 +2,8 @@
 //!
 //! PUCT Monte Carlo tree search over action sequences of length `horizon`.
 //! A node is a history of actions already taken. Its priors come from a
-//! [`PriorOracle`]: in production the semantic bridge, which asks the Zero
-//! backbone for `P(next action | scenario, history)`.
+//! [`PriorOracle`]: in production the [`SemanticBackend`] (native Qwen or
+//! the Python bridge), which asks the backbone for `P(next action | scenario, history)`.
 //!
 //! Value of a simulated path = geometric mean of the step probabilities along
 //! it, `exp(mean log p)`, in (0, 1]. It is the `sequence_likelihood`: how
@@ -22,7 +22,8 @@
 //!    `P' = (1 - eps) P + eps Dir(alpha)`, from a seeded generator, so results
 //!    are reproducible and the seed is reported.
 
-use crate::bridge::{AskInput, BridgeError, SemanticBridgeClient};
+use crate::bridge::{AskInput, BridgeError};
+use crate::semantic::SemanticBackend;
 use gen_zero_core::NormalizedEntropy;
 use rand::rngs::StdRng;
 use rand::{Rng, SeedableRng};
@@ -40,15 +41,15 @@ pub trait PriorOracle: Sync {
     fn priors<'a>(&'a self, history: &'a [usize]) -> PriorFuture<'a>;
 }
 
-/// Oracle backed by the Python semantic scorer.
-pub struct BridgeOracle<'a> {
-    pub client: &'a SemanticBridgeClient,
+/// Oracle backed by the engine's semantic backend.
+pub struct SemanticOracle<'a> {
+    pub backend: &'a SemanticBackend,
     pub scenario: &'a str,
     pub state: Option<&'a Value>,
     pub candidates: &'a [String],
 }
 
-impl PriorOracle for BridgeOracle<'_> {
+impl PriorOracle for SemanticOracle<'_> {
     fn priors<'a>(&'a self, history: &'a [usize]) -> PriorFuture<'a> {
         Box::pin(async move {
             let names: Vec<String> = history
@@ -56,7 +57,7 @@ impl PriorOracle for BridgeOracle<'_> {
                 .map(|&i| self.candidates[i].clone())
                 .collect();
             let resp = self
-                .client
+                .backend
                 .semantic_ask(&AskInput {
                     context: self.scenario,
                     candidates: self.candidates,
@@ -65,7 +66,7 @@ impl PriorOracle for BridgeOracle<'_> {
                     return_embedding: false,
                 })
                 .await?;
-            // The bridge validated that every candidate is present exactly once.
+            // The backend validated that every candidate is present exactly once.
             Ok(self
                 .candidates
                 .iter()

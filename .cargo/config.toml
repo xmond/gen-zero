@@ -1,0 +1,11 @@
+# candle's quantized (GGUF) CPU kernels are selected at compile time by
+# `cfg(target_feature = "avx2")`; without these flags the native Qwen scorer
+# falls back to scalar dot products and runs many times slower.
+# A binary built with these flags needs an x86-64 CPU with AVX2, FMA and F16C
+# (Intel Haswell / AMD Zen or newer). An explicit RUSTFLAGS environment
+# variable replaces these flags entirely.
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "target-feature=+avx2,+fma,+f16c"]
+
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+avx2,+fma,+f16c"]

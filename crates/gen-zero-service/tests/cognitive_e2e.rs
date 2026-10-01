@@ -21,9 +21,71 @@ fn assets() -> Value {
     serde_json::from_str(include_str!("fixtures/cognitive_assets_linear2d.json")).unwrap()
 }
 
+fn assets_128() -> Value {
+    let mut value = assets();
+    value["dim"] = json!(128);
+    value["provenance"] = json!("hand-written analytic 128D test generator; not trained");
+    value["curvature"] = json!(1.0);
+    value["generator"]["a"] = json!((0..128)
+        .map(|i| (0..128)
+            .map(|j| if i == j { -1.0 } else { 0.0 })
+            .collect::<Vec<_>>())
+        .collect::<Vec<_>>());
+    value["generator"]["b"] = json!((0..128)
+        .map(|i| (0..128)
+            .map(|j| if i == j { 1.0 } else { 0.0 })
+            .collect::<Vec<_>>())
+        .collect::<Vec<_>>());
+    value
+}
+
+#[tokio::test]
+async fn text_observation_scans_the_128d_manifold() {
+    let engine = engine();
+    let (status, body) = send(
+        &engine,
+        "/v1/mounts",
+        json!({
+            "base_version": 1, "assets": assets_128(), "reason": "text projection test"
+        }),
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let (status, body) = send(
+        &engine,
+        "/message",
+        json!({
+            "action": "stream", "observation": "A text observation enters the manifold"
+        }),
+        Some(TOKEN),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let meta = &body["result"]["meta"];
+    assert_eq!(meta["cognitive_runtime"]["status"], "engaged");
+    assert_eq!(meta["trajectory"]["scan"]["steps"], 1);
+    assert_eq!(meta["trajectory"]["gate"]["status"], "within_budget");
+    assert_eq!(
+        meta["trajectory"]["final_point"].as_array().unwrap().len(),
+        128
+    );
+    let (_, ask) = send(&engine, "/message", json!({
+        "action": "ask", "context": "Choose the next safe step", "candidates": ["wait", "review"]
+    }), Some(TOKEN)).await;
+    assert_eq!(
+        ask["result"]["meta"]["cognitive_runtime"]["status"],
+        "engaged"
+    );
+    assert_eq!(
+        ask["result"]["meta"]["cognitive_runtime"]["trajectory"]["scan"]["steps"],
+        1
+    );
+}
+
 /// Bridge off: nothing here may depend on the Python scorer.
 fn engine() -> Arc<PolymorphicZeroEngine> {
-    Arc::new(PolymorphicZeroEngine::new().with_bridge(None))
+    Arc::new(PolymorphicZeroEngine::new().with_semantic(None))
 }
 
 async fn send(

@@ -12,7 +12,7 @@
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use gen_zero_service::bridge::{BridgeHealth, DEFAULT_ENDPOINT};
-use gen_zero_service::{McpServer, PolymorphicZeroEngine};
+use gen_zero_service::{McpServer, PolymorphicZeroEngine, SemanticBackend};
 use serde_json::{json, Value};
 use std::sync::Arc;
 use tower::util::ServiceExt;
@@ -26,7 +26,7 @@ fn live_server() -> McpServer {
     );
     let server = McpServer::new();
     assert_eq!(
-        server.engine.bridge().map(|b| b.endpoint()),
+        server.engine.semantic().and_then(|b| b.endpoint()),
         Some(DEFAULT_ENDPOINT),
         "default configuration must enable the bridge on the scorer port"
     );
@@ -162,12 +162,15 @@ async fn default_port_8995_is_the_ready_scorer_and_readiness_reports_it() {
     let server = live_server();
     let engine: Arc<PolymorphicZeroEngine> = server.engine.clone();
     assert_eq!(DEFAULT_ENDPOINT, "http://127.0.0.1:8995");
-    let report = engine.bridge().unwrap().probe().await;
+    let Some(SemanticBackend::Remote(bridge)) = engine.semantic() else {
+        panic!("this suite needs the remote backend");
+    };
+    let report = bridge.probe().await;
     assert!(
         matches!(report.health, BridgeHealth::Ready { .. }),
         "{report:?}"
     );
-    server.check_bridge(Some(8999)).await.unwrap();
+    server.check_semantic(Some(8999)).await.unwrap();
 
     let app = McpServer::build_router(engine, None);
     let resp = app

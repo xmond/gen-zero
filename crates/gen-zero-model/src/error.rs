@@ -26,4 +26,10 @@ pub enum ModelError {
     ReflexUnknownHead(String),
     #[error("Reflex patch invalid: {0}")]
     ReflexPatch(String),
+    #[error("Qwen model load failed: {0}")]
+    QwenLoad(String),
+    #[error("Qwen input rejected: {0}")]
+    QwenInput(String),
+    #[error("Qwen inference failed: {0}")]
+    Inference(String),
 }

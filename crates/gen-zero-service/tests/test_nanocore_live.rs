@@ -32,7 +32,9 @@ use axum::{routing::post, Json, Router};
 use gen_zero_core::CompressedLatent;
 use gen_zero_nanocore::core_type::fixtures::synthetic_core;
 use gen_zero_nanocore::{NanoCoreFleetScheduler, DOMAIN_GENERAL};
-use gen_zero_service::{BridgeConfig, PolymorphicZeroEngine, SemanticBridgeClient};
+use gen_zero_service::{
+    BridgeConfig, PolymorphicZeroEngine, SemanticBackend, SemanticBridgeClient,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
@@ -111,7 +113,7 @@ async fn engine_with_registered_core_and_low_risk_bridge(
         .expect("stub bridge client");
 
     PolymorphicZeroEngine::new()
-        .with_bridge(Some(Arc::new(client)))
+        .with_semantic(Some(Arc::new(SemanticBackend::Remote(client))))
         .with_nano_fleet(fleet)
 }
 

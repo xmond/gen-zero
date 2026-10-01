@@ -1,5 +1,10 @@
 //! Semantic bridge client: Rust `zero` tool -> Python semantic scorer.
 //!
+//! This is the remote variant of [`crate::semantic::SemanticBackend`]. The
+//! in-process variant (native Qwen on candle) returns the same response types
+//! and passes the same validators ([`validate_ask`], [`validate_risk`],
+//! [`validate_route`]).
+//!
 //! The Python service (`python/gen_zero/service/app.py`, started with
 //! `python3 -m gen_zero.cli semantic`, default port 8995) exposes `/v1/semantic_ask`,
 //! `/v1/semantic_route` and `/v1/semantic_risk`. All three run the local Zero
@@ -50,6 +55,12 @@ pub enum BridgeError {
     WrongService { url: String },
     #[error("semantic bridge response rejected: {0}")]
     InvalidResponse(String),
+    /// The in-process Qwen scorer refused the input or failed to compute.
+    #[error("native Qwen scorer failed: {0}")]
+    Native(String),
+    /// Every in-process scorer slot stayed busy for the whole queue timeout.
+    #[error("native Qwen scorer overloaded: no free slot after {waited_ms} ms")]
+    Overloaded { waited_ms: u64 },
 }
 
 impl BridgeError {
@@ -145,15 +156,8 @@ impl BridgeConfig {
     }
 }
 
-/// One scored candidate as returned by the Python scorer.
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-pub struct CandidateScore {
-    pub name: String,
-    pub log_likelihood: f64,
-    pub baseline_log_likelihood: f64,
-    pub pmi: f64,
-    pub probability: f64,
-}
+/// One scored candidate. Same shape from the Python scorer and the native one.
+pub use gen_zero_model::semantic_qwen::CandidateScore;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SemanticAskResponse {
@@ -273,6 +277,55 @@ fn check_probabilities(scores: &[CandidateScore], expected: &[String]) -> Result
         return Err(BridgeError::InvalidResponse(format!(
             "probabilities sum to {sum}"
         )));
+    }
+    Ok(())
+}
+
+/// Contract of an ask answer: a distribution over exactly the candidates,
+/// a consistent choice, and a normalized entropy.
+pub fn validate_ask(r: &SemanticAskResponse, candidates: &[String]) -> Result<(), BridgeError> {
+    check_probabilities(&r.candidates, candidates)?;
+    if r.chosen_index >= r.candidates.len() || r.candidates[r.chosen_index].name != r.chosen {
+        return Err(BridgeError::InvalidResponse(
+            "chosen does not match chosen_index".into(),
+        ));
+    }
+    if !(0.0..=1.0).contains(&r.entropy) {
+        return Err(BridgeError::InvalidResponse(format!(
+            "entropy {} outside [0, 1]",
+            r.entropy
+        )));
+    }
+    Ok(())
+}
+
+/// Contract of a risk answer: probability and thresholds in [0, 1], ordered.
+pub fn validate_risk(r: &SemanticRiskResponse) -> Result<(), BridgeError> {
+    let t = r.thresholds;
+    let unit = |x: f64| x.is_finite() && (0.0..=1.0).contains(&x);
+    if !unit(r.p_dangerous) || !unit(t.escalate) || !unit(t.hard_stop) {
+        return Err(BridgeError::InvalidResponse(format!(
+            "risk {} or thresholds {:?} outside [0, 1]",
+            r.p_dangerous, t
+        )));
+    }
+    if t.escalate > t.hard_stop {
+        return Err(BridgeError::InvalidResponse(format!(
+            "escalate threshold {} above hard-stop threshold {}",
+            t.escalate, t.hard_stop
+        )));
+    }
+    Ok(())
+}
+
+/// Contract of a route answer: a distribution over exactly the tools, sorted.
+pub fn validate_route(r: &SemanticRouteResponse, tool_names: &[String]) -> Result<(), BridgeError> {
+    check_probabilities(&r.ranked, tool_names)?;
+    if r.ranked
+        .windows(2)
+        .any(|w| w[0].probability < w[1].probability)
+    {
+        return Err(BridgeError::InvalidResponse("ranking is not sorted".into()));
     }
     Ok(())
 }
@@ -497,48 +550,15 @@ impl SemanticBridgeClient {
             body["history"] = json!(input.history);
         }
         self.post("/v1/semantic_ask", &body, |r: &SemanticAskResponse| {
-            check_probabilities(&r.candidates, input.candidates)?;
-            if r.chosen_index >= r.candidates.len() || r.candidates[r.chosen_index].name != r.chosen
-            {
-                return Err(BridgeError::InvalidResponse(
-                    "chosen does not match chosen_index".into(),
-                ));
-            }
-            if !(0.0..=1.0).contains(&r.entropy) {
-                return Err(BridgeError::InvalidResponse(format!(
-                    "entropy {} outside [0, 1]",
-                    r.entropy
-                )));
-            }
-            Ok(())
+            validate_ask(r, input.candidates)
         })
         .await
     }
 
     /// Safety risk of `text` (any language) from the Python classifier.
     pub async fn semantic_risk(&self, text: &str) -> Result<SemanticRiskResponse, BridgeError> {
-        self.post(
-            "/v1/semantic_risk",
-            &json!({ "text": text }),
-            |r: &SemanticRiskResponse| {
-                let t = r.thresholds;
-                let unit = |x: f64| x.is_finite() && (0.0..=1.0).contains(&x);
-                if !unit(r.p_dangerous) || !unit(t.escalate) || !unit(t.hard_stop) {
-                    return Err(BridgeError::InvalidResponse(format!(
-                        "risk {} or thresholds {:?} outside [0, 1]",
-                        r.p_dangerous, t
-                    )));
-                }
-                if t.escalate > t.hard_stop {
-                    return Err(BridgeError::InvalidResponse(format!(
-                        "escalate threshold {} above hard-stop threshold {}",
-                        t.escalate, t.hard_stop
-                    )));
-                }
-                Ok(())
-            },
-        )
-        .await
+        self.post("/v1/semantic_risk", &json!({ "text": text }), validate_risk)
+            .await
     }
 
     pub async fn semantic_route(
@@ -554,14 +574,7 @@ impl SemanticBridgeClient {
             body["state"] = state.clone();
         }
         self.post("/v1/semantic_route", &body, |r: &SemanticRouteResponse| {
-            check_probabilities(&r.ranked, tool_names)?;
-            if r.ranked
-                .windows(2)
-                .any(|w| w[0].probability < w[1].probability)
-            {
-                return Err(BridgeError::InvalidResponse("ranking is not sorted".into()));
-            }
-            Ok(())
+            validate_route(r, tool_names)
         })
         .await
     }

@@ -259,7 +259,7 @@ const DIM: usize = 128;
 const E0: usize = 80;
 
 fn engine() -> Arc<PolymorphicZeroEngine> {
-    Arc::new(PolymorphicZeroEngine::new().with_bridge(None))
+    Arc::new(PolymorphicZeroEngine::new().with_semantic(None))
 }
 
 async fn send(engine: &Arc<PolymorphicZeroEngine>, path: &str, body: Value) -> (StatusCode, Value) {
@@ -608,7 +608,7 @@ async fn http_fiber_requests_fail_closed() {
     // Assets whose dynamics are not 128 x 128 do not mount.
     let mut bad = plain_assets();
     bad["entailment"]["dynamics"] = json!({"a": [[0.0]], "b": [[1.0]]});
-    let fresh = Arc::new(PolymorphicZeroEngine::new().with_bridge(None));
+    let fresh = Arc::new(PolymorphicZeroEngine::new().with_semantic(None));
     let (status, body) = send(
         &fresh,
         "/v1/mounts",
