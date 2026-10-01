@@ -92,7 +92,7 @@ class ZeroConfig:
     @property
     def sparse_layer_indices(self):
         """0-indexed layers using the sparse operator pool; empty unless sparse_moe is set.
-        sparse_layer_start is 1-indexed inclusive, per docs/zero/05 "第16~24层": the default 16
+        sparse_layer_start is 1-indexed inclusive, per docs/zero/05 ("layers 16-24"): the default 16
         on a 24-layer model marks layers 16-24 (1-indexed) i.e. 0-indexed 15-23, 9 layers."""
         if not self.sparse_moe:
             return frozenset()
@@ -170,8 +170,8 @@ class ZeroConfig:
         350M stored budgets are actually met, not just asserted: at intermediate_size=2816 with
         expert_intermediate_size=704 the honest active count is ~269.6M (verified via
         active_parameter_count(), not estimated), still over budget by ~40M. Shrinking dense MLP
-        width is the lever this preset's own docs explicitly permit ("对前16层MLP设定紧凑因式分解或
-        指定expert_intermediate_size"); expert_intermediate_size is kept at the doc's own 704
+        width is the lever this preset's own docs explicitly permit ("set compact factorization for
+        the first 16 MLP layers or specify expert_intermediate_size"); expert_intermediate_size is kept at the doc's own 704
         (intermediate_size//4 of the *original* 2816) since only the dense layers were oversized.
 
         Exact counts (computed by active_parameter_count()/parameter_count(), not estimated):

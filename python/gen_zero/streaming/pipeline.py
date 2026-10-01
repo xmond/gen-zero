@@ -88,8 +88,8 @@ class SandwichStreamingPipeline:
             draft_mutation = GraphMutation(
                 op=GraphOp.CREATE_NODE,
                 target_node_id=draft_item.draft_id,
-                label=f"待确认: {draft_item.text[:30]}",
-                role_lane="待定",
+                label=f"Pending: {draft_item.text[:30]}",
+                role_lane="Pending",
                 depends_on=parent_ids,
                 is_draft=True,
             )
