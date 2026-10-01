@@ -15,9 +15,9 @@
 //! - `graph_ppr`: Personalized PageRank diffusion from seed entities.
 //! - `graph_prune`: record evidence against one entity, then evolve every
 //!   confidence to the fixed point; dependents that fall below `theta_lo` are
-//!   falsified and revoked. `dry_run` reports and rolls back.
+//!   falsified and revoked. `dry_run` reports and changes nothing.
 //! - `graph_evolve`: optionally retract such evidence, then evolve every
-//!   confidence to the fixed point. `dry_run` reports and rolls back.
+//!   confidence to the fixed point. `dry_run` reports and changes nothing.
 //!
 //!   Both evolutions take `gamma` (default 1), the gain of `falsifies` edges in
 //!   `c = (1 - beta) pi + beta max(0, P+ c - gamma P- c)`, and solve it by
@@ -27,10 +27,10 @@
 //! - `graph_coarse_grain`: insert a summary node for a cluster of member nodes
 //!   on the band its coordinate implies (strictly coarser than every member),
 //!   link each member to it with a `CoarseGrain` edge and flush. `dry_run`
-//!   reports and rolls back.
+//!   reports and changes nothing.
 //! - `graph_zoom`: move one node one band `in` or `out`, or `to_coord`: to the
 //!   band its coordinate implies. The coarse-grain order is kept. `dry_run`
-//!   reports and rolls back.
+//!   reports and changes nothing.
 //!
 //! A deposited node without `band` gets the band its coordinate implies
 //! (`LodNode::derive_band_from_coord`).
@@ -352,6 +352,8 @@ pub(crate) fn graph_rejection(e: LodError) -> Rejection {
         LodError::CsrInvariant(_) | LodError::FlushConflict | LodError::CheckpointRejected(_) => {
             ("GraphError", 500)
         }
+        // The disk refused a commit; the request itself was valid.
+        LodError::Persistence(_) => ("GraphPersistence", 503),
         _ => ("InvalidParams", 400),
     };
     Rejection {
@@ -970,6 +972,20 @@ fn fixed_point_json(graph: &LodGraph, params: EvolveParams, report: &FixedPointR
     })
 }
 
+/// Run a verb as one transaction, or with `dry_run` on a private copy that is
+/// never published: no reader sees a trial state, and nothing is persisted.
+fn apply<T>(
+    graph: &LodGraph,
+    dry_run: bool,
+    f: impl FnOnce(&LodGraph) -> Result<T, LodError>,
+) -> Result<T, LodError> {
+    if dry_run {
+        graph.dry_run(f)
+    } else {
+        graph.transact(f)
+    }
+}
+
 fn prune(graph: &LodGraph, spec: PruneSpec) -> Result<(String, Value), Rejection> {
     let e = entity(spec.entity_id, spec.action.as_deref(), "graph_prune")?;
     let dry_run = spec.dry_run.unwrap_or(false);
@@ -984,38 +1000,33 @@ fn prune(graph: &LodGraph, spec: PruneSpec) -> Result<(String, Value), Rejection
     let node = graph
         .node_for_entity(e)
         .ok_or_else(|| graph_rejection(LodError::EntityNotFound(e)))?;
-    let (pruned, revoked, retracted, fixed_point) = graph
-        .transact(|g| {
-            let before = g.create_checkpoint();
-            let retracted_by_evidence = g.falsify_node(node)?;
-            let report = params.run(g)?;
-            let retracted = retracted_by_evidence + report.retracted_dependencies;
-            // The root, then every node the evolution falsified. Read the labels
-            // while the prune is still applied.
-            let falsified = report
-                .transitions
-                .iter()
-                .filter(|t| t.to == EpistemicStatus::Falsified);
-            let pruned: Vec<Value> = std::iter::once(node)
-                .chain(falsified.map(|t| t.node))
-                .take(MAX_LISTED_TRANSITIONS + 1)
-                .map(|id| node_json(g, id))
-                .collect();
-            let revoked: Vec<u64> = std::iter::once(e)
-                .chain(report.revoked_entities.iter().copied())
-                .collect();
-            let fixed_point = fixed_point_json(g, params, &report);
-            if dry_run {
-                g.rollback_checkpoint(&before)?;
-            }
-            Ok((pruned, revoked, retracted, fixed_point))
-        })
-        .map_err(graph_rejection)?;
+    let (pruned, revoked, retracted, fixed_point) = apply(graph, dry_run, |g| {
+        let retracted_by_evidence = g.falsify_node(node)?;
+        let report = params.run(g)?;
+        let retracted = retracted_by_evidence + report.retracted_dependencies;
+        // The root, then every node the evolution falsified. Read the labels
+        // while the prune is still applied.
+        let falsified = report
+            .transitions
+            .iter()
+            .filter(|t| t.to == EpistemicStatus::Falsified);
+        let pruned: Vec<Value> = std::iter::once(node)
+            .chain(falsified.map(|t| t.node))
+            .take(MAX_LISTED_TRANSITIONS + 1)
+            .map(|id| node_json(g, id))
+            .collect();
+        let revoked: Vec<u64> = std::iter::once(e)
+            .chain(report.revoked_entities.iter().copied())
+            .collect();
+        let fixed_point = fixed_point_json(g, params, &report);
+        Ok((pruned, revoked, retracted, fixed_point))
+    })
+    .map_err(graph_rejection)?;
     let summary = format!(
         "graph_prune: {} node(s) {} from entity {e}",
         revoked.len(),
         if dry_run {
-            "would be pruned (dry run, rolled back)"
+            "would be pruned (dry run, not applied)"
         } else {
             "pruned and revoked"
         }
@@ -1057,27 +1068,22 @@ fn evolve(graph: &LodGraph, spec: EvolveSpec) -> Result<(String, Value), Rejecti
             .ok_or_else(|| graph_rejection(LodError::EntityNotFound(e)))?;
         retract.push((e, node));
     }
-    let fixed_point = graph
-        .transact(|g| {
-            let before = g.create_checkpoint();
-            for &(_, node) in &retract {
-                g.retract_falsification(node)?;
-            }
-            let report = params.run(g)?;
-            let fixed_point = fixed_point_json(g, params, &report);
-            if dry_run {
-                g.rollback_checkpoint(&before)?;
-            }
-            Ok(fixed_point)
-        })
-        .map_err(graph_rejection)?;
+    let fixed_point = apply(graph, dry_run, |g| {
+        for &(_, node) in &retract {
+            g.retract_falsification(node)?;
+        }
+        let report = params.run(g)?;
+        let fixed_point = fixed_point_json(g, params, &report);
+        Ok(fixed_point)
+    })
+    .map_err(graph_rejection)?;
     let summary = format!(
         "graph_evolve: fixed point in {} step(s) (bound {}), {} status change(s){}",
         fixed_point["iterations"],
         fixed_point["k_max"],
         fixed_point["transitions_total"],
         if dry_run {
-            " (dry run, rolled back)"
+            " (dry run, not applied)"
         } else {
             ""
         }
@@ -1111,29 +1117,24 @@ fn coarse_grain(graph: &LodGraph, spec: CoarseGrainSpec) -> Result<(String, Valu
             .ok_or_else(|| graph_rejection(LodError::EntityNotFound(e)))?;
         members.push(node);
     }
-    let (summary, member_nodes, csr_edges) = graph
-        .transact(|g| {
-            if g.node_count() + 1 > MAX_GRAPH_NODES {
-                return Err(LodError::InvalidNode(format!(
-                    "the live graph is capped at {MAX_GRAPH_NODES} nodes"
-                )));
-            }
-            let before = g.create_checkpoint();
-            let id = g.coarse_grain_cluster(&members, summary_entity, summary_coord, spec.hdc)?;
-            let summary = node_json(g, id);
-            let member_nodes: Vec<Value> = members.iter().map(|&m| node_json(g, m)).collect();
-            let csr_edges = g.csr_snapshot().num_edges();
-            if dry_run {
-                g.rollback_checkpoint(&before)?;
-            }
-            Ok((summary, member_nodes, csr_edges))
-        })
-        .map_err(graph_rejection)?;
+    let (summary, member_nodes, csr_edges) = apply(graph, dry_run, |g| {
+        if g.node_count() + 1 > MAX_GRAPH_NODES {
+            return Err(LodError::InvalidNode(format!(
+                "the live graph is capped at {MAX_GRAPH_NODES} nodes"
+            )));
+        }
+        let id = g.coarse_grain_cluster(&members, summary_entity, summary_coord, spec.hdc)?;
+        let summary = node_json(g, id);
+        let member_nodes: Vec<Value> = members.iter().map(|&m| node_json(g, m)).collect();
+        let csr_edges = g.csr_snapshot().num_edges();
+        Ok((summary, member_nodes, csr_edges))
+    })
+    .map_err(graph_rejection)?;
     let summary_line = format!(
         "graph_coarse_grain: {} member(s) {} under entity {summary_entity} at band {}",
         members.len(),
         if dry_run {
-            "would be coarse-grained (dry run, rolled back)"
+            "would be coarse-grained (dry run, not applied)"
         } else {
             "coarse-grained"
         },
@@ -1168,29 +1169,24 @@ fn zoom(graph: &LodGraph, spec: ZoomSpec) -> Result<(String, Value), Rejection> 
     let node = graph
         .node_for_entity(e)
         .ok_or_else(|| graph_rejection(LodError::EntityNotFound(e)))?;
-    let (from, to, node_after) = graph
-        .transact(|g| {
-            let before = g.create_checkpoint();
-            let (from, to) = match direction {
-                Some(d) => {
-                    let from = g.get_node(node).ok_or(LodError::NodeNotFound(node))?.band;
-                    (from, g.zoom_node(node, d)?)
-                }
-                None => g.migrate_band_to_coord(node)?,
-            };
-            let node_after = node_json(g, node);
-            if dry_run {
-                g.rollback_checkpoint(&before)?;
+    let (from, to, node_after) = apply(graph, dry_run, |g| {
+        let (from, to) = match direction {
+            Some(d) => {
+                let from = g.get_node(node).ok_or(LodError::NodeNotFound(node))?.band;
+                (from, g.zoom_node(node, d)?)
             }
-            Ok((from, to, node_after))
-        })
-        .map_err(graph_rejection)?;
+            None => g.migrate_band_to_coord(node)?,
+        };
+        let node_after = node_json(g, node);
+        Ok((from, to, node_after))
+    })
+    .map_err(graph_rejection)?;
     let summary = format!(
         "graph_zoom: entity {e} band {} -> {}{}",
         band_level(from),
         band_level(to),
         if dry_run {
-            " (dry run, rolled back)"
+            " (dry run, not applied)"
         } else {
             ""
         }

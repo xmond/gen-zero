@@ -5107,7 +5107,7 @@ mod tests {
     #[tokio::test]
     async fn ask_enforces_graph_revocations() {
         let engine = PolymorphicZeroEngine::new().with_semantic(None);
-        engine.graph.revoke_entity(action_id("revoked").0 as u64);
+        engine.graph.revoke_entity(action_id("revoked").0 as u64).unwrap();
         let out = engine
             .execute(&json!({"action":"ask", "candidates":["revoked"]}))
             .await
@@ -5142,7 +5142,7 @@ mod tests {
                     let body = body.clone();
                     let graph = graph.clone();
                     async move {
-                        if revoke { graph.revoke_entity(action_id("first").0 as u64); }
+                        if revoke { graph.revoke_entity(action_id("first").0 as u64).unwrap(); }
                         Json(body)
                     }
                 }))
