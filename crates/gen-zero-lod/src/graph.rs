@@ -15,7 +15,9 @@
 //! `Falsifies` edges (`evolve_signed_epistemic_fixed_point_within`). The
 //! dependency graph is cut into strongly connected components (Tarjan) and
 //! solved sources first: a node on no cycle in one evaluation, a cycle by its
-//! own contraction, refused when it has none. Evidence enters through
+//! own contraction, refused when it has none. Admission keeps such cycles out:
+//! an edge that would close one at [`ADMISSION_BETA`], [`ADMISSION_GAMMA`] is
+//! refused when it is added. Evidence enters through
 //! `falsify_node` and leaves through `retract_falsification`; the next
 //! evolution moves every dependent accordingly, in either direction.
 //!
@@ -400,6 +402,72 @@ pub const MAX_FIXED_POINT_STEPS: usize = 100_000;
 /// fully confident falsifier cancels a fully confident support.
 pub const DEFAULT_FALSIFICATION_GAIN: f32 = 1.0;
 
+/// Damping `beta` every edge is admitted against and every reflection evolves
+/// with. See [`LodGraph::add_edge`].
+pub const ADMISSION_BETA: f32 = 0.85;
+
+/// Falsification gain every edge is admitted against and every reflection
+/// evolves with.
+pub const ADMISSION_GAMMA: f32 = DEFAULT_FALSIFICATION_GAIN;
+
+/// Tolerance and hysteresis band of [`LodGraph::reflect_failure`].
+const REFLECTION_TOLERANCE: f32 = 1e-6;
+const REFLECTION_THETA_LO: f32 = 0.3;
+const REFLECTION_THETA_HI: f32 = 0.6;
+
+/// What a cyclic block whose Lipschitz bound is `>= 1` does.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum OnNonContractive {
+    /// Refuse the whole evolution with [`LodError::FixedPointNotContractive`].
+    Refuse,
+    /// Lower the gain of the falsifier edges inside the block until it
+    /// contracts, and report it in [`FixedPointReport::adapted_blocks`].
+    AdaptGain,
+}
+
+/// A cyclic block whose internal falsifier gain an evolution lowered, because at
+/// the requested gain its map was not a contraction.
+///
+/// Only falsifier edges with both ends inside the block run at `applied_gamma`.
+/// Support edges, and falsifiers from outside the block, keep their weight. The
+/// fixed point of such a block is the one of the weaker map, not of the
+/// requested one: the report is how a caller sees that.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AdaptedBlock {
+    /// Node ids of the block.
+    pub nodes: Vec<u32>,
+    pub requested_gamma: f64,
+    pub applied_gamma: f64,
+    /// Lipschitz bound at `requested_gamma` (`>= 1`).
+    pub requested_contraction: f64,
+    /// Lipschitz bound at `applied_gamma` (`< 1`).
+    pub contraction: f64,
+}
+
+/// How [`LodGraph::reflect_failure`] revoked the action.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReflectionRevocation {
+    /// The evolution pressed the action's confidence below the threshold.
+    Evolution,
+    /// The evolution left the action at or above the threshold (other support
+    /// outweighs the observation). The action is revoked by hand, as
+    /// [`LodGraph::revoke_entity`] does, and stays revoked.
+    Quarantine,
+}
+
+/// Result of one [`LodGraph::reflect_failure`].
+#[derive(Clone, Debug)]
+pub struct ReflectionReport {
+    /// Node of the failure observation.
+    pub evidence: u32,
+    /// Node of the action.
+    pub target: u32,
+    pub revocation: ReflectionRevocation,
+    /// Confidence of the action at the fixed point.
+    pub target_confidence: f32,
+    pub evolution: FixedPointReport,
+}
+
 /// One status change made by a confidence evolution.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct StatusTransition {
@@ -471,6 +539,10 @@ pub struct FixedPointReport {
     /// Validated dependencies dropped and gained by the status changes.
     pub retracted_dependencies: usize,
     pub added_dependencies: usize,
+    /// Cyclic blocks solved at a lowered internal falsifier gain. Always empty
+    /// for [`LodGraph::evolve_signed_epistemic_fixed_point_within`], which
+    /// refuses such a block; only [`LodGraph::reflect_failure`] adapts.
+    pub adapted_blocks: Vec<AdaptedBlock>,
     /// State just before the evolution, taken under the same lock. Pass it to
     /// [`LodGraph::rollback_checkpoint`] to undo the evolution.
     pub checkpoint: GraphCheckpoint,
@@ -589,31 +661,46 @@ fn tarjan_scc(offsets: &[usize], targets: &[u32]) -> Condensation {
     Condensation { starts, members }
 }
 
+/// Gain of the falsifier entries whose source lies in the same block as their
+/// row, when an [`OnNonContractive::AdaptGain`] evolution lowered it: the
+/// block of every node, and the lowered gain.
+type InnerGain<'a> = Option<(&'a [usize], f64)>;
+
 /// `T_v(c) = (1 - beta) pi_v + beta max(0, P+_v c - gamma P-_v c)`, clamped to
 /// [0, 1]. A row without support entries uses `pi_v` for `P+_v c`, written so
-/// that a node with no falsifier either reproduces `pi_v` exactly.
+/// that a node with no falsifier either reproduces `pi_v` exactly. With `inner`,
+/// falsifiers from `v`'s own block weigh its gain instead of `gamma`.
 fn evaluate_node(
     rows: &SignedRows,
     prior: &[f64],
     beta: f64,
     gamma: f64,
+    inner: InnerGain<'_>,
     c: &[f64],
     v: usize,
 ) -> f64 {
-    let (mut support, mut penalty) = (0.0_f64, 0.0_f64);
+    let (mut support, mut outer, mut within) = (0.0_f64, 0.0_f64, 0.0_f64);
     for i in rows.row(v) {
-        let term = rows.probabilities[i] * c[rows.sources[i] as usize];
-        if rows.falsifies[i] {
-            penalty += term;
-        } else {
+        let u = rows.sources[i] as usize;
+        let term = rows.probabilities[i] * c[u];
+        if !rows.falsifies[i] {
             support += term;
+        } else if inner.is_some_and(|(block_of, _)| block_of[u] == block_of[v]) {
+            within += term;
+        } else {
+            outer += term;
         }
     }
+    // Without `inner`, `within` is 0 and the penalty is `gamma outer` exactly.
+    let penalty = match inner {
+        Some((_, gain)) => gamma * outer + gain * within,
+        None => gamma * outer,
+    };
     let value = if rows.supported[v] {
-        (1.0 - beta) * prior[v] + beta * (support - gamma * penalty).max(0.0)
+        (1.0 - beta) * prior[v] + beta * (support - penalty).max(0.0)
     } else {
-        // (1 - beta) pi + beta max(0, pi - gamma penalty), rearranged.
-        prior[v] - beta * prior[v].min(gamma * penalty)
+        // (1 - beta) pi + beta max(0, pi - penalty), rearranged.
+        prior[v] - beta * prior[v].min(penalty)
     };
     value.clamp(0.0, 1.0)
 }
@@ -645,6 +732,7 @@ fn iterate_block(
     q: f64,
     beta: f64,
     gamma: f64,
+    inner: InnerGain<'_>,
     tolerance: f64,
     max_steps: usize,
     c: &mut [f64],
@@ -661,7 +749,7 @@ fn iterate_block(
         let mut delta = 0.0_f64;
         for (out, &v) in next.iter_mut().zip(members) {
             let v = v as usize;
-            *out = evaluate_node(rows, prior, beta, gamma, c, v);
+            *out = evaluate_node(rows, prior, beta, gamma, inner, c, v);
             let moved = (*out - c[v]).abs();
             if !(out.is_finite() && moved.is_finite()) {
                 return None;
@@ -715,6 +803,126 @@ struct BlockSolve {
     /// The cyclic block with the largest `k_max`, if any.
     reported: Option<BlockRun>,
     error_bound: f64,
+    adapted: Vec<AdaptedBlock>,
+}
+
+/// The strongly connected components of the dependency graph, and the
+/// component of every node.
+struct Blocks {
+    condensation: Condensation,
+    block_of: Vec<usize>,
+}
+
+impl Blocks {
+    fn of(rows: &SignedRows) -> Self {
+        let condensation = tarjan_scc(&rows.offsets, &rows.sources);
+        let mut block_of = vec![0usize; rows.offsets.len() - 1];
+        for k in 0..condensation.component_count() {
+            for &v in condensation.component(k) {
+                block_of[v as usize] = k;
+            }
+        }
+        Self {
+            condensation,
+            block_of,
+        }
+    }
+
+    /// The block has a cycle: more than one node, or one node with a self-loop.
+    fn is_cyclic(&self, rows: &SignedRows, k: usize) -> bool {
+        let members = self.condensation.component(k);
+        members.len() > 1 || rows.sources[rows.row(members[0] as usize)].contains(&members[0])
+    }
+
+    /// Lipschitz data of block `k`: its bound `q = beta max_v sum_{u in S}
+    /// |P_vu|` at `gamma`, the largest propagated upstream error
+    /// `beta max_v sum_{u outside} |P_vu| e_u` (0 without `error`), and per
+    /// member the support and the falsifier weight from inside the block, the
+    /// latter before any gain.
+    fn weights(
+        &self,
+        rows: &SignedRows,
+        k: usize,
+        beta: f64,
+        gamma: f64,
+        error: Option<&[f64]>,
+    ) -> (f64, f64, Vec<(f64, f64)>) {
+        let members = self.condensation.component(k);
+        let mut q = 0.0_f64;
+        let mut inherited = 0.0_f64;
+        let mut inside = Vec::with_capacity(members.len());
+        for &v in members {
+            let (mut internal, mut external) = (0.0_f64, 0.0_f64);
+            let (mut support, mut against) = (0.0_f64, 0.0_f64);
+            for i in rows.row(v as usize) {
+                let u = rows.sources[i] as usize;
+                let weight = rows.lipschitz_weight(i, gamma);
+                if self.block_of[u] == k {
+                    internal += weight;
+                    if rows.falsifies[i] {
+                        against += rows.probabilities[i];
+                    } else {
+                        support += rows.probabilities[i];
+                    }
+                } else if let Some(error) = error {
+                    external += weight * error[u];
+                }
+            }
+            q = q.max(beta * internal);
+            inherited = inherited.max(beta * external);
+            inside.push((support, against));
+        }
+        (q, inherited, inside)
+    }
+}
+
+/// The gain of a block's internal falsifier edges that makes it a contraction
+/// with margin, and the Lipschitz bound at that gain.
+///
+/// Row `v` weighs `a_v + g b_v` inside the block (`a_v` support, `b_v`
+/// falsifiers before gain). Support alone gives `beta a_max <= beta < 1`. The
+/// target bound is `q* = (1 + beta a_max) / 2`, halfway to 1, reached by
+/// `g = min(gamma, min_{b_v > 0} (q* / beta - a_v) / b_v)`; each row is
+/// bounded by its own `a_v` and `b_v`, which is tighter than pairing the
+/// largest `a` with the largest `b` when they lie on different rows.
+///
+/// Why not the limit `(1 / beta - a) / (b + eps)`: its bound sits within about
+/// `eps` of 1, and `k_max` grows like `|ln tolerance| / eps`. For a small `eps`
+/// that passes [`MAX_FIXED_POINT_STEPS`], and the refusal becomes a divergence.
+///
+/// A bound that is still not below 1 (non-finite weights) is `None`.
+fn adapted_gain(beta: f64, gamma: f64, inside: &[(f64, f64)]) -> Option<(f64, f64)> {
+    let support_max = inside.iter().map(|&(a, _)| a).fold(0.0, f64::max);
+    let target = 0.5 * (1.0 + beta * support_max);
+    let gain = inside
+        .iter()
+        .filter(|&&(_, b)| b > 0.0)
+        .map(|&(a, b)| (target / beta - a) / b)
+        .fold(gamma, f64::min)
+        .max(0.0);
+    let q = inside
+        .iter()
+        .map(|&(a, b)| beta * (a + gain * b))
+        .fold(0.0, f64::max);
+    (gain.is_finite() && q.is_finite() && q < 1.0).then_some((gain, q))
+}
+
+/// The first cyclic block whose map is not a contraction at `beta`, `gamma`,
+/// as the error an evolution would refuse it with.
+fn non_contractive_block(rows: &SignedRows, beta: f64, gamma: f64) -> Option<LodError> {
+    let blocks = Blocks::of(rows);
+    (0..blocks.condensation.component_count()).find_map(|k| {
+        if !blocks.is_cyclic(rows, k) {
+            return None;
+        }
+        let (q, _, _) = blocks.weights(rows, k, beta, gamma, None);
+        (q.is_nan() || q >= 1.0).then(|| LodError::FixedPointNotContractive {
+            block_size: blocks.condensation.component(k).len(),
+            contraction: q,
+            beta,
+            gamma,
+        })
+    })
 }
 
 /// Decompose the dependency graph into strongly connected components and solve
@@ -725,12 +933,16 @@ struct BlockSolve {
 /// - A cyclic component `S` is iterated alone, its inputs from outside held.
 ///   Its Lipschitz bound is `q_S = beta max_{v in S} sum_{u in S} |P_vu|`, with
 ///   `P- ` entries weighted by `gamma`. `q_S >= 1` is
-///   [`LodError::FixedPointNotContractive`]: without a contraction the
-///   iteration has no bound and the fixed point need not be unique.
+///   [`LodError::FixedPointNotContractive`] under [`OnNonContractive::Refuse`]:
+///   without a contraction the iteration has no bound and the fixed point need
+///   not be unique. Under [`OnNonContractive::AdaptGain`] the falsifier entries
+///   inside `S` take the gain of [`adapted_gain`] instead, and the block is
+///   listed in [`BlockSolve::adapted`].
 ///
 /// Error propagation: a block reads upstream values that are off by at most
 /// their own bounds `e_u`, so its bound is
 /// `(q r + beta max_v sum_{u outside} |P_vu| e_u) / (1 - q)`, `r` its stop residual.
+#[allow(clippy::too_many_arguments)]
 fn solve_by_blocks(
     rows: &SignedRows,
     prior: &[f64],
@@ -738,15 +950,11 @@ fn solve_by_blocks(
     gamma: f64,
     tolerance: f64,
     max_steps: usize,
+    on_non_contractive: OnNonContractive,
 ) -> Result<BlockSolve, LodError> {
     let n = prior.len();
-    let condensation = tarjan_scc(&rows.offsets, &rows.sources);
-    let mut block_of = vec![0usize; n];
-    for k in 0..condensation.component_count() {
-        for &v in condensation.component(k) {
-            block_of[v as usize] = k;
-        }
-    }
+    let blocks = Blocks::of(rows);
+    let condensation = &blocks.condensation;
     let mut c = prior.to_vec();
     let mut error = vec![0.0_f64; n];
     let mut solve = BlockSolve {
@@ -759,32 +967,15 @@ fn solve_by_blocks(
         node_updates: 0,
         reported: None,
         error_bound: 0.0,
+        adapted: Vec::new(),
     };
     for k in 0..condensation.component_count() {
         let members = condensation.component(k);
         solve.max_scc_size = solve.max_scc_size.max(members.len());
-        // Per node: Lipschitz weight inside the block, propagated upstream error.
-        let mut q = 0.0_f64;
-        let mut inherited = 0.0_f64;
-        for &v in members {
-            let (mut internal, mut external) = (0.0_f64, 0.0_f64);
-            for i in rows.row(v as usize) {
-                let u = rows.sources[i] as usize;
-                let weight = rows.lipschitz_weight(i, gamma);
-                if block_of[u] == k {
-                    internal += weight;
-                } else {
-                    external += weight * error[u];
-                }
-            }
-            q = q.max(beta * internal);
-            inherited = inherited.max(beta * external);
-        }
-        let cyclic =
-            members.len() > 1 || rows.sources[rows.row(members[0] as usize)].contains(&members[0]);
-        if !cyclic {
+        let (requested, inherited, inside) = blocks.weights(rows, k, beta, gamma, Some(&error));
+        if !blocks.is_cyclic(rows, k) {
             let v = members[0] as usize;
-            let value = evaluate_node(rows, prior, beta, gamma, &c, v);
+            let value = evaluate_node(rows, prior, beta, gamma, None, &c, v);
             if !value.is_finite() {
                 return Err(LodError::FixedPointDiverged {
                     iterations: 0,
@@ -799,16 +990,32 @@ fn solve_by_blocks(
             solve.node_updates += 1;
             continue;
         }
-        if q.is_nan() || q >= 1.0 {
-            return Err(LodError::FixedPointNotContractive {
-                block_size: members.len(),
-                contraction: q,
-                beta,
-                gamma,
-            });
-        }
+        let refusal = LodError::FixedPointNotContractive {
+            block_size: members.len(),
+            contraction: requested,
+            beta,
+            gamma,
+        };
+        let (q, inner) = if requested.is_nan() || requested >= 1.0 {
+            match on_non_contractive {
+                OnNonContractive::Refuse => return Err(refusal),
+                OnNonContractive::AdaptGain => {
+                    let (gain, q) = adapted_gain(beta, gamma, &inside).ok_or(refusal)?;
+                    solve.adapted.push(AdaptedBlock {
+                        nodes: members.to_vec(),
+                        requested_gamma: gamma,
+                        applied_gamma: gain,
+                        requested_contraction: requested,
+                        contraction: q,
+                    });
+                    (q, Some((blocks.block_of.as_slice(), gain)))
+                }
+            }
+        } else {
+            (requested, None)
+        };
         let run = iterate_block(
-            rows, prior, members, q, beta, gamma, tolerance, max_steps, &mut c,
+            rows, prior, members, q, beta, gamma, inner, tolerance, max_steps, &mut c,
         )?;
         let bound = (q * run.residual + inherited) / (1.0 - q);
         for &v in members {
@@ -824,6 +1031,59 @@ fn solve_by_blocks(
     solve.error_bound = error.iter().copied().fold(0.0, f64::max);
     solve.confidences = c;
     Ok(solve)
+}
+
+/// The edge enters the confidence iteration and its target reaches its source
+/// along edges that do: adding it closes a cycle. An edge that closes none
+/// cannot raise any block's Lipschitz bound, it only dilutes its target's row.
+fn closes_confidence_cycle(
+    nodes: &[LodNode],
+    snapshot: &CsrGraph,
+    pending: &[BufferedEdge],
+    edge: &BufferedEdge,
+) -> bool {
+    let with_falsifiers = ADMISSION_GAMMA > 0.0;
+    let enters = |target: u32, edge_type: EdgeType, weight: f32| {
+        (carries_confidence(edge_type) || (with_falsifiers && edge_type == EdgeType::Falsifies))
+            && weight > 0.0
+            && !is_pinned(&nodes[target as usize])
+    };
+    if !enters(edge.target, edge.edge_type, edge.weight) {
+        return false;
+    }
+    let mut buffered: HashMap<u32, Vec<(u32, EdgeType, f32)>> = HashMap::new();
+    for e in pending {
+        buffered
+            .entry(e.source)
+            .or_default()
+            .push((e.target, e.edge_type, e.weight));
+    }
+    let mut seen = HashSet::from([edge.target]);
+    let mut stack = vec![edge.target];
+    while let Some(u) = stack.pop() {
+        if u == edge.source {
+            return true;
+        }
+        let later = buffered.get(&u).into_iter().flatten().copied();
+        for (v, edge_type, weight) in snapshot.neighbors(u).chain(later) {
+            if enters(v, edge_type, weight) && seen.insert(v) {
+                stack.push(v);
+            }
+        }
+    }
+    false
+}
+
+/// The refusal admission gives the graph made of `nodes` and these edges: its
+/// first cycle that is not a contraction at [`ADMISSION_BETA`],
+/// [`ADMISSION_GAMMA`].
+fn admission_refusal(
+    nodes: &[LodNode],
+    snapshot: &CsrGraph,
+    pending: &[BufferedEdge],
+) -> Option<LodError> {
+    let rows = signed_rows(nodes, snapshot, pending, ADMISSION_GAMMA > 0.0);
+    non_contractive_block(&rows, f64::from(ADMISSION_BETA), f64::from(ADMISSION_GAMMA))
 }
 
 /// Edges along which confidence is inherited: the target depends on the source.
@@ -1181,7 +1441,16 @@ impl LodGraph {
     /// Append a directional edge to the pending buffer and return its ticket.
     /// Both endpoints must be existing nodes; the weight must be finite and
     /// nonnegative. A `CoarseGrain` edge must run from a finer band to a strictly
-    /// coarser one. The critical section is O(1): no history is copied.
+    /// coarser one.
+    ///
+    /// Admission: an edge that closes a cycle of confidence-carrying or
+    /// `Falsifies` edges is refused with [`LodError::FixedPointNotContractive`]
+    /// when some cycle of the resulting graph is not a contraction at
+    /// [`ADMISSION_BETA`], [`ADMISSION_GAMMA`]. The graph then never holds a
+    /// cycle an evolution at those parameters, the reflection's among them,
+    /// must refuse. An edge that closes no cycle only dilutes its target's row
+    /// and is admitted after a reachability walk from the target; a cycle-closing
+    /// edge costs one `O(V + E)` check.
     pub fn add_edge(
         &self,
         source: u32,
@@ -1193,6 +1462,31 @@ impl LodGraph {
         self.push_edge(&mut st, source, target, edge_type, weight)
     }
 
+    /// Append several edges as one batch and return their tickets, in order.
+    /// Each edge is checked as [`Self::add_edge`] checks it, and admission runs
+    /// once over the graph with the whole batch (one `O(V + E)` pass instead of
+    /// one per edge, so a large deposit stays linear). Any refusal leaves the
+    /// buffer as it was: no edge of the batch is added.
+    pub fn add_edges(&self, edges: &[(u32, u32, EdgeType, f32)]) -> Result<Vec<u64>, LodError> {
+        let mut st = self.state.write();
+        let mut batch = Vec::with_capacity(edges.len());
+        for &(source, target, edge_type, weight) in edges {
+            batch.push(self.checked_edge(&st, source, target, edge_type, weight)?);
+        }
+        let snapshot = self.csr_snapshot.load_full();
+        let kept = st.edge_buffer.len();
+        st.edge_buffer.extend_from_slice(&batch);
+        let refusal = admission_refusal(&st.nodes, &snapshot, &st.edge_buffer);
+        st.edge_buffer.truncate(kept);
+        if let Some(refusal) = refusal {
+            return Err(refusal);
+        }
+        Ok(batch
+            .into_iter()
+            .map(|edge| self.commit_edge(&mut st, edge))
+            .collect())
+    }
+
     /// [`Self::add_edge`] under a held write lock.
     fn push_edge(
         &self,
@@ -1202,6 +1496,29 @@ impl LodGraph {
         edge_type: EdgeType,
         weight: f32,
     ) -> Result<u64, LodError> {
+        let edge = self.checked_edge(st, source, target, edge_type, weight)?;
+        let snapshot = self.csr_snapshot.load_full();
+        if closes_confidence_cycle(&st.nodes, &snapshot, &st.edge_buffer, &edge) {
+            st.edge_buffer.push(edge);
+            let refusal = admission_refusal(&st.nodes, &snapshot, &st.edge_buffer);
+            st.edge_buffer.pop();
+            if let Some(refusal) = refusal {
+                return Err(refusal);
+            }
+        }
+        Ok(self.commit_edge(st, edge))
+    }
+
+    /// The edge, once its endpoints, weight and band order are valid. Its
+    /// ticket is set by [`Self::commit_edge`].
+    fn checked_edge(
+        &self,
+        st: &GraphState,
+        source: u32,
+        target: u32,
+        edge_type: EdgeType,
+        weight: f32,
+    ) -> Result<BufferedEdge, LodError> {
         check_edge(st.nodes.len(), source, target, weight)?;
         if edge_type == EdgeType::CoarseGrain {
             let (fine, coarse) = (
@@ -1215,23 +1532,31 @@ impl LodGraph {
                 )));
             }
         }
-        // Taken under the lock so buffer order is ticket order.
-        let ticket = self.ticket_counter.fetch_add(1, Ordering::Relaxed);
-        st.edge_buffer.push(BufferedEdge {
+        Ok(BufferedEdge {
             source,
             target,
             edge_type,
             weight,
-            ticket,
-        });
-        if states_dependency(edge_type) {
-            let (u, v) = (&st.nodes[source as usize], &st.nodes[target as usize]);
+            ticket: 0,
+        })
+    }
+
+    /// Append an admitted edge to the buffer and return its ticket.
+    fn commit_edge(&self, st: &mut GraphState, mut edge: BufferedEdge) -> u64 {
+        // Taken under the lock so buffer order is ticket order.
+        edge.ticket = self.ticket_counter.fetch_add(1, Ordering::Relaxed);
+        st.edge_buffer.push(edge);
+        if states_dependency(edge.edge_type) {
+            let (u, v) = (
+                &st.nodes[edge.source as usize],
+                &st.nodes[edge.target as usize],
+            );
             if u.status.is_active_truth() && v.status.is_active_truth() {
                 let dep = (u.entity_id, v.entity_id);
                 st.validated_deps.insert(dep);
             }
         }
-        Ok(ticket)
+        edge.ticket
     }
 
     /// Merge the pending edges into a new CSR snapshot and drain them from the
@@ -1752,7 +2077,9 @@ impl LodGraph {
     /// `Falsified` status): the node returns to `Hypothesized` at its prior and
     /// its entity is no longer revoked, unless [`Self::revoke_entity`] revoked it.
     /// Dependents recover at the next [`Self::evolve_epistemic_fixed_point`].
-    /// A node that is not refuted is an error.
+    /// A node that is not refuted is an error. Refused, with nothing changed,
+    /// when the node's edges would close a cycle that admission
+    /// ([`Self::add_edge`]) refuses.
     pub fn retract_falsification(&self, node_id: u32) -> Result<(), LodError> {
         let mut guard = self.state.write();
         let st = &mut *guard;
@@ -1765,10 +2092,18 @@ impl LodGraph {
                 "node {node_id} is not refuted by evidence"
             )));
         }
+        let before = NodeMutable::of(node);
         node.refuted = false;
         node.status = EpistemicStatus::Hypothesized;
         node.confidence = node.prior;
         let entity = node.entity_id;
+        // Unpinning gives the node its incoming edges back, which may close a
+        // cycle admission never saw.
+        let snapshot = self.csr_snapshot.load_full();
+        if let Some(refusal) = admission_refusal(&st.nodes, &snapshot, &st.edge_buffer) {
+            before.restore(&mut st.nodes[node_id as usize]);
+            return Err(refusal);
+        }
         if !st.manual_revocations.contains(&entity) {
             st.revocations.remove(&entity);
         }
@@ -1867,7 +2202,14 @@ impl LodGraph {
 
         let mut guard = self.state.write();
         self.evolve_locked(
-            &mut guard, beta, gamma, tolerance, theta_lo, theta_hi, max_steps,
+            &mut guard,
+            beta,
+            gamma,
+            tolerance,
+            theta_lo,
+            theta_hi,
+            max_steps,
+            OnNonContractive::Refuse,
         )
     }
 
@@ -1881,6 +2223,7 @@ impl LodGraph {
         theta_lo: f32,
         theta_hi: f32,
         max_steps: usize,
+        on_non_contractive: OnNonContractive,
     ) -> Result<FixedPointReport, LodError> {
         let checkpoint = self.capture(st);
         let snapshot = self.csr_snapshot.load_full();
@@ -1901,6 +2244,7 @@ impl LodGraph {
             f64::from(gamma),
             f64::from(tolerance),
             max_steps.min(MAX_FIXED_POINT_STEPS),
+            on_non_contractive,
         )?;
 
         // Converged: commit. Nothing above this line changed the graph.
@@ -1980,6 +2324,7 @@ impl LodGraph {
             reinstated_entities,
             retracted_dependencies,
             added_dependencies,
+            adapted_blocks: run.adapted,
             checkpoint,
         })
     }
@@ -2142,6 +2487,19 @@ impl LodGraph {
     /// Record a model/policy observation and evolve under one exclusive lock.
     /// Observation confidence expresses certainty that the diagnostic occurred,
     /// not calibrated real-world causality. Identical payloads reuse evidence.
+    ///
+    /// The evolution runs at [`ADMISSION_BETA`], [`ADMISSION_GAMMA`], so on a
+    /// graph built through [`Self::add_edge`] every cycle contracts. A cycle that
+    /// does not (an invariant broken some other way) does not fail the
+    /// reflection: its internal falsifier gain is lowered until it contracts and
+    /// the block is listed in [`FixedPointReport::adapted_blocks`]. The
+    /// observation's own `Falsifies` edge comes from a node with no incoming
+    /// edge, so it is never inside a cycle and always presses at full gain.
+    ///
+    /// The action always ends revoked: by the evolution when its confidence
+    /// falls below the threshold, otherwise by an explicit quarantine
+    /// ([`ReflectionRevocation::Quarantine`]).
+    ///
     /// On failure no staged evidence is published; the target is quarantined and
     /// the caller receives an error. An axiom cannot be silently rewritten.
     pub fn reflect_failure(
@@ -2149,7 +2507,7 @@ impl LodGraph {
         action: u32,
         payload: &str,
         timestamp_ns: u64,
-    ) -> Result<(u32, u32, FixedPointReport), LodError> {
+    ) -> Result<ReflectionReport, LodError> {
         let mut live = self.state.write();
         let mut staged = live.clone();
         let result = (|| {
@@ -2219,21 +2577,30 @@ impl LodGraph {
                     id
                 }
             };
-            let report = self.evolve_locked(
+            let evolution = self.evolve_locked(
                 &mut staged,
-                0.85,
-                1.0,
-                1e-6,
-                0.3,
-                0.6,
+                ADMISSION_BETA,
+                ADMISSION_GAMMA,
+                REFLECTION_TOLERANCE,
+                REFLECTION_THETA_LO,
+                REFLECTION_THETA_HI,
                 MAX_FIXED_POINT_STEPS,
+                OnNonContractive::AdaptGain,
             )?;
-            if !staged.revocations.contains(&entity) {
-                return Err(LodError::InvalidQuery(format!(
-                    "reflection did not revoke action {action}; quarantined"
-                )));
-            }
-            Ok((evidence, target, report))
+            let revocation = if staged.revocations.contains(&entity) {
+                ReflectionRevocation::Evolution
+            } else {
+                staged.revocations.insert(entity);
+                staged.manual_revocations.insert(entity);
+                ReflectionRevocation::Quarantine
+            };
+            Ok(ReflectionReport {
+                evidence,
+                target,
+                revocation,
+                target_confidence: staged.nodes[target as usize].confidence,
+                evolution,
+            })
         })();
         match result {
             Ok(report) => {
@@ -2747,6 +3114,7 @@ mod tests {
                     beta,
                     beta,
                     1.0,
+                    None,
                     tol,
                     usize::MAX,
                     &mut c,
@@ -4095,7 +4463,9 @@ mod tests {
                         .unwrap()
                 })
                 .collect();
-            graph.add_edge(x, ids[0], EdgeType::DependsOn, 1.0).unwrap();
+            // x carries 9 of row n0's 10 support weight, so the falsifier that
+            // closes the cycle below leaves it admissible (q = 1.1 beta < 1).
+            graph.add_edge(x, ids[0], EdgeType::DependsOn, 9.0).unwrap();
             graph
                 .add_edge(ids[0], ids[1], EdgeType::DependsOn, 2.0)
                 .unwrap();
@@ -4134,39 +4504,90 @@ mod tests {
         assert_eq!(shape(&r_plain), shape(&r_zero));
         assert_eq!(r_plain.error_bound, r_zero.error_bound);
         // With gamma on, the falsifiers enter and close the cycle
-        // n0 -> n1 -> n2 -| n3 -| n0. Row n0 then weighs 1/2 + gamma inside it:
-        // q = 1.5 beta, refused at beta 0.85, solved at beta 0.5.
-        match evolve_signed(&build(true), BETA, 1.0).unwrap_err() {
+        // n0 -> n1 -> n2 -| n3 -| n0. Row n0 then weighs 1/10 + gamma inside it:
+        // q = 1.6 beta at gamma 1.5, refused at beta 0.85; at gamma 1 it is
+        // 1.1 beta, solved at beta 0.5. (A loop refused at gamma 1, beta 0.85
+        // is refused by admission and cannot be built: see
+        // `admission_refuses_a_non_contractive_cycle_and_keeps_the_graph`.)
+        match evolve_signed(&build(true), BETA, 1.5).unwrap_err() {
             LodError::FixedPointNotContractive { block_size, .. } => assert_eq!(block_size, 4),
             other => panic!("expected FixedPointNotContractive, got {other}"),
         }
         let r_on = evolve_signed(&build(true), 0.5, 1.0).unwrap();
         assert_eq!(r_on.falsification_edges, 2);
         assert_eq!((r_plain.max_scc_size, r_on.max_scc_size), (2, 4));
-        assert_eq!(r_on.contraction, 0.75);
+        assert!(
+            (r_on.contraction - 0.55).abs() < 1e-12,
+            "{}",
+            r_on.contraction
+        );
     }
 
     /// A falsifier inside a cycle: row a is `P+ = b` and `P- = b`, Lipschitz
-    /// `beta (1 + gamma)`. At beta 0.85, gamma 1 that is 1.7: refused, nothing
-    /// committed. At beta 0.45 it is 0.9: solved.
+    /// `beta (1 + gamma)`, 1.7 at the admission parameters. The edge that closes
+    /// it is refused and the graph keeps the two edges it had. The same edge is
+    /// admitted once another falsifier dilutes it to a tenth of row a's `P-`:
+    /// `q = 1.1 beta`. On that admitted graph an evolution at gamma 2
+    /// (`q = 1.2 beta`) is still refused and commits nothing; at gamma 1 it
+    /// solves to the exact fixed point.
     #[test]
-    fn non_contractive_signed_cycle_is_refused_and_commits_nothing() {
+    fn admission_refuses_a_non_contractive_cycle_and_keeps_the_graph() {
         let graph = LodGraph::new();
         let a = graph.add_node(node("a", 1).with_prior(0.7)).unwrap();
         let b = graph.add_node(node("b", 2).with_prior(0.4)).unwrap();
         graph.add_edge(b, a, EdgeType::DependsOn, 1.0).unwrap();
         graph.add_edge(a, b, EdgeType::DependsOn, 1.0).unwrap();
-        graph.add_edge(b, a, EdgeType::Falsifies, 1.0).unwrap();
         let before = (confidences(&graph), status(&graph, a), status(&graph, b));
+        match graph.add_edge(b, a, EdgeType::Falsifies, 1.0).unwrap_err() {
+            LodError::FixedPointNotContractive {
+                block_size,
+                contraction,
+                beta,
+                gamma,
+            } => {
+                assert_eq!(block_size, 2);
+                assert!((contraction - 2.0 * f64::from(ADMISSION_BETA)).abs() < 1e-12);
+                assert_eq!((beta, gamma), (0.85_f32 as f64, 1.0));
+            }
+            other => panic!("expected FixedPointNotContractive, got {other}"),
+        }
+        assert_eq!(graph.pending_edge_count(), 2);
+        assert_eq!(
+            (confidences(&graph), status(&graph, a), status(&graph, b)),
+            before
+        );
+        assert!(!graph.is_revoked(1) && !graph.is_revoked(2));
 
-        match evolve_signed(&graph, BETA, 1.0).unwrap_err() {
+        // A falsifier from outside the loop takes 9/10 of row a's `P-`. As a
+        // batch, the closing edge alone is refused and so is the whole batch;
+        // with the diluting edge in it, the batch is admitted, tickets in order.
+        let e = graph.add_node(node("e", 3).with_prior(0.0)).unwrap();
+        assert!(matches!(
+            graph.add_edges(&[
+                (e, b, EdgeType::DependsOn, 1.0),
+                (b, a, EdgeType::Falsifies, 1.0)
+            ]),
+            Err(LodError::FixedPointNotContractive { block_size: 2, .. })
+        ));
+        assert_eq!(graph.pending_edge_count(), 2);
+        let tickets = graph
+            .add_edges(&[
+                (e, a, EdgeType::Falsifies, 9.0),
+                (b, a, EdgeType::Falsifies, 1.0),
+            ])
+            .unwrap();
+        assert_eq!(tickets.len(), 2);
+        assert!(tickets[0] < tickets[1]);
+        assert_eq!(graph.pending_edge_count(), 4);
+        let before = (confidences(&graph), status(&graph, a), status(&graph, b));
+        match evolve_signed(&graph, BETA, 2.0).unwrap_err() {
             LodError::FixedPointNotContractive {
                 block_size,
                 contraction,
                 ..
             } => {
                 assert_eq!(block_size, 2);
-                assert!((contraction - 2.0 * f64::from(BETA)).abs() < 1e-12);
+                assert!((contraction - 1.2 * f64::from(BETA)).abs() < 1e-12);
             }
             other => panic!("expected FixedPointNotContractive, got {other}"),
         }
@@ -4174,19 +4595,147 @@ mod tests {
             (confidences(&graph), status(&graph, a), status(&graph, b)),
             before
         );
-        assert!(!graph.is_revoked(1) && !graph.is_revoked(2));
 
-        let report = evolve_signed(&graph, 0.45, 1.0).unwrap();
-        assert!((report.contraction - 0.9 * f64::from(0.45_f32) / 0.45).abs() < 1e-6);
-        // Exact: a = k 0.7 + beta max(0, b - b) = k 0.7, b = k 0.4 + beta a.
-        let beta = f64::from(0.45_f32);
+        let report = evolve_signed(&graph, BETA, 1.0).unwrap();
+        assert!((report.contraction - 1.1 * f64::from(BETA)).abs() < 1e-12);
+        assert!(report.adapted_blocks.is_empty());
+        // e has prior 0 and no support: it stays at 0 and presses nothing.
+        // a = k 0.7 + beta (b - b / 10), b = k 0.4 + beta a.
+        let beta = f64::from(BETA);
         let k = 1.0 - beta;
+        let (pa, pb) = (f64::from(0.7_f32), f64::from(0.4_f32));
+        let ea = k * (pa + 0.9 * beta * pb) / (1.0 - 0.9 * beta * beta);
+        let eb = k * pb + beta * ea;
         let got = confidences(&graph);
-        assert!(
-            (f64::from(got[a as usize]) - k * 0.7_f32 as f64).abs() <= report.error_bound + 1e-6
-        );
-        let eb = k * 0.4_f32 as f64 + beta * k * 0.7_f32 as f64;
+        assert_eq!(got[e as usize], 0.0);
+        assert!((f64::from(got[a as usize]) - ea).abs() <= report.error_bound + 1e-6);
         assert!((f64::from(got[b as usize]) - eb).abs() <= report.error_bound + 1e-6);
+    }
+
+    /// Unpinning a refuted node gives it back its incoming edges. When they
+    /// close a cycle admission refuses, the retraction is refused and the node
+    /// stays refuted.
+    #[test]
+    fn retraction_that_would_close_a_non_contractive_cycle_is_refused() {
+        let graph = LodGraph::new();
+        let a = graph.add_node(node("a", 1).with_prior(0.7)).unwrap();
+        let b = graph.add_node(node("b", 2).with_prior(0.4)).unwrap();
+        graph.falsify_node(a).unwrap();
+        // Edges into a refuted node do not enter the iteration: all admitted.
+        graph.add_edge(b, a, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(a, b, EdgeType::DependsOn, 1.0).unwrap();
+        graph.add_edge(b, a, EdgeType::Falsifies, 1.0).unwrap();
+        assert!(matches!(
+            graph.retract_falsification(a),
+            Err(LodError::FixedPointNotContractive { block_size: 2, .. })
+        ));
+        let node_a = graph.get_node(a).unwrap();
+        assert!(node_a.refuted);
+        assert_eq!(node_a.status, EpistemicStatus::Falsified);
+        assert_eq!(node_a.confidence, 0.0);
+        assert!(graph.is_revoked(1));
+        evolve_signed(&graph, BETA, 1.0).unwrap();
+    }
+
+    /// Fixture only: append edges to the pending buffer without admission, the
+    /// state a graph would be in if the admission invariant were broken. No
+    /// production path writes the buffer this way.
+    fn inject_unadmitted(graph: &LodGraph, edges: &[(u32, u32, EdgeType, f32)]) {
+        let mut st = graph.state.write();
+        for &(source, target, edge_type, weight) in edges {
+            let ticket = graph.ticket_counter.fetch_add(1, Ordering::Relaxed);
+            st.edge_buffer.push(BufferedEdge {
+                source,
+                target,
+                edge_type,
+                weight,
+                ticket,
+            });
+        }
+    }
+
+    /// Reflection on a graph holding a cycle that is not a contraction at its
+    /// parameters: the cycle's internal falsifier gain is lowered and reported,
+    /// the evolution converges, the evidence and its edge are committed and
+    /// the action is revoked. The plain evolution on the same graph is refused.
+    #[test]
+    fn reflection_adapts_the_gain_of_a_non_contractive_cycle() {
+        let graph = LodGraph::new();
+        let a = graph.add_node(node("a", 7).with_prior(0.9)).unwrap();
+        let b = graph.add_node(node("b", 8).with_prior(0.9)).unwrap();
+        let s = graph
+            .add_node(node("s", 9).with_status(EpistemicStatus::Axiomatic))
+            .unwrap();
+        inject_unadmitted(
+            &graph,
+            &[
+                (b, a, EdgeType::DependsOn, 1.0),
+                (a, b, EdgeType::DependsOn, 1.0),
+                (b, a, EdgeType::Falsifies, 1.0),
+                (a, b, EdgeType::Falsifies, 1.0),
+                (s, b, EdgeType::DependsOn, 1.0),
+            ],
+        );
+        assert!(matches!(
+            evolve_signed(&graph, ADMISSION_BETA, ADMISSION_GAMMA),
+            Err(LodError::FixedPointNotContractive { block_size: 2, .. })
+        ));
+
+        let reflection = graph
+            .reflect_failure(7, "model terminal diagnostic", 1)
+            .unwrap();
+        assert_eq!(reflection.target, a);
+        let evidence = graph.get_node(reflection.evidence).unwrap();
+        assert_eq!(
+            evidence.payload.as_deref(),
+            Some("model terminal diagnostic")
+        );
+        // Nothing was flushed: the observation's edge is in the pending buffer.
+        assert!(graph
+            .state
+            .read()
+            .edge_buffer
+            .iter()
+            .any(|e| e.source == reflection.evidence
+                && e.target == a
+                && e.edge_type == EdgeType::Falsifies
+                && e.weight == 1.0));
+        assert_eq!(reflection.revocation, ReflectionRevocation::Evolution);
+        assert!(graph.is_revoked(7));
+        assert!(status(&graph, a).is_falsified());
+
+        // Row a: support b (1), falsifiers b (1/2) and the evidence (1/2, from
+        // outside). Row b: support a (1/2) and s (1/2), falsifier a (1).
+        // a_max = 1, so q* = (1 + beta) / 2 and the binding row is a:
+        // g = (q* / beta - 1) / (1/2) = (1 - beta) / beta.
+        let report = &reflection.evolution;
+        assert_eq!(report.adapted_blocks.len(), 1);
+        let adapted = &report.adapted_blocks[0];
+        let beta = f64::from(ADMISSION_BETA);
+        let mut nodes = adapted.nodes.clone();
+        nodes.sort_unstable();
+        assert_eq!(nodes, vec![a, b]);
+        assert_eq!(adapted.requested_gamma, 1.0);
+        assert!((adapted.requested_contraction - 1.5 * beta).abs() < 1e-12);
+        assert!((adapted.applied_gamma - (1.0 - beta) / beta).abs() < 1e-12);
+        assert!((adapted.contraction - 0.5 * (1.0 + beta)).abs() < 1e-12);
+        assert!(adapted.contraction < 1.0);
+        assert_eq!(report.contraction, adapted.contraction);
+
+        // The committed values are a fixed point of the adapted map.
+        let g = adapted.applied_gamma;
+        let k = 1.0 - beta;
+        let c = confidences(&graph);
+        let (ca, cb, ce) = (
+            f64::from(c[a as usize]),
+            f64::from(c[b as usize]),
+            f64::from(c[reflection.evidence as usize]),
+        );
+        let ta = k * 0.9 + beta * (cb - (g * 0.5 * cb + 1.0 * 0.5 * ce)).max(0.0);
+        let tb = k * 0.9 + beta * (0.5 * ca + 0.5 - g * ca).max(0.0);
+        assert!((ca - ta).abs() <= report.error_bound + 1e-5, "{ca} vs {ta}");
+        assert!((cb - tb).abs() <= report.error_bound + 1e-5, "{cb} vs {tb}");
+        assert_eq!(f64::from(reflection.target_confidence), ca);
     }
 
     /// A non-finite value in either kind of block is a refusal, never a value.
@@ -4207,13 +4756,30 @@ mod tests {
         ] {
             assert!(
                 matches!(
-                    solve_by_blocks(&rows, &prior, 0.85, 1.0, 1e-6, 100),
+                    solve_by_blocks(
+                        &rows,
+                        &prior,
+                        0.85,
+                        1.0,
+                        1e-6,
+                        100,
+                        OnNonContractive::Refuse
+                    ),
                     Err(LodError::FixedPointDiverged { .. })
                 ),
                 "{prior:?}"
             );
         }
-        let ok = solve_by_blocks(&rows, &[0.5, 0.5, 0.5], 0.85, 1.0, 1e-6, 100).unwrap();
+        let ok = solve_by_blocks(
+            &rows,
+            &[0.5, 0.5, 0.5],
+            0.85,
+            1.0,
+            1e-6,
+            100,
+            OnNonContractive::Refuse,
+        )
+        .unwrap();
         assert_eq!((ok.trivial_scc_count, ok.cyclic_scc_count), (1, 1));
     }
 }

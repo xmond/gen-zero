@@ -23602,7 +23602,7 @@
     {
       "file": "crates/gen-zero-lod/src/graph.rs",
       "declared_modules": [],
-      "public_symbols": 54
+      "public_symbols": 58
     },
     {
       "file": "crates/gen-zero-lod/src/lib.rs",
@@ -23827,7 +23827,7 @@
     {
       "file": "crates/gen-zero-service/src/graph_verb.rs",
       "declared_modules": [],
-      "public_symbols": 4
+      "public_symbols": 5
     },
     {
       "file": "crates/gen-zero-service/src/imagine.rs",

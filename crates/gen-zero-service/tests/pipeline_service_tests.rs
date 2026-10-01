@@ -867,9 +867,119 @@ async fn policy_audit_reflection_is_idempotent_and_evolution_conflict_is_explici
         json!({"state": trap_state(), "actions": [0], "auto_reflect": true}),
     )
     .await;
-    assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR, "{body}");
+    // An axiom the observation contradicts is a conflict with the graph's
+    // content, not an engine fault: 409, the action still quarantined.
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
     assert!(body.to_string().contains("GraphReflectionFailed"));
     assert!(body.to_string().contains("quarantined"));
     assert!(graph.is_revoked(0));
     assert_eq!(graph.node_count(), 1);
+}
+
+fn graph_node(entity: u64, label: &str, status: &str, confidence: f64) -> Value {
+    json!({
+        "entity_id": entity, "label": label, "band": 0, "status": status,
+        "coord": {"hyperbolic": [0, 0, 0, 0], "spherical": [1, 0, 0, 0],
+                  "euclidean": [0, 0, 0, 0, 0, 0, 0, 0]},
+        "hdc": [entity, 0, 0, 0], "confidence": confidence,
+    })
+}
+
+fn graph_edge(source: u64, target: u64, kind: &str, weight: f64) -> Value {
+    json!({"source": {"entity_id": source}, "target": {"entity_id": target},
+           "type": kind, "weight": weight})
+}
+
+/// A deposit whose edge would close a cycle that is not a contraction at the
+/// reflection's parameters is refused (422) and commits nothing, the nodes of
+/// the same request included. On the admitted graph, two cycles one of them
+/// through the trap action 0 with a falsifier inside it, `auto_reflect` answers
+/// 200, deposits the observation and its `Falsifies` edge, revokes the action
+/// by evolution, and a later `decide` on it is hard-stopped.
+#[tokio::test]
+async fn admission_refuses_a_divergent_cycle_and_reflection_on_cycles_returns_200() {
+    use gen_zero_core::GraphFactProvider;
+    let graph = Arc::new(LodGraph::new());
+    let engine = Arc::new(
+        PolymorphicZeroEngine::new()
+            .with_semantic(None)
+            .with_lod_graph(graph.clone()),
+    );
+    // Cycle A: 0 -> 100 -> 101 -> 0 (support), 101 -| 100 inside it. Row 100
+    // is 1/10 support from the loop (fact 200 carries 9/10) plus the
+    // falsifier: q = 0.85 * 1.1 = 0.935. Cycle B: 300 <-> 301.
+    let world = json!({"action": "graph_deposit", "graph": {
+        "nodes": [
+            graph_node(0, "trap action", "hypothesized", 0.9),
+            graph_node(100, "valve open", "hypothesized", 0.8),
+            graph_node(101, "pressure drop", "hypothesized", 0.7),
+            graph_node(200, "safety invariant", "validated", 1.0),
+            graph_node(300, "pump on", "hypothesized", 0.6),
+            graph_node(301, "flow up", "hypothesized", 0.6),
+        ],
+        "edges": [
+            graph_edge(0, 100, "depends_on", 1.0),
+            graph_edge(200, 100, "depends_on", 9.0),
+            graph_edge(100, 101, "depends_on", 1.0),
+            graph_edge(101, 0, "depends_on", 1.0),
+            graph_edge(101, 100, "falsifies", 1.0),
+            graph_edge(300, 301, "causal_transition", 1.0),
+            graph_edge(301, 300, "causal_transition", 1.0),
+        ],
+    }});
+    let (status, body) = post(&engine, "/message", world).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(graph.node_count(), 6);
+
+    // 100 -| 0 inside cycle A: row 0 would weigh 1 (support 101) + 1, q = 1.7.
+    let (status, body) = post(
+        &engine,
+        "/message",
+        json!({"action": "graph_deposit", "graph": {
+            "nodes": [graph_node(400, "bystander", "hypothesized", 0.5)],
+            "edges": [graph_edge(100, 0, "falsifies", 1.0)],
+        }}),
+    )
+    .await;
+    assert_eq!(status.as_u16(), 422, "{body}");
+    assert!(
+        body.to_string().contains("FixedPointNotContractive"),
+        "{body}"
+    );
+    assert_eq!(graph.node_count(), 6);
+    assert_eq!(graph.node_for_entity(400), None);
+
+    let (status, body) = post(
+        &engine,
+        "/v1/pipeline/simulate",
+        json!({"state": trap_state(), "actions": [0], "auto_reflect": true}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let observation = &meta_pipeline(&body)["graph_reflection"]["observations"][0];
+    let evidence = observation["evidence_node_id"].as_u64().unwrap() as u32;
+    assert_eq!(observation["action_node_id"], 0);
+    assert_eq!(observation["revocation"], "evolution");
+    let evolution = &observation["evolution"];
+    assert_eq!(evolution["cyclic_scc_count"], 2);
+    assert_eq!(evolution["max_scc_size"], 3);
+    assert_eq!(evolution["adapted_blocks"], json!([]));
+    assert!(evolution["contraction"].as_f64().unwrap() < 1.0);
+    assert_eq!(graph.node_count(), 7);
+    let node = graph.get_node(evidence).unwrap();
+    assert!(node.payload.unwrap().contains("model_terminal_observation"));
+    assert!(graph.get_node(0).unwrap().confidence < 0.3);
+    assert!(graph.is_revoked(0));
+
+    let (status, body) = post(
+        &engine,
+        "/v1/pipeline/decide",
+        json!({"state": zeros(), "candidates": [0], "mode": "reflex", "entropy": 0.0}),
+    )
+    .await;
+    assert_ne!(status, StatusCode::OK, "{body}");
+    assert!(
+        body.to_string().contains("NoFeasibleAction") || body.to_string().contains("no feasible"),
+        "{body}"
+    );
 }

@@ -22,8 +22,9 @@ pub mod weighted;
 
 pub use error::LodError;
 pub use graph::{
-    BufferedEdge, CsrGraph, EdgeType, FixedPointReport, FlushReport, GraphCheckpoint,
-    HybridRagResult, LodGraph, PprRanking, RagDiffusion, RagHit, StatusTransition,
+    AdaptedBlock, BufferedEdge, CsrGraph, EdgeType, FixedPointReport, FlushReport,
+    GraphCheckpoint, HybridRagResult, LodGraph, PprRanking, RagDiffusion, RagHit,
+    ReflectionReport, ReflectionRevocation, StatusTransition, ADMISSION_BETA, ADMISSION_GAMMA,
     DEFAULT_FALSIFICATION_GAIN, HYBRID_PPR_TOLERANCE, MAX_FIXED_POINT_STEPS,
 };
 pub use manifold::{

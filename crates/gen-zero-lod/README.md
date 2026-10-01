@@ -44,6 +44,20 @@ text retrieval over payload-carrying nodes.
     above `theta_hi` is `Validated`, in between the status is kept.
     `retract_falsification` withdraws evidence; the next evolution returns the
     earlier confidences exactly.
+  - Admission: `add_edge` (and every internal edge write) refuses, with
+    `FixedPointNotContractive`, an edge that closes a cycle whose bound is not
+    below 1 at `ADMISSION_BETA = 0.85`, `ADMISSION_GAMMA = 1`. An edge that
+    closes no cycle only dilutes its target's row and passes after a
+    reachability walk. `retract_falsification` is refused the same way when
+    unpinning the node would close such a cycle.
+  - Reflection: `reflect_failure` evolves at the admission parameters, so on an
+    admitted graph every cycle contracts. If a cycle does not (the invariant
+    broken some other way), the falsifier gain inside that cycle alone is
+    lowered to reach `q* = (1 + beta a_max) / 2` and the block is listed in
+    `FixedPointReport::adapted_blocks`. The observation's own `Falsifies` edge
+    is never inside a cycle and keeps full gain. When the evolution leaves the
+    action above the threshold, the action is quarantined (manual revocation)
+    and `ReflectionReport::revocation` says so.
   - Limits: the effect of a refutation on a dependent shrinks with the
     dependent's prior, its other dependencies and its distance from the refuted
     node. It is not a whole-subtree cascade. `beta`, `gamma` and the thresholds

@@ -52,7 +52,8 @@ use crate::cognitive::Rejection;
 use crate::zero::action_id;
 use gen_zero_lod::{
     EdgeType, EpistemicStatus, FixedPointReport, HybridRagResult, LodBand, LodError, LodGraph,
-    LodNode, MixedCurvatureCoord, ZoomDirection, DEFAULT_FALSIFICATION_GAIN, PROJECTOR_VERSION,
+    LodNode, MixedCurvatureCoord, ZoomDirection, ADMISSION_BETA, ADMISSION_GAMMA,
+    PROJECTOR_VERSION,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -82,10 +83,12 @@ pub const DEFAULT_PPR_MAX_ITERS: usize = 100;
 pub const DEFAULT_PPR_TOLERANCE: f32 = 1e-6;
 
 /// Confidence evolution parameters used when a request names none. Echoed in
-/// every response. Uncalibrated presets.
-pub const DEFAULT_EVOLVE_BETA: f32 = 0.85;
+/// every response. Uncalibrated presets. `beta` and `gamma` are the ones every
+/// edge is admitted against, so a default evolution never meets a cycle it
+/// must refuse.
+pub const DEFAULT_EVOLVE_BETA: f32 = ADMISSION_BETA;
 /// Falsification gain: how strongly a `falsifies` edge presses its target.
-pub const DEFAULT_EVOLVE_GAMMA: f32 = DEFAULT_FALSIFICATION_GAIN;
+pub const DEFAULT_EVOLVE_GAMMA: f32 = ADMISSION_GAMMA;
 pub const DEFAULT_EVOLVE_TOLERANCE: f32 = 1e-6;
 pub const DEFAULT_EVOLVE_THETA_LO: f32 = 0.2;
 pub const DEFAULT_EVOLVE_THETA_HI: f32 = 0.8;
@@ -317,9 +320,10 @@ fn invalid(detail: impl Into<String>) -> Rejection {
 /// Input faults are 400 (blank text `EmptyInput`), an oversized payload 413, a
 /// duplicate entity 409, a missing entity 404, a
 /// confidence evolution that did not converge inside its step bound, or whose
-/// map is not a contraction on some cycle, 422. A CSR
+/// map is not a contraction on some cycle, 422; so is a deposited edge that
+/// admission refuses because it closes such a cycle. A CSR
 /// or checkpoint failure is an engine fault, 500.
-fn graph_rejection(e: LodError) -> Rejection {
+pub(crate) fn graph_rejection(e: LodError) -> Rejection {
     let (code, status) = match &e {
         LodError::FixedPointDiverged { .. } => ("FixedPointDiverged", 422),
         LodError::FixedPointNotContractive { .. } => ("FixedPointNotContractive", 422),
@@ -615,7 +619,7 @@ fn deposit(
             for node in nodes {
                 ids.push(g.add_node(node)?);
             }
-            let mut tickets = Vec::with_capacity(edges.len());
+            let mut resolved = Vec::with_capacity(edges.len());
             for &(source, target, edge_type, weight) in &edges {
                 let s = g
                     .node_for_entity(source)
@@ -623,8 +627,10 @@ fn deposit(
                 let t = g
                     .node_for_entity(target)
                     .ok_or(LodError::EntityNotFound(target))?;
-                tickets.push(g.add_edge(s, t, edge_type, weight)?);
+                resolved.push((s, t, edge_type, weight));
             }
+            // One admission pass for the whole deposit.
+            let tickets = g.add_edges(&resolved)?;
             let flush = g.flush_edges_to_csr()?;
             Ok((ids, tickets, flush))
         })

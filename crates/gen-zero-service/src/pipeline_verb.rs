@@ -6,9 +6,10 @@
 //! keys are refused, so a misspelt field never falls back to a default unseen.
 
 use crate::cognitive::Rejection;
+use crate::graph_verb::graph_rejection;
 use gen_zero_core::{ActionId, CoreError, FullLatent, NormalizedEntropy, WorldModelDynamics};
 use gen_zero_gate::PolicyGate;
-use gen_zero_lod::LodGraph;
+use gen_zero_lod::{LodError, LodGraph, ReflectionRevocation};
 use gen_zero_planner::{
     AuditReport, DecideMode, DecideRequest, Decision, GraphContext, PlannerConfig, PlannerError,
     ProductionPipeline, PrunedAction, Rollout, WhatIfReport, DEFAULT_WARN_RISK,
@@ -307,26 +308,77 @@ fn deposit_reflection(
         .map_err(|e| invalid(format!("reflection clock error: {e}")))?;
     let timestamp =
         u64::try_from(now.as_nanos()).map_err(|_| invalid("reflection timestamp overflow"))?;
-    let (evidence, target, report) = graph
+    let reflection = graph
         .reflect_failure(action.0, payload, timestamp)
-        .map_err(|e| Rejection {
-            code: "GraphReflectionFailed".into(),
-            stage: STAGE.into(),
-            detail: format!("reflection failed; action {} quarantined: {e}", action.0),
-            http_status: 500,
-        })?;
+        .map_err(|e| reflection_rejection(action, e))?;
+    let report = &reflection.evolution;
+    for block in &report.adapted_blocks {
+        tracing::warn!(
+            action = action.0,
+            nodes = ?block.nodes,
+            requested_gamma = block.requested_gamma,
+            applied_gamma = block.applied_gamma,
+            requested_contraction = block.requested_contraction,
+            contraction = block.contraction,
+            "reflection met a non-contractive cycle; its internal falsifier gain was lowered"
+        );
+    }
+    let revocation = match reflection.revocation {
+        ReflectionRevocation::Evolution => "evolution",
+        ReflectionRevocation::Quarantine => {
+            tracing::warn!(
+                action = action.0,
+                confidence = reflection.target_confidence,
+                "reflection evolution left the action above the revocation threshold; quarantined"
+            );
+            "quarantine"
+        }
+    };
+    let adapted: Vec<Value> = report
+        .adapted_blocks
+        .iter()
+        .map(|b| {
+            json!({"nodes": b.nodes, "requested_gamma": b.requested_gamma,
+                "applied_gamma": b.applied_gamma,
+                "requested_contraction": b.requested_contraction, "contraction": b.contraction})
+        })
+        .collect();
+    let (evidence, target) = (reflection.evidence, reflection.target);
     Ok(
         json!({"evidence_node_id": evidence, "action_node_id": target,
         "falsification_edge": {"source": evidence, "target": target, "type": "Falsifies"},
         "revoked_entities": [action.0], "newly_revoked_entities": report.revoked_entities,
+        "revocation": revocation, "action_confidence": reflection.target_confidence,
         "evolution": {"converged": true, "beta": report.beta, "gamma": report.gamma,
             "tolerance": report.tolerance, "theta_lo": report.theta_lo, "theta_hi": report.theta_hi,
             "scc_count": report.scc_count, "cyclic_scc_count": report.cyclic_scc_count,
             "trivial_scc_count": report.trivial_scc_count, "max_scc_size": report.max_scc_size,
+            "contraction": report.contraction, "adapted_blocks": adapted,
             "iterations": report.iterations, "residual": report.residual,
             "error_bound": report.error_bound, "node_updates": report.node_updates,
             "falsification_edges": report.falsification_edges}}),
     )
+}
+
+/// A failed reflection quarantines the action and is refused with the status of
+/// its cause: an engine fault (CSR, checkpoint) is 500, a refused evolution 422,
+/// a conflict with what the graph holds (an axiom, a colliding or incomplete
+/// earlier observation) 409.
+fn reflection_rejection(action: ActionId, e: LodError) -> Rejection {
+    let conflict = matches!(e, LodError::InvalidQuery(_));
+    let mut rejection = graph_rejection(e);
+    if conflict {
+        rejection.http_status = 409;
+    }
+    Rejection {
+        code: "GraphReflectionFailed".into(),
+        stage: STAGE.into(),
+        detail: format!(
+            "reflection failed; action {} quarantined: {}",
+            action.0, rejection.detail
+        ),
+        http_status: rejection.http_status,
+    }
 }
 
 fn invalid(detail: impl Into<String>) -> Rejection {
