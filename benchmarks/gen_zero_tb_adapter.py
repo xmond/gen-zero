@@ -200,7 +200,7 @@ class GenZeroAgent(BaseAgent):
         return "gen-zero"
 
     def version(self) -> str:
-        return "0.1.0"
+        return "0.1.1"
 
     def __init__(self, *args, endpoint="http://127.0.0.1:8080/v1/decisions",
                  proposer_url=None, proposer_mode="openai", max_steps=40, command_timeout=60,

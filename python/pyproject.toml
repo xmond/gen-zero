@@ -18,7 +18,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "gen-zero"
-version = "0.1.0"
+version = "0.1.1"
 description = "Decision SDK with experimental planning and world-model simulation"
 readme = "README.md"
 requires-python = ">=3.10"

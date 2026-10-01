@@ -11,7 +11,7 @@ Offline training, replay, distillation and self-play are not part of this
 package; they live in gen-zero-research.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __author__ = "Gen-Zero Authors"
 
 from .config import GenZeroConfig

@@ -15,7 +15,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["Gen-Zero Core Team <core@gen-zero.ai>"]
 license = "Apache-2.0"
@@ -24,16 +24,16 @@ rust-version = "1.88"
 
 [workspace.dependencies]
 # Intra-workspace dependencies
-gen-zero-core = { path = "crates/gen-zero-core", version = "0.1.0" }
-gen-zero-model = { path = "crates/gen-zero-model", version = "0.1.0" }
-gen-zero-nanocore = { path = "crates/gen-zero-nanocore", version = "0.1.0" }
-gen-zero-worldmodel = { path = "crates/gen-zero-worldmodel", version = "0.1.0" }
-gen-zero-lod = { path = "crates/gen-zero-lod", version = "0.1.0" }
-gen-zero-gate = { path = "crates/gen-zero-gate", version = "0.1.0" }
-gen-zero-planner = { path = "crates/gen-zero-planner", version = "0.1.0" }
-gen-zero-storage = { path = "crates/gen-zero-storage", version = "0.1.0" }
-gen-zero-provenance = { path = "crates/gen-zero-provenance", version = "0.1.0" }
-gen-zero-service = { path = "crates/gen-zero-service", version = "0.1.0" }
+gen-zero-core = { path = "crates/gen-zero-core", version = "0.1.1" }
+gen-zero-model = { path = "crates/gen-zero-model", version = "0.1.1" }
+gen-zero-nanocore = { path = "crates/gen-zero-nanocore", version = "0.1.1" }
+gen-zero-worldmodel = { path = "crates/gen-zero-worldmodel", version = "0.1.1" }
+gen-zero-lod = { path = "crates/gen-zero-lod", version = "0.1.1" }
+gen-zero-gate = { path = "crates/gen-zero-gate", version = "0.1.1" }
+gen-zero-planner = { path = "crates/gen-zero-planner", version = "0.1.1" }
+gen-zero-storage = { path = "crates/gen-zero-storage", version = "0.1.1" }
+gen-zero-provenance = { path = "crates/gen-zero-provenance", version = "0.1.1" }
+gen-zero-service = { path = "crates/gen-zero-service", version = "0.1.1" }
 
 # Serialization & Zero-copy
 serde = { version = "1.0", features = ["derive"] }

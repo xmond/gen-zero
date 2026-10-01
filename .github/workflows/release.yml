@@ -43,11 +43,22 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install "torch>=2.0.0" --index-url https://download.pytorch.org/whl/cpu
-          python -m pip install -e "./python[dev]" pyyaml ortools
+          python -m pip install -e "./python[dev]" pyyaml ortools transformers
           python -m pip check
 
       - name: Run all Python regression tests
-        run: python -m pytest -ra --strict-config --strict-markers python/gen_zero/tests
+        run: python -m pytest -ra --strict-config --strict-markers python/gen_zero/tests python/tests/test_rnn_set_adapter_contract.py
+
+      - name: Audit production entry reachability
+        run: |
+          python scripts/reachability_audit.py
+          STATUS="$(git status --porcelain -- benchmarks/results/reachability.json)"
+          if [ -n "$STATUS" ]; then
+            echo "::error::benchmarks/results/reachability.json is stale or untracked; run scripts/reachability_audit.py and commit the result." >&2
+            git status --porcelain -- benchmarks/results/reachability.json
+            git diff -- benchmarks/results/reachability.json
+            exit 1
+          fi
 
   rust-gate:
     name: Rust quality gate
@@ -159,7 +170,7 @@ jobs:
       - name: Package release artifact
         shell: bash
         run: |
-          TAG_NAME="${GITHUB_REF_NAME:-v0.1.0}"
+          TAG_NAME="${GITHUB_REF_NAME:-v0.1.1}"
           PKG_NAME="gen-zero-${TAG_NAME}-${{ matrix.target }}"
           mkdir -p "dist/${PKG_NAME}"
 
