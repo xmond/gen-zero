@@ -55,6 +55,17 @@ pub enum LodError {
         beta: f64,
         gamma: f64,
     },
+    #[error(
+        "Confidence map on a cycle of {block_size} node(s) contracts too slowly: Lipschitz \
+         bound {contraction} may need {k_max} step(s) to reach the tolerance, over the \
+         budget of {max_steps}; refused"
+    )]
+    FixedPointTooSlow {
+        block_size: usize,
+        contraction: f64,
+        k_max: usize,
+        max_steps: usize,
+    },
     #[error("Empty input: {0}")]
     EmptyInput(String),
     #[error("Payload is {len} bytes; one chunk holds at most {max} bytes")]
