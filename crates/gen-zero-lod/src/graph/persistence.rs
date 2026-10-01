@@ -497,13 +497,13 @@ mod tests {
         assert!(LodGraph::open_persistent(&dir, GeometryParams::UNIT).is_err());
         graph.transact(|g| g.add_node(node(1))).unwrap();
         // An actual filesystem failure before publication, not a mocked writer.
-        fs::create_dir(&dir.join("WRITE.tmp")).unwrap();
+        fs::create_dir(dir.join("WRITE.tmp")).unwrap();
         assert!(graph.transact(|g| g.add_node(node(2))).is_err());
         assert_eq!(graph.node_count(), 1);
         assert!(graph.check_persistence().is_err());
         assert!(graph.transact(|g| g.add_node(node(3))).is_err());
         drop(graph);
-        fs::remove_dir(&dir.join("WRITE.tmp")).unwrap();
+        fs::remove_dir(dir.join("WRITE.tmp")).unwrap();
         let restored = LodGraph::open_persistent(&dir, GeometryParams::UNIT).unwrap();
         assert_eq!(restored.node_count(), 1);
     }
