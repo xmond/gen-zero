@@ -1,6 +1,6 @@
 //! The Single Polymorphic `zero` Tool Router.
 //!
-//! Exposes 11 Core Cognitive Verbs:
+//! Exposes 20 Cognitive Verbs (see [`ZeroVerb`]):
 //! 1. ask: Discrete decision over candidates, scored by the semantic bridge
 //! 2. route: Tool ranking by semantic relevance to the intent
 //! 3. imagine: Multi-step PUCT lookahead with semantic priors + formal feasibility
@@ -9,9 +9,11 @@
 //! 6. compact: zstd context compression
 //! 7. entail: Asymmetric Busemann entailment on manifold coordinates
 //! 8. causal_fold: Relation-chain fold on a caller-supplied learned semiring
-//! 9. simulate: Fixed action plan rolled out on the latent world model
-//! 10. what_if: Counterfactual comparison of candidate first actions on the latent world model
-//! 11. audit: Shadow risk review of one planned action (never an approval)
+//! 9. pipeline: Latent world-model pipeline operations (simulate, what-if, audit, multi-mode decide)
+//! 10. simulate: Fixed action plan rolled out on the latent world model
+//! 11. what_if: Counterfactual comparison of candidate first actions on the latent world model
+//! 12. audit: Shadow risk review of one planned action (never an approval)
+//! 13. graph_*: Eight LodGraph memory operations (deposit, recall, rag, ppr, prune, evolve, coarse_grain, zoom)
 //!
 //! `ask` (alias `decide`) also takes a `mode`: `auto`/`reflex` run the semantic
 //! ask; `mcts` runs the semantic PUCT lookahead (`imagine`) or, with a numeric
@@ -5107,7 +5109,10 @@ mod tests {
     #[tokio::test]
     async fn ask_enforces_graph_revocations() {
         let engine = PolymorphicZeroEngine::new().with_semantic(None);
-        engine.graph.revoke_entity(action_id("revoked").0 as u64).unwrap();
+        engine
+            .graph
+            .revoke_entity(action_id("revoked").0 as u64)
+            .unwrap();
         let out = engine
             .execute(&json!({"action":"ask", "candidates":["revoked"]}))
             .await

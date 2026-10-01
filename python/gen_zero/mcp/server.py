@@ -618,7 +618,7 @@ def _validate_zero_stream_arguments(arguments: Any) -> Optional[Dict[str, Any]]:
 
     Returns an MCP error response dict if the arguments are malformed, or ``None`` if they are
     well-formed. Factored out of ``execute_zero_stream`` so ``MCPServer.handle_request`` can run
-    this check BEFORE calling ``_acquire_stream_engine`` (A07 阻断2): an illegal request must
+    this check BEFORE calling ``_acquire_stream_engine`` (A07 gate 2): an illegal request must
     never create a new session or trigger an LRU eviction of an unrelated, legitimate session.
     """
     rejected = _reject_unsupported_constraints(arguments, 'stream')
@@ -1436,7 +1436,7 @@ class MCPServer:
                     }
                 }
             if tool_name == "zero" and resolve_zero_stream_mode(tool_args):
-                # A07 阻断2: validate the request BEFORE touching any session state. A malformed
+                # A07 gate 2: validate the request BEFORE touching any session state. A malformed
                 # request (bad observation/candidate_actions) must never create a new session or
                 # evict an unrelated, legitimate session's engine via the LRU cap.
                 validation_error = _validate_zero_stream_arguments(tool_args)
@@ -1447,7 +1447,7 @@ class MCPServer:
                     try:
                         engine = await self._acquire_stream_engine(session_id)
                     except ValueError as exc:
-                        # A07 阻断1: a session_id of the wrong type/empty is a caller error,
+                        # A07 gate 1: a session_id of the wrong type/empty is a caller error,
                         # surfaced explicitly -- never silently downgraded to an ephemeral engine.
                         tool_result = {
                             "isError": True,

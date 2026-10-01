@@ -7,14 +7,14 @@ set -eu
 : "${PROPOSER_MODEL:?Set an explicit model}"
 : "${PROPOSER_PROTOCOL:?Set anthropic or openai}"
 : "${PROPOSER_KEY_ENV:?Set the credential variable NAME}"
-bench_dir=${BENCH_DIR:-/home/luy/benchmarks}
+bench_dir=${BENCH_DIR:-$HOME/benchmarks}
 evidence=${EVIDENCE_DIR:?Set a fresh evidence directory}
 if [[ -e "$evidence" ]]; then
     echo "Refusing to reuse evidence directory: $evidence" >&2
     exit 1
 fi
 mkdir -p "$evidence/audit"
-export PATH="/home/luy/.local/bin:$PATH"
+export PATH="$HOME/.local/bin:$PATH"
 export PYTHONPATH="$bench_dir${PYTHONPATH:+:$PYTHONPATH}"
 cd "$bench_dir"
 job=t3-deepswe-r3-$(date -u +%Y%m%dT%H%M%SZ)

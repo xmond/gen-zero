@@ -4,6 +4,12 @@ use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum LodError {
+    #[error("Graph node capacity exceeded: {current} existing + {additional} requested > {max}")]
+    GraphCapacityExceeded {
+        current: usize,
+        additional: usize,
+        max: usize,
+    },
     #[error("Graph persistence refused: {0}")]
     Persistence(String),
     #[error("Node ID {0} not found in LodGraph")]

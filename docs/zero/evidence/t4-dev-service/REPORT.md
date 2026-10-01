@@ -33,10 +33,10 @@
 ## Reproducible commands and raw logs
 
 ```bash
-ssh dev 'cd /home/user/gen-zero-dev-eval; export PATH=/home/user/.cargo/bin:$PATH; CARGO_BUILD_JOBS=64 cargo build --release -p gen-zero-cli'
+ssh worker-node 'cd /home/user/gen-zero-dev-eval; export PATH=/home/user/.cargo/bin:$PATH; CARGO_BUILD_JOBS=64 cargo build --release -p gen-zero-cli'
 # Full environment, auth-token reading, and PID management for starting the service are in start-services.sh; the actual Rust command:
 nohup target/release/gen-zero serve --mode sse --port 8080 --host 127.0.0.1 > service.log 2>&1 < /dev/null &
-ssh dev 'cd /home/user/gen-zero-dev-eval; bash t4-evidence/http-check.sh connected'
+ssh worker-node 'cd /home/user/gen-zero-dev-eval; bash t4-evidence/http-check.sh connected'
 ```
 
 `http-check.sh` contains all curl calls and JSON assertions; payloads are in `ask.json`, `route.json`, `what_if.json`, `invalid_what_if.json`. The fully expanded command, response headers, body, stderr, HTTP status, raw exit code, and assertion exit code for each request are saved separately under `connected/<name>.*`. `connected.log` preserves the full round's output. The subsequent readiness query command:

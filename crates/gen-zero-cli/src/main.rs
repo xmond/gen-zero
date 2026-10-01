@@ -7,7 +7,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 
 #[derive(Parser, Debug)]
-#[command(name = "gen-zero", author, version, about = "Gen-Zero SOTA Rust Cognitive Decision Engine", long_about = None)]
+#[command(name = "gen-zero", author, version, about = "Gen-Zero Rust Cognitive Decision Engine", long_about = None)]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
@@ -463,9 +463,6 @@ pub enum Commands {
     },
 }
 
-/// Publish an assets file as the next generation of the default mount. Any
-/// failure stops the process: serving without the requested geometry would
-/// be a silent downgrade.
 /// Engine configuration from the environment, with `--qwen-model` applied.
 fn engine_config(
     qwen_model: Option<PathBuf>,
@@ -478,6 +475,9 @@ fn engine_config(
     })
 }
 
+/// Publish an assets file as the next generation of the default mount. Any
+/// failure stops the process: serving without the requested geometry would
+/// be a silent downgrade.
 fn mount_assets_file(server: &McpServer, path: &str) -> anyhow::Result<()> {
     let text = std::fs::read_to_string(path).with_context(|| format!("read {path}"))?;
     let assets: serde_json::Value =

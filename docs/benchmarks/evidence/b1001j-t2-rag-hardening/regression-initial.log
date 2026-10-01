@@ -1,0 +1,506 @@
+      ┌─────────┐  mr boxington
+     ╱ ═══════ ╱│
+    ╱─────────╱ │
+    │ •    (◉)│≡│
+    │  ◟▄▄▄◞  │ ╱
+    │   ◀◆▶   │╱
+    └─────────┘
+    Updating crates.io index
+     Locking 301 packages to latest compatible versions
+      Adding axum v0.7.9 (available: v0.8.9)
+      Adding bincode v1.3.3 (available: v3.0.0)
+      Adding candle-core v0.9.2 (available: v0.11.0)
+      Adding candle-nn v0.9.2 (available: v0.11.0)
+      Adding candle-transformers v0.9.2 (available: v0.11.0)
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding nalgebra v0.33.3 (available: v0.35.0)
+      Adding rand v0.8.8 (available: v0.10.3)
+      Adding reqwest v0.12.28 (available: v0.13.5)
+      Adding sha2 v0.10.9 (available: v0.11.0)
+      Adding simd-json v0.14.3 (available: v0.18.1)
+      Adding thiserror v1.0.69 (available: v2.0.21)
+      Adding tokenizers v0.22.2 (available: v0.23.2)
+      Adding tower v0.4.13 (available: v0.5.3)
+      Adding zstd v0.13.3 (available: v0.14.0)
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.26
+   Compiling quote v1.0.47
+   Compiling libc v0.2.189
+   Compiling cfg-if v1.0.5
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling version_check v0.9.5
+   Compiling autocfg v1.5.1
+   Compiling once_cell v1.21.4
+   Compiling libm v0.2.16
+   Compiling zerocopy v0.8.59
+   Compiling num-traits v0.2.19
+   Compiling getrandom v0.3.4
+   Compiling find-msvc-tools v0.1.14
+   Compiling syn v3.0.6
+   Compiling syn v2.0.119
+mbx[warning]: build-script cache bypassed: cached action is missing blob f83f95cb0ed2e7861312d298847235a136c20f5a3cd05ea93e535328ddfa6bd1
+   Compiling shlex v2.0.1
+   Compiling jobserver v0.1.35
+   Compiling cc v1.5.1
+   Compiling bitflags v2.13.2
+   Compiling parking_lot_core v0.9.12
+   Compiling foldhash v0.2.0
+   Compiling scopeguard v1.2.0
+   Compiling itoa v1.0.18
+   Compiling lock_api v0.4.14
+   Compiling hashbrown v0.17.1
+   Compiling equivalent v1.0.2
+   Compiling stable_deref_trait v1.2.1
+   Compiling paste v1.0.15
+   Compiling crossbeam-utils v0.8.23
+   Compiling memchr v2.8.3
+   Compiling rand_core v0.9.5
+   Compiling crossbeam-epoch v0.9.21
+   Compiling indexmap v2.14.2
+   Compiling rustversion v1.0.23
+   Compiling crossbeam-deque v0.8.8
+   Compiling typenum v1.20.1
+   Compiling rayon-core v1.13.0
+   Compiling generic-array v0.14.7
+   Compiling thiserror v1.0.69
+   Compiling either v1.18.0
+   Compiling pin-project-lite v0.2.17
+   Compiling pulp v0.22.3
+   Compiling zmij v1.0.23
+   Compiling synstructure v0.14.0
+   Compiling raw-cpuid v11.6.0
+   Compiling rayon v1.12.0
+   Compiling reborrow v0.5.5
+   Compiling pulp-wasm-simd-flag v0.1.1
+   Compiling pkg-config v0.3.34
+   Compiling serde_json v1.0.151
+   Compiling dyn-stack-macros v0.1.3
+   Compiling crypto-common v0.1.7
+   Compiling zerocopy-derive v0.8.59
+   Compiling thiserror-impl v1.0.69
+   Compiling block-buffer v0.10.4
+   Compiling blake3 v1.8.7
+   Compiling serde_derive v1.0.229
+   Compiling bytemuck_derive v1.12.1
+   Compiling zerofrom-derive v0.1.8
+   Compiling yoke-derive v0.8.4
+   Compiling zerovec-derive v0.11.6
+   Compiling displaydoc v0.2.7
+   Compiling bytemuck v1.25.2
+   Compiling num-complex v0.4.6
+   Compiling dyn-stack v0.13.2
+   Compiling seq-macro v0.3.6
+   Compiling zerofrom v0.1.8
+   Compiling yoke v0.8.3
+   Compiling futures-core v0.3.34
+   Compiling zerovec v0.11.8
+   Compiling log v0.4.34
+   Compiling digest v0.10.7
+   Compiling tracing-attributes v0.1.31
+   Compiling tracing-core v0.1.36
+   Compiling bytes v1.12.1
+   Compiling allocator-api2 v0.2.21
+   Compiling smallvec v1.16.2
+   Compiling arrayvec v0.7.8
+   Compiling cpufeatures v0.2.17
+   Compiling cpufeatures v0.3.1
+   Compiling constant_time_eq v0.4.2
+   Compiling sha2 v0.10.9
+   Compiling tracing v0.1.44
+   Compiling parking_lot v0.12.5
+   Compiling tinystr v0.8.4
+   Compiling ahash v0.8.12
+mbx[progress]: 15s elapsed; 23 hits, 100 misses, 0 bypassed, 0 not looked up; ~2.5s compiler work saved
+   Compiling strsim v0.11.1
+   Compiling fnv v1.0.7
+   Compiling gen-zero-core v0.1.1 (/ebs/pj/gen-zero-worktree/b1001j-t2-rag/crates/gen-zero-core)
+   Compiling ryu v1.0.23
+   Compiling litemap v0.8.3
+   Compiling ident_case v1.0.1
+   Compiling writeable v0.6.4
+   Compiling darling_core v0.20.11
+   Compiling http v1.5.0
+   Compiling bincode v1.3.3
+   Compiling icu_locale_core v2.3.0
+   Compiling potential_utf v0.1.6
+   Compiling zerotrie v0.2.5
+   Compiling futures-macro v0.3.34
+   Compiling zstd-sys v2.1.0+zstd.1.5.7
+   Compiling ppv-lite86 v0.2.21
+   Compiling arc-swap v1.9.2
+   Compiling aho-corasick v1.1.5
+   Compiling errno v0.3.14
+   Compiling fs2 v0.4.3
+   Compiling rand_chacha v0.9.0
+   Compiling thiserror v2.0.21
+   Compiling regex-syntax v0.8.11
+   Compiling slab v0.4.12
+   Compiling rand v0.9.5
+   Compiling futures-task v0.3.34
+   Compiling utf8_iter v1.0.4
+   Compiling icu_properties_data v2.3.0
+   Compiling icu_normalizer_data v2.3.0
+   Compiling crc32fast v1.5.2
+   Compiling futures-util v0.3.34
+   Compiling icu_collections v2.3.0
+   Compiling rand_distr v0.5.1
+   Compiling signal-hook-registry v1.4.8
+   Compiling http-body v1.1.0
+mbx[warning]: cc cache bypassed: compiler invocation names no output file
+   Compiling half v2.7.1
+   Compiling darling_macro v0.20.11
+mbx[warning]: cc result was not restored: cached action is missing blob 6673a3ef93625c87350812062b653844a3b3f548ba6ead7604faf52ea7843599
+mbx[warning]: cc result was not restored: cached action is missing blob c6a2d5266de8c03c37dceeacb881dcc78f456b9f02bd43e79a42c22c6e4f70f2
+   Compiling gemm-common v0.19.0
+   Compiling regex-automata v0.4.18
+   Compiling icu_provider v2.3.1
+   Compiling tokio-macros v2.7.2
+mbx[warning]: cc result was not restored: cached action is missing blob 9ab02ca687447aa1f44b94b3a0967d7cd5ec70200a5ff85055474c370b171f1e
+   Compiling gemm-f32 v0.19.0
+   Compiling thiserror-impl v2.0.21
+mbx[warning]: cc result was not restored: cached action is missing blob 02c5628d11c384e94bead38de8fe3c787535c19805f1d53cd97c6594a14bda97
+   Compiling mio v1.2.3
+   Compiling socket2 v0.6.5
+mbx[warning]: cc result was not restored: cached action is missing blob 10a74a0afbd78b937fea252b4a621af1089fb55c001bf255a59191753ffb917f
+   Compiling bit-vec v0.8.0
+   Compiling tower-service v0.3.3
+   Compiling percent-encoding v2.3.2
+mbx[warning]: cc result was not restored: cached action is missing blob 25972c481d64c996d52761aeb44b010ecce400a589ef924dd7fa587f2fe54353
+   Compiling getrandom v0.4.3
+   Compiling rustix v1.1.5
+mbx[warning]: cc result was not restored: cached action is missing blob f450a034eb663b5ebe23931f5e561135bdb1bec70c0bdfea2dc84254cda9fa14
+   Compiling tokio v1.53.1
+   Compiling bit-set v0.8.0
+   Compiling gemm-f16 v0.19.0
+   Compiling gemm-f64 v0.19.0
+   Compiling gemm-c64 v0.19.0
+mbx[warning]: cc result was not restored: cached action is missing blob eda2685b6cd9ee2675dc3cc65a321687f833832dfe16a908ef0807f1d41e22e2
+   Compiling gemm-c32 v0.19.0
+mbx[warning]: cc result was not restored: cached action is missing blob 5b06d7aeeab32ebd2b717be4976d9fec755c2e8e9f4a6ae629aba6ee7a8d3e65
+mbx[warning]: cc result was not restored: cached action is missing blob bf20cc58db86237eb2f43a9ff3f10bca252342a116fb670231c51dcfc425864e
+   Compiling darling v0.20.11
+mbx[warning]: cc result was not restored: cached action is missing blob cfeda125048d0a1349fbdebf3c9eed9b9eb8c4806297e13d5dee1206c398417f
+   Compiling gen-zero-lod v0.1.1 (/ebs/pj/gen-zero-worktree/b1001j-t2-rag/crates/gen-zero-lod)
+mbx[warning]: cc result was not restored: cached action is missing blob 67be52463dd1194b888c2935452acb81f9a12200fb20367c7144a77cdb5fe827
+   Compiling hashbrown v0.16.1
+mbx[warning]: cc result was not restored: cached action is missing blob c62ecff81602ded186e0d1fd6d450fbb976ce5a06dd4e0eaddd90cdb9ade58ca
+   Compiling safe_arch v0.7.4
+   Compiling getrandom v0.2.17
+   Compiling matrixmultiply v0.3.11
+   Compiling typed-path v0.12.3
+   Compiling httparse v1.10.1
+   Compiling zstd-safe v7.3.0
+   Compiling linux-raw-sys v0.12.1
+mbx[warning]: cc result was not restored: cached action is missing blob 539b025d5834692cd1f6280de2050df9121408d40ebe0e441a9c025b306c2547
+   Compiling tower-layer v0.3.3
+   Compiling wide v0.7.33
+mbx[warning]: cc result was not restored: cached action is missing blob 640344cf238a1f535a63999c09efb75c8f5963e44e76b8e955325ebcaa0b1d7e
+   Compiling zip v7.2.0
+mbx[warning]: cc result was not restored: cached action is missing blob 928f56a18cfcb6a4b14539b9eec063eeb183c0b546a77bc7c88d449baf4bfa8c
+mbx[progress]: 30s elapsed; 38 hits, 184 misses, 1 bypassed, 5 not looked up; ~5.9s compiler work saved
+   Compiling rand_core v0.6.4
+   Compiling safetensors v0.7.0
+   Compiling icu_normalizer v2.3.0
+   Compiling icu_properties v2.3.0
+   Compiling derive_builder_core v0.20.2
+   Compiling gemm v0.19.0
+mbx[warning]: cc result was not restored: cached action is missing blob 94a4f4581d4b0bd11371c0f09de6b381064d23554adb4b85f94b526a966cc72c
+   Compiling form_urlencoded v1.2.2
+   Compiling float8 v0.6.1
+   Compiling sync_wrapper v1.0.2
+   Compiling memmap2 v0.9.11
+   Compiling approx v0.5.1
+   Compiling num-integer v0.1.47
+   Compiling num_cpus v1.17.0
+   Compiling vcpkg v0.2.15
+   Compiling rawpointer v0.2.1
+   Compiling esaxx-rs v0.1.10
+   Compiling minimal-lexical v0.2.1
+   Compiling fastrand v2.5.0
+   Compiling byteorder v1.5.0
+   Compiling try-lock v0.2.5
+   Compiling want v0.3.1
+   Compiling nom v7.1.3
+   Compiling tempfile v3.27.0
+   Compiling candle-core v0.9.2
+   Compiling derive_builder_macro v0.20.2
+   Compiling libsqlite3-sys v0.38.2
+   Compiling num-rational v0.4.2
+   Compiling simba v0.9.1
+   Compiling idna_adapter v1.2.2
+   Compiling rand_chacha v0.3.1
+   Compiling futures-channel v0.3.34
+   Compiling monostate-impl v0.1.18
+   Compiling nalgebra-macros v0.2.2
+   Compiling castaway v0.2.4
+   Compiling itertools v0.14.0
+   Compiling pastey v0.2.3
+   Compiling httpdate v1.0.3
+   Compiling atomic-waker v1.1.2
+   Compiling unicode-segmentation v1.13.3
+   Compiling macro_rules_attribute-proc_macro v0.2.3
+   Compiling static_assertions v1.1.0
+   Compiling base64 v0.13.1
+mbx[warning]: cc result was not restored: cached action is missing blob 27b87383b0a44ef723c74093678bb141d5c9be47567f1905bb866558614bab18
+   Compiling macro_rules_attribute v0.2.3
+   Compiling spm_precompiled v0.1.4
+   Compiling compact_str v0.9.1
+   Compiling hyper v1.11.1
+   Compiling monostate v0.1.18
+   Compiling rand v0.8.8
+mbx[warning]: cc result was not restored: cached action is missing blob 41edf62a9b65867ba5e8929ce9481af49b53cdbeb0ae1b652a4bbfdebbbbbda2
+   Compiling rayon-cond v0.4.0
+   Compiling idna v1.1.0
+   Compiling derive_builder v0.20.2
+   Compiling candle-nn v0.9.2
+   Compiling tower v0.5.3
+   Compiling regex v1.13.1
+   Compiling fancy-regex v0.14.0
+   Compiling fancy-regex v0.17.0
+   Compiling hashbrown v0.14.5
+mbx[warning]: cc result was not restored: cached action is missing blob eb86da6236f1f9357a9bfde6386dcd4acee0e570a8a20a70a1d677b87e3a69e5
+mbx[warning]: cc result was not restored: cached action is missing blob cc3766bdca49569aaf6e3ce188a1c23657d86328232a49136985d51cac572085
+   Compiling nalgebra v0.33.3
+   Compiling http-body-util v0.1.5
+   Compiling unicode-normalization-alignments v0.1.12
+   Compiling serde_plain v1.0.2
+   Compiling dary_heap v0.3.9
+mbx[warning]: cc result was not restored: cached action is missing blob 781d0d47cfd1f237ee122eedbc76d8cb706a53c31df1a6bbac822b09e5ddb426
+   Compiling ipnet v2.12.2
+   Compiling unicode_categories v0.1.1
+   Compiling base64 v0.23.1
+   Compiling ref-cast v1.0.27
+   Compiling tokenizers v0.22.2
+   Compiling hyper-util v0.1.21
+   Compiling candle-transformers v0.9.2
+   Compiling halfbrown v0.2.5
+mbx[warning]: cc result was not restored: cached action is missing blob 537b1966972d1996aeb32db434f0aa333059636a0f5e16055859d46d8413a143
+   Compiling url v2.5.8
+   Compiling serde_urlencoded v0.7.1
+   Compiling ref-cast-impl v1.0.27
+   Compiling async-trait v0.1.92
+mbx[warning]: cc result was not restored: cached action is missing blob 3aed7ba29b0c8943eb2aba45284666ee2bdd34ce47b5e5b5988a3c7e07b4ea0f
+   Compiling hashlink v0.12.2
+   Compiling float-cmp v0.10.0
+mbx[warning]: cc result was not restored: cached action is missing blob 8651e3263dfce60ae4fa76f89e892dca301e5c4cd38415d465ae9a708e3b9018
+   Compiling mime v0.3.17
+   Compiling fallible-iterator v0.3.0
+   Compiling fallible-streaming-iterator v0.1.9
+   Compiling axum-core v0.4.5
+   Compiling value-trait v0.10.1
+   Compiling tower-http v0.6.11
+   Compiling pin-project-internal v1.1.13
+   Compiling zstd v0.13.3
+   Compiling serde_path_to_error v0.1.20
+   Compiling matchit v0.7.3
+mbx[progress]: 45s elapsed; 51 hits, 280 misses, 2 bypassed, 6 not looked up; ~61.0s compiler work saved
+   Compiling base64 v0.22.1
+   Compiling gen-zero-model v0.1.1 (/ebs/pj/gen-zero-worktree/b1001j-t2-rag/crates/gen-zero-model)
+   Compiling simdutf8 v0.1.5
+   Compiling reqwest v0.12.28
+   Compiling gen-zero-gate v0.1.1 (/ebs/pj/gen-zero-worktree/b1001j-t2-rag/crates/gen-zero-gate)
+   Compiling simd-json v0.14.3
+   Compiling gen-zero-worldmodel v0.1.1 (/ebs/pj/gen-zero-worktree/b1001j-t2-rag/crates/gen-zero-worldmodel)
+   Compiling rusqlite v0.40.2
+   Compiling gen-zero-planner v0.1.1 (/ebs/pj/gen-zero-worktree/b1001j-t2-rag/crates/gen-zero-planner)
+   Compiling gen-zero-storage v0.1.1 (/ebs/pj/gen-zero-worktree/b1001j-t2-rag/crates/gen-zero-storage)
+   Compiling gen-zero-nanocore v0.1.1 (/ebs/pj/gen-zero-worktree/b1001j-t2-rag/crates/gen-zero-nanocore)
+   Compiling axum v0.7.9
+   Compiling pin-project v1.1.13
+   Compiling gen-zero-provenance v0.1.1 (/ebs/pj/gen-zero-worktree/b1001j-t2-rag/crates/gen-zero-provenance)
+   Compiling tower v0.4.13
+   Compiling gen-zero-service v0.1.1 (/ebs/pj/gen-zero-worktree/b1001j-t2-rag/crates/gen-zero-service)
+mbx[progress]: 60s elapsed; 52 hits, 294 misses, 2 bypassed, 19 not looked up; ~64.3s compiler work saved
+mbx[progress]: 75s elapsed; 52 hits, 294 misses, 2 bypassed, 30 not looked up; ~64.3s compiler work saved
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 22s
+     Running unittests src/lib.rs (target/debug/deps/gen_zero_lod-fb63c77317baea12)
+
+running 159 tests
+test graph::persistence::tests::deserialization_cannot_construct_invalid_csr ... ok
+test graph::tests::add_node_refuses_duplicate_entity_and_bad_parent ... ok
+test graph::tests::a_summary_loses_confidence_when_its_members_are_refuted ... ok
+test graph::tests::add_node_refuses_inconsistent_confidence_fields ... ok
+test graph::tests::admission_refuses_a_non_contractive_cycle_and_keeps_the_graph ... ok
+test graph::tests::add_edge_refuses_unknown_endpoint_and_bad_weight ... ok
+test graph::tests::axiom_survives_direct_falsification_and_evolution ... ok
+test graph::tests::coarse_grain_cluster_links_members_to_a_coarser_summary_in_the_csr ... ok
+test graph::tests::coarse_grain_cluster_refuses_and_changes_nothing ... ok
+test graph::tests::coarse_grain_edges_must_point_to_a_coarser_band ... ok
+test graph::tests::csr_from_edges_keeps_invariants_and_refuses_out_of_range ... ok
+test graph::tests::cycle_converges_to_the_unique_fixed_point_within_k_max ... ok
+test graph::tests::cyclic_block_iterates_alone_and_feeds_its_dependents_once ... ok
+test graph::tests::evolution_rebuilds_dependencies_from_flushed_edges ... ok
+test graph::tests::edge_weights_decide_which_refutation_propagates ... ok
+test graph::tests::dag_blocks_are_trivial_and_take_one_evaluation_each ... ok
+test graph::tests::evolution_refuses_out_of_range_arguments ... ok
+test graph::tests::flush_drains_the_buffer_and_keeps_every_edge_once ... ok
+test graph::tests::evolution_validates_supported_chain_and_refutation_falsifies_it ... ok
+test graph::tests::graph_curvature_decides_which_coordinates_are_in_domain ... ok
+test graph::tests::falsifies_edge_presses_its_target_to_falsified_and_revokes_it ... ok
+test graph::tests::geometry_parameters_reorder_two_stage_recall ... ok
+test graph::tests::every_start_reaches_the_same_fixed_point_on_a_pure_cycle ... ok
+test graph::tests::migrate_band_to_coord_steps_to_the_coordinate_band ... ok
+test graph::tests::incremental_merge_equals_full_rebuild ... ok
+test graph::tests::hysteresis_band_keeps_the_status ... ok
+test graph::tests::alias_rules_are_enforced_and_nothing_is_inserted_on_refusal ... ok
+test graph::tests::normalization_handles_empty_exact_and_invalid_tracks ... ok
+test graph::tests::non_finite_values_fail_closed_in_both_block_kinds ... ok
+test graph::tests::out_of_domain_coord_is_refused_at_insert_and_query ... ok
+test graph::tests::insert_refuses_a_payload_whose_digest_was_tampered ... ok
+test graph::tests::falsifier_penalty_scales_with_the_falsifier_confidence ... ok
+test graph::tests::ppr_covers_nodes_added_after_the_last_flush ... ok
+test graph::tests::ppr_omits_falsified_and_revoked_nodes ... ok
+test graph::tests::hybrid_search_equals_recall_then_ppr_from_the_same_anchors ... FAILED
+test graph::tests::ppr_refuses_unknown_seed_and_bad_alpha ... ok
+test graph::tests::reflection_adapts_the_gain_of_a_non_contractive_cycle ... ok
+test graph::tests::retraction_that_would_close_a_non_contractive_cycle_is_refused ... ok
+test graph::tests::retracting_evidence_reverses_the_evolution_exactly ... ok
+test graph::tests::rollback_refuses_foreign_and_discarded_checkpoints ... ok
+test graph::tests::report_checkpoint_undoes_the_evolution_and_an_earlier_one_the_evidence ... ok
+test graph::tests::test_graph_ppr_query ... ok
+test graph::tests::test_lod_graph_workflow ... ok
+test graph::tests::rollback_restores_nodes_edges_csr_and_revocations ... ok
+test graph::tests::test_two_stage_recall_filters_falsified ... ok
+test graph::tests::hybrid_text_search_returns_anchor_payload_and_diffused_neighbor ... ok
+test graph::tests::rollback_drops_the_payload_nodes_it_removes ... ok
+test graph::tests::transact_rolls_back_a_failed_write ... ok
+test manifold::tests::coord_distance_is_zero_at_identity_and_grows ... ok
+test graph::tests::zoom_node_keeps_the_coarse_grain_order_and_rolls_back ... ok
+test manifold::tests::coord_distance_responds_to_every_parameter ... ok
+test manifold::tests::coord_rejects_invalid_state_and_parameters ... ok
+test graph::tests::zero_gamma_is_the_unsigned_evolution_bit_for_bit ... ok
+test manifold::tests::distance_composes_alpha_weighted_factors ... ok
+test graph::tests::hybrid_search_fails_closed_on_bad_input_and_is_empty_on_an_empty_graph ... ok
+test manifold::tests::extreme_scale_log_exp_and_transport_round_trip ... ok
+test manifold::tests::extreme_sphere_radius_stays_scale_free ... ok
+test manifold::tests::extreme_alpha_weights_give_a_finite_confidence_or_a_refusal ... ok
+test manifold::tests::from_preset_with_seals_the_preset_layout_and_a_distinct_frame ... ok
+test manifold::tests::geometry_is_object_safe_and_shareable ... ok
+test graph::tests::rollback_forgets_aliases_links_and_the_embedding_dimension ... ok
+test manifold::tests::large_coordinate_norms_and_layout_additions_fail_closed ... ok
+test manifold::tests::layouts_store_128_and_256_coordinates ... ok
+test manifold::tests::hyperbolic_domain_violation_fails_closed ... ok
+test manifold::tests::non_finite_and_malformed_input_fails_closed ... ok
+test manifold::tests::overflowing_alpha_sum_is_refused_by_validate ... ok
+test manifold::tests::public_kernels_reject_invalid_scalars_and_mismatched_shapes ... ok
+test graph::tests::embeddings_and_vector_queries_fail_closed ... ok
+test manifold::tests::coord_distance_equals_product_manifold_distance ... ok
+test manifold::tests::subnormal_sphere_validation_and_near_boundary_cancellation ... ok
+test manifold::tests::tangent_bound_to_other_fiber_or_epoch_is_rejected ... ok
+test manifold::tests::tiny_curvature_preserves_small_hyperbolic_displacements ... ok
+test manifold::tests::tiny_tangents_are_not_erased_and_overflow_does_not_become_identity ... ok
+test manifold::tests::topology_presets_are_a_closed_whitelist ... ok
+test manifold::tests::sphere_antipode_is_cut_locus ... ok
+test manifold::tests::gyration_closed_form_matches_mobius_definition ... ok
+test node::tests::band_from_scale_splits_the_scale_axis_into_four_intervals ... ok
+test manifold::tests::sphere_angle_matches_arccos_form ... ok
+test node::tests::derive_band_is_invariant_under_curvature_rescaling ... ok
+test node::tests::derive_band_puts_the_origin_on_top_and_the_boundary_at_the_bottom ... ok
+test node::tests::derive_band_refuses_a_point_outside_the_ball_and_a_bad_geometry ... ok
+test manifold::tests::transport_along_multi_point_path_and_back_preserves_norm ... ok
+test node::tests::zoom_steps_are_inverse_and_bounded ... ok
+test node::tests::payload_carries_its_digest_and_the_gate_refuses_tampering ... ok
+test graph::tests::an_alias_recalls_a_translation_the_lexical_projection_misses ... ok
+test ppr::tests::test_ppr_reports_nonconvergence ... ok
+test ppr::tests::test_ppr_refuses_bad_inputs_instead_of_clamping ... ok
+test ppr::tests::test_ppr_triangle ... ok
+test projection::tests::a_translation_with_no_shared_ngram_is_as_far_as_an_unrelated_text ... ok
+test graph::tests::one_alias_links_at_most_the_holder_cap ... ok
+test projection::tests::projection_is_deterministic_and_ignores_case_and_spacing ... ok
+test projection::tests::projection_refuses_empty_punctuation_and_oversized_text ... ok
+test graph::tests::concurrent_add_flush_and_rollback_never_duplicate_edges ... ok
+test projection::tests::unicode_text_without_spaces_still_shares_trigrams ... ok
+test semiring::tests::a_conflict_key_makes_chart_refuse_and_left_fold_never_picks ... ok
+test semiring::tests::a_tiny_explicit_budget_trips_inside_chart_fold_core ... ok
+test semiring::tests::associativity_audit_detects_a_genuine_violation ... ok
+test projection::tests::shared_ngrams_bring_texts_closer_in_both_fingerprint_and_manifold ... ok
+test graph::tests::diffusion_recalls_synonyms_along_alias_links_and_validates_edges ... ok
+test semiring::tests::chart_chain_length_bound_refuses_before_chart_allocation ... ok
+test semiring::tests::chart_closes_a_2plus2_chain_that_left_fold_refuses ... ok
+test semiring::tests::associativity_audit_reports_zero_violations_on_an_associative_table ... ok
+test semiring::tests::chart_closes_inner_first_bracketing ... ok
+test semiring::tests::chart_fold_chain_refuses_when_bracketings_disagree ... ok
+test projection::tests::projection_stays_inside_the_ball_of_every_curvature ... ok
+test semiring::tests::chart_fold_sets_agrees_with_fold_left_on_a_single_valued_chain ... ok
+test semiring::tests::compose_soft_is_linear_in_each_argument ... ok
+test semiring::tests::compose_soft_is_the_kernel_sum_and_keeps_unclosed_mass ... ok
+test semiring::tests::empty_chain_is_refused_by_every_fold ... ok
+test semiring::tests::fold_chain_soft_concludes_under_the_entropy_gate_and_refuses_above_it ... ok
+test graph::persistence::tests::uncommitted_files_never_replace_a_committed_snapshot ... ok
+test semiring::tests::fold_chain_soft_on_deltas_matches_the_discrete_left_fold ... ok
+test semiring::tests::fold_chain_soft_refuses_a_tie_and_a_dominant_unclosed_mass ... ok
+test semiring::tests::fold_chain_soft_refuses_bad_input_and_unweighted_conflict_keys ... ok
+test semiring::tests::gender_length_mismatch_is_refused ... ok
+test manifold::tests::arsinh_distance_matches_arcosh_and_mobius_forms ... ok
+test semiring::tests::insert_axiom_records_and_clears_conflict_keys ... ok
+test semiring::tests::missing_key_composes_to_empty ... ok
+test semiring::tests::result_set_normalizes_to_canonical_form ... ok
+test semiring::tests::soft_result_set_validates_and_measures_entropy ... ok
+test semiring::tests::union_is_idempotent_with_empty_zero ... ok
+test weighted::tests::an_exact_tie_refuses_even_at_zero_threshold ... ok
+test weighted::tests::from_counts_computes_negative_log_frequency ... ok
+test weighted::tests::from_counts_rejects_an_empty_key ... ok
+test weighted::tests::from_counts_rejects_duplicate_relation_and_duplicate_key ... ok
+test weighted::tests::from_counts_rejects_invalid_pseudo_count ... ok
+test weighted::tests::from_counts_rejects_zero_count ... ok
+test weighted::tests::invalid_margin_threshold_refuses_at_step_zero ... ok
+test weighted::tests::logprob_plus_matches_probability_sum ... ok
+test weighted::tests::margin_above_threshold_refuses_with_all_candidates ... ok
+test weighted::tests::margin_resolves_a_false_ambiguity ... ok
+test weighted::tests::missing_energy_for_a_table_result_refuses ... ok
+test graph::persistence::tests::corruption_missing_blocks_versions_and_geometry_fail_closed ... ok
+test weighted::tests::nan_propagates_through_plus_in_both_semirings ... ok
+test weighted::tests::tropical_and_logprob_can_pick_different_relations ... ok
+test manifold::tests::project_tangent_128_and_256 ... ok
+test weighted::tests::tropical_plus_is_min_with_zero_identity ... ok
+test weighted::tests::unweighted_chart_refuses_the_conflict_key ... ok
+test graph::tests::a_vector_query_anchors_by_embedding_and_diffuses_to_text_nodes ... FAILED
+test manifold::tests::log_of_exp_recovers_tangent_inside_injectivity_radius ... ok
+test graph::tests::text_and_vector_tracks_never_cross_and_combine_in_one_query ... ok
+test graph::persistence::tests::durable_transaction_failure_poison_and_writer_exclusion ... ok
+test manifold::tests::log_norm_equals_distance ... ok
+test graph::tests::tarjan_lists_components_after_everything_they_reach ... ok
+test semiring::tests::budget_is_not_over_tight_for_a_long_associative_chain ... ok
+test graph::tests::exhausted_step_budget_fails_closed_and_commits_nothing ... ok
+test projection::tests::dense_projection_stays_inside_the_ball_of_every_curvature ... ok
+test graph::persistence::tests::reflection_and_failed_reflection_quarantine_survive_restart ... ok
+test projection::tests::dense_projection_is_deterministic_scale_free_and_refuses_bad_vectors ... ok
+test graph::tests::reflection_adapts_a_cycle_too_slow_for_the_step_budget ... ok
+test semiring::tests::fold_chain_soft_fails_closed_on_budget ... ok
+test manifold::tests::exp_of_log_recovers_point ... ok
+test semiring::tests::dense_bomb_chart_fold_sets_refuses_on_budget ... ok
+test semiring::tests::dense_bomb_chart_fold_chain_refuses_on_budget ... ok
+test manifold::tests::distance_is_symmetric_and_satisfies_triangle_inequality ... ok
+test manifold::tests::transport_is_isometric_and_maps_log_to_negated_log ... ok
+test graph::persistence::tests::exact_snapshot_roundtrip_and_incremental_blocks ... ok
+test weighted::tests::dense_bomb_weighted_fold_refuses_on_budget ... ok
+test projection::tests::dense_fingerprint_has_only_a_weak_angular_statistical_signal ... ok
+
+failures:
+
+---- graph::tests::hybrid_search_equals_recall_then_ppr_from_the_same_anchors stdout ----
+
+thread 'graph::tests::hybrid_search_equals_recall_then_ppr_from_the_same_anchors' (601244) panicked at crates/gen-zero-lod/src/graph.rs:4613:9:
+assertion `left == right` failed
+  left: [(0, 0.84643006), (1, 1.0)]
+ right: [(0, 2.906307), (1, 3.4336057)]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- graph::tests::a_vector_query_anchors_by_embedding_and_diffuses_to_text_nodes stdout ----
+
+thread 'graph::tests::a_vector_query_anchors_by_embedding_and_diffuses_to_text_nodes' (601211) panicked at crates/gen-zero-lod/src/graph.rs:5003:9:
+assertion `left == right` failed
+  left: 1.0
+ right: 1.3652483
+
+
+failures:
+    graph::tests::a_vector_query_anchors_by_embedding_and_diffuses_to_text_nodes
+    graph::tests::hybrid_search_equals_recall_then_ppr_from_the_same_anchors
+
+test result: FAILED. 157 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.94s
+
+error: test failed, to rerun pass `-p gen-zero-lod --lib`
+mbx[cache]: 52 hits, 294 misses, 32 not looked up, 2 bypassed; 0 B downloaded, 0 B uploaded, 4.8 GiB stored locally
+mbx[savings]: 52 compilations restored from cache this build, avoiding 1m 4s of compiler time

@@ -205,7 +205,7 @@ class GraphAST:
         """Generates standard Mermaid flowchart TD code."""
         lines = ["flowchart TD"]
         for node in self.nodes.values():
-            draft_tag = " [草稿?]" if node.is_draft else ""
+            draft_tag = " [Draft?]" if node.is_draft else ""
             clean_label = f"{node.role_lane}: {node.label}{draft_tag}"
             clean_label = clean_label.replace('"', "'")
             lines.append(f'    {node.node_id}["{clean_label}"]')
@@ -251,7 +251,7 @@ class GraphAST:
 
             label_text = f"<b>[{node.role_lane}]</b><br/>{node.label}"
             if node.is_draft:
-                label_text += "<br/><i>(待确认草稿)</i>"
+                label_text += "<br/><i>(Pending Draft)</i>"
 
             cell = ET.SubElement(
                 root,

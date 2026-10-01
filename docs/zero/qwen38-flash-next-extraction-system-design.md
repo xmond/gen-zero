@@ -67,7 +67,7 @@ A100 must not be treated as having H100's native FP8 path; neither A100 nor H100
 
 Before loading, output a per-device memory plan: tensor owner, storage dtype, compute dtype, bytes, CPU/GPU location, copy count, prefill workspace, GDN state, QSA/indexer/cache, hook staging, and temporary loading space. Admission is based on **available** RAM/VRAM, not total. The overall budget is `weights + states + activations + workspace + staging + safety_margin`; verify at batch=1 and the task's longest input before deciding the token budget.
 
-No SSH probing of dev/stg/ai-wsl was done this time, and no user-provided actual GPU count/interconnect information was found; the above is conditional sizing. At execution time, first collect `uptime`, `/proc/loadavg`, `free -b`, `df -B1`, `nproc`, `nvidia-smi`, `nvidia-smi topo -m`. Normalize 1m/15m load by core count, and write the admission threshold into the manifest; >=8GB RAM and >=10GB disk are only the user's baseline requirement and cannot substitute for the model's own budget. If any node fails to meet the bar, record the rejection reason and do not start the task.
+No SSH probing of remote worker nodes was done this time, and no user-provided actual GPU count/interconnect information was found; the above is conditional sizing. At execution time, first collect `uptime`, `/proc/loadavg`, `free -b`, `df -B1`, `nproc`, `nvidia-smi`, `nvidia-smi topo -m`. Normalize 1m/15m load by core count, and write the admission threshold into the manifest; >=8GB RAM and >=10GB disk are only the user's baseline requirement and cannot substitute for the model's own budget. If any node fails to meet the bar, record the rejection reason and do not start the task.
 
 ## 4. Engine choice and offloading implementation
 

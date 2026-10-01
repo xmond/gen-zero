@@ -278,7 +278,7 @@ def main() -> int:
         "kind": "REANALYSIS_OF_EXISTING_ARTIFACT_NOT_A_NEW_RUN",
         "new_gpu_run_executed": False,
         "why_no_new_run": [
-            "no CUDA device on this host or on tailnet hosts ai-wsl/dev/claw (nvidia-smi absent)",
+            "no CUDA device on this host or on reachable worker nodes (nvidia-smi absent)",
             "aws sts get-caller-identity: NoCredentials",
             "Qwen/Qwen3.5-9B weights not in the HF cache (only 0.5B/0.6B/0.8B)",
             "run_remote_eval_v6.py assert_real_gpu refuses CPU/mock by contract",

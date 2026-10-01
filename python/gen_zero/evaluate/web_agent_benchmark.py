@@ -240,25 +240,26 @@ class WebAgentBenchmarkSuite:
             json.dump(results, f, indent=2)
 
         md_path = out_dir / "web_agent_action_selection_smoke_report.md"
-        md_content = f"""# Gen-Zero Decide-and-Fill 动作选择冒烟测试报告
+        md_content = f"""# Gen-Zero Decide-and-Fill Action Selection Smoke Test Report
 
-评测时间：{results['timestamp']} · 评测轮次：{results['total_trials']} 次实验
+Evaluation Time: {results['timestamp']} · Trials: {results['total_trials']} experiments
 
-**说明**：本报告是针对 3 个手写合成场景的冒烟测试 (synthetic smoke test)，
-用于验证 Decide-and-Fill 流水线的动作选择与字面 Word-Span 参数抽取是否按预期工作。
-它不是真实世界 Web 智能体基准，结果不可与任何 LLM baseline 比较。
+**Note**: This report is a synthetic smoke test covering 3 handwritten scenarios,
+designed to verify that the Decide-and-Fill action selection and literal Word-Span
+parameter extraction pipeline operate as expected.
+It is not a real-world web agent benchmark and must not be compared to LLM baselines.
 
-## 结果
+## Results
 
-| 指标 | 数值 |
+| Metric | Value |
 | :--- | :---: |
-| 任务成功率 (action 匹配 + span 精确匹配) | {res_exp.task_success_rate_pct}% |
-| 每场景合成候选动作数（非执行步数） | {exp_avg_steps} |
-| 单任务执行步数 | 未测量 |
-| 单步决策时延 (mean) | {res_exp.average_step_latency_ms} ms |
-| 总评测次数 | {results['failure_breakdown']['total_evaluations']} |
-| 动作不匹配次数 (action mismatch) | {results['failure_breakdown']['action_mismatches']} |
-| 词区间不匹配次数 (span mismatch) | {results['failure_breakdown']['span_mismatches']} |
+| Task Success Rate (action match + span exact match) | {res_exp.task_success_rate_pct}% |
+| Candidate Actions per Scenario (not execution steps) | {exp_avg_steps} |
+| Steps per Task | Not measured |
+| Single-Step Decision Latency (mean) | {res_exp.average_step_latency_ms} ms |
+| Total Evaluations | {results['failure_breakdown']['total_evaluations']} |
+| Action Mismatches | {results['failure_breakdown']['action_mismatches']} |
+| Span Mismatches | {results['failure_breakdown']['span_mismatches']} |
 """
         with open(md_path, "w", encoding="utf-8") as f:
             f.write(md_content)

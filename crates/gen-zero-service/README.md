@@ -1,7 +1,8 @@
 # gen-zero-service
 
 The Gen-Zero MCP server: a dual-transport server (stdio and SSE/HTTP REST), a
-single polymorphic `zero` tool router with 11 cognitive verbs, a high-performance
+single polymorphic `zero` tool router with 20 cognitive verbs (core decision,
+world-model pipeline, and LodGraph memory verbs), a high-performance
 simd-json protocol loop, the semantic bridge to the Python scorer, and the
 Spec 25 cognitive runtime (mount snapshots, tangent SSM, geometry gate).
 
@@ -45,11 +46,12 @@ Spec 25 cognitive runtime (mount snapshots, tangent SSM, geometry gate).
   the contact manifold; `damping` sets the rate `gamma >= 0`, `gamma = 0` is the
   symplectic flow, `gamma > 0` contracts each `(q_i, p_i)` pair by
   `exp(-2 gamma dt)` per step).
-- `zero`: the single polymorphic `zero` tool router, exposing 12 cognitive
+- `zero`: the single polymorphic `zero` tool router, exposing 20 cognitive
   verbs (`ask`/`decide`, `route`, `imagine`, `stream`, `grep`, `compact`,
-  `entail`, `causal_fold`, `pipeline`, `simulate`, `what_if`, `audit`). Every request
-  captures one immutable mount snapshot; `ask`/`route`/`imagine` run request
-  text through the semantic risk classifier before scoring.
+  `entail`, `causal_fold`, `pipeline`, `simulate`, `what_if`, `audit`, and 8
+  `graph_*` verbs for LodGraph memory operations). Every request captures one
+  immutable mount snapshot; `ask`/`route`/`imagine` run request text through
+  the semantic risk classifier before scoring.
 
 ## Key exports
 

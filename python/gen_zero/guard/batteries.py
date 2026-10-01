@@ -2,7 +2,7 @@
 
 Implements Milestone 1 of Issue #26:
 - Non-autoregressive input & output batteries.
-- Prompt injection natural immunity: zero token generation, pure logit difference.
+- Prompt injection defense: zero token generation, pure logit difference.
 - Multi-dimensional Noul probes (jailbreak, harmful_request, medical_advice, self_harm, data_exfiltration, unauthorized_execution).
 - Severity Score (0 ~ 3 Likert scale).
 """

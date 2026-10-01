@@ -936,6 +936,7 @@ async fn graph_rag_answers_a_text_query_with_payload_and_graph_evidence() {
     assert_eq!(out.verb, ZeroVerb::GraphRag);
     let op = &out.meta["graph_op"];
     assert_eq!(op["op"], "graph_rag");
+    assert_eq!(op["distance_normalization"], "per_track_max");
     assert_eq!(op["query"]["kind"], "text");
     assert_eq!(op["query"]["projector"], gen_zero_lod::PROJECTOR_VERSION);
     assert_eq!(op["crag_margin"], 0.0);

@@ -103,7 +103,7 @@ def test_balanced_dataset_symmetric_confusion_makes_balanced_accuracy_equal_raw_
 
 def _row(name: str, acc: float, best01png: float, collapsed: bool, balanced_acc: float, macro_f1: float,
          n: int = 100) -> dict:
-    win_marker = "COLLAPSED(多数类坍缩，不计胜出)" if collapsed else ("WIN" if acc > best01png else "-")
+    win_marker = "COLLAPSED(majority_collapse_win_excluded)" if collapsed else ("WIN" if acc > best01png else "-")
     return {
         "dataset": name, "n": n, "n_expected_01png": n, "nimble": best01png, "jev": best01png,
         "best_01png": best01png, "majority_class_train_prior_acc": None, "leakage_gate": {},
@@ -139,7 +139,7 @@ def test_build_report_splits_wins_by_collapse_and_render_md_marks_the_collapsed_
     assert "collapsed_win" not in agg["tasks_beating_best_01png"]
 
     md = render_md(rep)
-    assert "COLLAPSED(多数类坍缩，不计胜出)" in md
+    assert "COLLAPSED(majority_collapse_win_excluded)" in md
     assert "Majority-class collapse" in md
     assert "honest_win" not in md.split("Majority-class collapse")[1].split("\n")[0]  # only the collapsed task named there
     # the JSON report round-trips through the exact renderer path used by stage_eval

@@ -36,6 +36,8 @@ Binary name: `gen-zero`.
 - `entail`: Busemann entailment (`passage ⊃ question`) on the mounted preset
   geometry, with an optional tangent-event scheme.
 - `fold`: causal relation trace fold on the discrete relation semiring.
+- `qwen`: run the native Qwen2.5 scorer directly (no server, no Python): score
+  candidates after a prompt, or assess text safety risk.
 
 Reflex plugin commands (plugin archives come from `gen-zero-research` or a
 prior `reflex-adapt`; see `examples/reflex_bench_fixture.rs` for an untrained

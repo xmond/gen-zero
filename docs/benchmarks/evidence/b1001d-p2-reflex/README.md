@@ -15,9 +15,9 @@ Implemented on `feat/b1001d-p2-reflex`. This is graph-based candidate exclusion 
 
 ## Commands and raw results
 
-Remote source-only sandbox: `ai-wsl:/tmp/b1001d-p2-reflex-src`, no `.git`. Source SHA-256 manifest compared byte-for-byte with the local workspace (cmp exit 0). Dependency resolution is saved as `dependency-lock.txt`; the repository itself ignores Cargo.lock.
+Remote source-only sandbox: `worker-node-1:/tmp/b1001d-p2-reflex-src`, no `.git`. Source SHA-256 manifest compared byte-for-byte with the local workspace (cmp exit 0). Dependency resolution is saved as `dependency-lock.txt`; the repository itself ignores Cargo.lock.
 
-Health checks used `hostname; uptime; nproc; free -m; df -Pm /tmp; command -v cargo` on dev/stg/ai-wsl. Initial dev load was 56.28/53.75 on 64 CPUs; ai-wsl was 2.00/19.95 on 24 CPUs with ~98GB available RAM and ~948GB disk. ai-wsl was selected. Cargo required its explicit `~/.cargo/bin` PATH. A later environment capture is in `remote-environment.txt`.
+Health checks used `hostname; uptime; nproc; free -m; df -Pm /tmp; command -v cargo` across available compute nodes. Node worker-node-1 had ~98GB available RAM and ~948GB disk and was selected. Cargo required its explicit `~/.cargo/bin` PATH. A later environment capture is in `remote-environment.txt`.
 
 ```sh
 cd /tmp/b1001d-p2-reflex-src

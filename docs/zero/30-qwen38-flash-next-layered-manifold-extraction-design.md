@@ -295,7 +295,7 @@ Excluded: `model.visual`, `mtp.*` (already ignored by `Qwen4ExpForCausalLM._keys
 
 - A real forward pass requires about 250 GB of bf16 backbone plus 90 GB of N-gram table; truncated loading of the first K layers (`scripts/test_intermediate_layer_probe.py:365 load_truncated`) has already been proven on a tiny model to require only the byte-level read-only shards. Layer 4 needs all 48 layers; Layer 1/2/3 can each be done separately at K=2 (for L3) or any K.
 - The cost of the Layer 1 trajectory must be stated plainly: path (a) performs $T$ single-token full-model forward passes per sample (the QSA indexer still loops per query in Python, `Qwen4ExpTextQSAIndexer.forward` at `M:`), not a single prefill pass. In this mode, the state of all 36 GDN layers is in the cache at every step, so §2.3's "store only 3 layers" is a storage choice, not a compute-driven choice.
-- Neither this machine nor dev/stg/ai-wsl has any verifiable GPU information; this design makes no commitment about which machine can run this.
+- Neither this machine nor reachable worker nodes have any verifiable GPU information; this design makes no commitment about which machine can run this.
 
 ## 10. Evidence manifest
 

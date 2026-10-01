@@ -777,7 +777,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     ap.add_argument("--out", default=str(DEFAULT_OUT), help="output stem (writes .json and .md)")
     ap.add_argument("--tasks", nargs="*", default=None)
     ap.add_argument("--workers", type=int, default=3, help="tasks run in parallel processes")
-    ap.add_argument("--remote", default=None, help="ssh host to offload the run to (e.g. ai-wsl, dev)")
+    ap.add_argument("--remote", default=None, help="ssh host to offload the run to (e.g. remote-worker, dev-node)")
     ap.add_argument("--remote-dir", default="~/gz_offload_b0925h")
     ap.add_argument("--keep-remote", action="store_true")
     ap.add_argument("--resume", action="store_true", help="reuse per-task results left by an interrupted run")

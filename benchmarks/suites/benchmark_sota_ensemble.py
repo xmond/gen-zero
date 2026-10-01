@@ -680,7 +680,7 @@ def stage_eval(tasks: List[str]) -> None:
         ok = pred == gold
         acc = 100 * float(ok.mean())
         cs = collapse_stats(pred, gold, len(cands))
-        win_marker = ("COLLAPSED(多数类坍缩，不计胜出)" if cs["collapsed"]
+        win_marker = ("COLLAPSED(majority_collapse_win_excluded)" if cs["collapsed"]
                       else ("WIN" if acc - max(PNG[task][2:4]) > 0 else "-"))
         exp_acc = {n: round(100 * float(np.mean(p == gold)), 2) for n, p in expert_pred.items()}
         refs = {}

@@ -370,8 +370,11 @@ impl LodGraph {
         }
         let meta: MetaIn = decode(&read_block(dir, &m.state)?)?;
         let mut chunks = Vec::with_capacity(m.nodes.len());
+        let mut total_nodes = 0usize;
         for hash in &m.nodes {
             let chunk: Vec<LodNode> = decode(&read_block(dir, hash)?)?;
+            super::check_node_capacity(total_nodes, chunk.len())?;
+            total_nodes += chunk.len();
             chunks.push(Arc::new(chunk));
         }
         let nodes = NodeChunks::from_chunks(chunks)?;

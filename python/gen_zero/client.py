@@ -1973,8 +1973,9 @@ class GenZero:
         - Dynamically scales population and horizon based on state volatility and entropy.
         
         Returns:
-            Dict with 'action' (List[float]), 'plan_trajectory', 'expected_return',
-            'action_std', 'horizon', 'samples_evaluated', 'latency_ms'.
+            Dict with 'action', 'best_action', 'best_trajectory', 'expected_return',
+            'horizon', 'num_samples', 'iterations', 'latency_ms', and 'status'.
+            When status != 'OK', action and best_trajectory are None.
         """
         return self.mpc_cem_engine.plan_continuous(
             state=state,

@@ -27,6 +27,7 @@ pub use graph::{
     GraphCheckpoint, HybridRagResult, LodGraph, PprRanking, RagDiffusion, RagHit, ReflectionReport,
     ReflectionRevocation, StatusTransition, ADMISSION_BETA, ADMISSION_GAMMA, ALIAS_LINK_WEIGHT,
     DEFAULT_FALSIFICATION_GAIN, HYBRID_PPR_TOLERANCE, MAX_ALIAS_HOLDERS, MAX_FIXED_POINT_STEPS,
+    MAX_GRAPH_NODES,
 };
 pub use manifold::{
     ContainmentCriteria, ContainmentScore, Digest, Epochs, FiberId, GeometryParams, Layout,

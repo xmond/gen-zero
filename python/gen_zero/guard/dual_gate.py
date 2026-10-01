@@ -4,7 +4,7 @@ Implements Module 1 & 2 of Issue #26:
 - DualGateGuardrail:
   - guard_input(prompt, context=None, policy="strict") -> GuardVerdict
   - guard_output(response, input_context=None, policy="strict") -> GuardVerdict
-- Prompt injection immunity: zero token generation, pure non-autoregressive logit difference.
+- Prompt injection defense: zero token generation, pure non-autoregressive logit difference.
 - Four-tier arbitration: support / block / review / pass.
 """
 

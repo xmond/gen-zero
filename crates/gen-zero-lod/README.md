@@ -78,6 +78,11 @@ text retrieval over payload-carrying nodes.
     is never inside a cycle and keeps full gain. When the evolution leaves the
     action above the threshold, the action is quarantined (manual revocation)
     and `ReflectionReport::revocation` says so.
+    Reflection and every insertion or snapshot-load path share the hard
+    `MAX_GRAPH_NODES = 1 << 20` cap. `reflect_failure` preflights the missing
+    action and evidence nodes before staging; overflow returns
+    `GraphCapacityExceeded`, stages no nodes or edges, and quarantines the
+    action. There is no LRU eviction.
   - Limits: the effect of a refutation on a dependent shrinks with the
     dependent's prior, its other dependencies and its distance from the refuted
     node. It is not a whole-subtree cascade. `beta`, `gamma` and the thresholds
@@ -94,10 +99,16 @@ text retrieval over payload-carrying nodes.
   - Retrieval: `hybrid_rag_search(coord, hdc, top_k, crag_margin, ppr_alpha,
     ppr_iters)` runs three stages under one read lock: Hamming prefilter to
     `4 * top_k` live nodes, product-geodesic rerank (with the CRAG neighbor
-    expansion) to `top_k` anchors, then PPR from the anchors seeded
-    `1 / (1 + distance)`. Hits are every anchor plus up to `top_k` nodes reached
-    only by diffusion, ordered by PPR score, each with its confidence, payload,
-    `source_uri`, `timestamp_ns` and digest.
+    expansion) to `top_k` anchors, then per-track normalization of each
+    anchor distance by the maximum distance among that track's recalled
+    anchors (a zero maximum leaves all distances at zero), followed by PPR
+    seeded with `1 / (1 + normalized_distance)`. The normalization is
+    candidate-relative (`distance_normalization: per_track_max`), not semantic
+    calibration; with one nonzero candidate its normalized distance is `1`.
+    Returned `anchor_distance` values are dimensionless. Hits are every anchor plus up to `top_k` nodes
+    reached only by diffusion, ordered by PPR score, each with its confidence,
+    payload, `source_uri`, `timestamp_ns` and digest. Internal reflection
+    evidence is excluded from general recall, anchors and diffusion hits.
     `hybrid_rag_search_query(text?, vector?, ...)` projects a query text
     (`LodGraph::project_text`), a query vector (`LodGraph::project_dense`) or
     both with the graph's own projector first. With both, each track gives up
@@ -115,17 +126,16 @@ text retrieval over payload-carrying nodes.
     any case and spacing; at most 64 holders per alias). PPR follows every edge
     type in the edge's direction, so a query that anchors one of them reaches
     the other after the next flush.
-  - Limits, measured by the unit tests in `projection.rs`: the lexical
+  - Limits: the lexical
     projection puts a translation ("valve closure" / "关闭主阀") as far away as
     an unrelated text, so such a pair is found only through an alias, an edge
-    or the dense track. The dense track is as good as the caller's embedding
-    model; this crate holds none and was tested with synthetic vectors only.
-    The dense fingerprint tracks the angle (mean Hamming within 2 bits of
-    `256 * theta / pi` at 128, 256 and 512 dimensions). The 16-number
-    coordinate is a coarse sketch: over 400 random triples at 256 dimensions it
-    ordered cosine 0.9 against 0.3 correctly in 99.8% of them, and cosine 0.8
-    against 0.7 in 74.5% (the fingerprint: 88.5%). Stage 2 can therefore
-    reorder close candidates worse than Stage 1 ranked them.
+    or the dense track. The dense track accepts vectors from an external model
+    but this crate holds no model and adds no learned semantics or cross-model
+    alignment. Its deterministic random-sign/SimHash fingerprint and
+    real-valued 16-row chart sketch have only a weak statistical relation to
+    input angles; they are not an isometry and provide no cosine, distance or
+    ranking guarantee. Stage 2 can therefore reorder candidates relative to
+    their input-space similarity.
     The Hamming scan is a linear `count_ones` loop; it is not benchmarked and
     uses a hardware POPCNT only when the build enables that target feature.
 - `manifold`: Spec 25 mixed-curvature product manifolds,
@@ -153,8 +163,12 @@ text retrieval over payload-carrying nodes.
   the hyperbolic depth of a projected point carries no hierarchy. Blank text or
   text with no alphanumeric token is `LodError::EmptyInput`.
   `project_dense` hashes a dense embedding from an external model (16 to 8192
-  finite values, norm above 0) the same way, one signed feature per axis: close
-  means high cosine, nothing more.
+  finite values, norm above 0) with one signed feature per axis. Fixed keyed
+  pseudo-random signs form the 256-bit SimHash; fixed keyed real-valued rows
+  form the 16-number chart sketch. An ideal random-hyperplane ensemble has an
+  expected bit-mismatch rate of `theta / pi`, but this deterministic finite
+  projection offers only a weak angular statistical signal and no distance or
+  ranking guarantee. It is not learned, aligned across models, or an isometry.
 - `ppr`: Personalized PageRank sparse flow engine. Lock-free, CSR-based sparse
   power iteration for context diffusion, `p_{t+1} = (1-alpha) * W_semantic * p_t + alpha * e_seed`.
 - `semiring`: learned relation semiring (Spec 24 §8.6.2). `P(R)` under
