@@ -2881,6 +2881,22 @@
       "to": "gen_zero.runtime.nano_core_vision"
     },
     {
+      "from": "gen_zero.scripts.dump_semantic_pmi_reference",
+      "to": "gen_zero"
+    },
+    {
+      "from": "gen_zero.scripts.dump_semantic_pmi_reference",
+      "to": "gen_zero.service"
+    },
+    {
+      "from": "gen_zero.scripts.dump_semantic_pmi_reference",
+      "to": "gen_zero.service.app"
+    },
+    {
+      "from": "gen_zero.scripts.dump_semantic_pmi_reference",
+      "to": "gen_zero.service.semantic_scorer"
+    },
+    {
       "from": "gen_zero.scripts.run_12_planners_benchmark",
       "to": "gen_zero"
     },
@@ -3429,6 +3445,7 @@
     "gen_zero.scripts.calibrate_semantic_risk",
     "gen_zero.scripts.demo_specific_scenarios",
     "gen_zero.scripts.download_qwen",
+    "gen_zero.scripts.dump_semantic_pmi_reference",
     "gen_zero.scripts.run_12_planners_benchmark",
     "gen_zero.scripts.run_6_orthogonal_planners_benchmark",
     "gen_zero.scripts.run_complex_scenario",
@@ -20615,6 +20632,12 @@
       "status": "unresolved_symbol_dispatch"
     },
     {
+      "symbol": "gen_zero.scripts.dump_semantic_pmi_reference.main",
+      "file": "python/gen_zero/scripts/dump_semantic_pmi_reference.py",
+      "line": 35,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
       "symbol": "gen_zero.scripts.gen_grep._clamp_prob",
       "file": "python/gen_zero/scripts/gen_grep.py",
       "line": 29,
@@ -23163,6 +23186,10 @@
     },
     {
       "from": "crates/gen-zero-lod/src/lib.rs",
+      "to": "crates/gen-zero-lod/src/projection.rs"
+    },
+    {
+      "from": "crates/gen-zero-lod/src/lib.rs",
       "to": "crates/gen-zero-lod/src/semiring.rs"
     },
     {
@@ -23187,11 +23214,19 @@
     },
     {
       "from": "crates/gen-zero-model/src/lib.rs",
+      "to": "crates/gen-zero-model/src/qwen.rs"
+    },
+    {
+      "from": "crates/gen-zero-model/src/lib.rs",
       "to": "crates/gen-zero-model/src/reflex.rs"
     },
     {
       "from": "crates/gen-zero-model/src/lib.rs",
       "to": "crates/gen-zero-model/src/sanitize.rs"
+    },
+    {
+      "from": "crates/gen-zero-model/src/lib.rs",
+      "to": "crates/gen-zero-model/src/semantic_qwen.rs"
     },
     {
       "from": "crates/gen-zero-nanocore/src/lib.rs",
@@ -23288,6 +23323,10 @@
     {
       "from": "crates/gen-zero-service/src/lib.rs",
       "to": "crates/gen-zero-service/src/reflex_registry.rs"
+    },
+    {
+      "from": "crates/gen-zero-service/src/lib.rs",
+      "to": "crates/gen-zero-service/src/semantic.rs"
     },
     {
       "from": "crates/gen-zero-service/src/lib.rs",
@@ -23393,6 +23432,7 @@
     "crates/gen-zero-lod/src/manifold.rs",
     "crates/gen-zero-lod/src/node.rs",
     "crates/gen-zero-lod/src/ppr.rs",
+    "crates/gen-zero-lod/src/projection.rs",
     "crates/gen-zero-lod/src/semiring.rs",
     "crates/gen-zero-lod/src/weighted.rs",
     "crates/gen-zero-model/src/choice_head.rs",
@@ -23400,8 +23440,10 @@
     "crates/gen-zero-model/src/lib.rs",
     "crates/gen-zero-model/src/mask.rs",
     "crates/gen-zero-model/src/patch.rs",
+    "crates/gen-zero-model/src/qwen.rs",
     "crates/gen-zero-model/src/reflex.rs",
     "crates/gen-zero-model/src/sanitize.rs",
+    "crates/gen-zero-model/src/semantic_qwen.rs",
     "crates/gen-zero-nanocore/src/core_type.rs",
     "crates/gen-zero-nanocore/src/error.rs",
     "crates/gen-zero-nanocore/src/lib.rs",
@@ -23431,6 +23473,7 @@
     "crates/gen-zero-service/src/pipeline_verb.rs",
     "crates/gen-zero-service/src/reflex_adapter.rs",
     "crates/gen-zero-service/src/reflex_registry.rs",
+    "crates/gen-zero-service/src/semantic.rs",
     "crates/gen-zero-service/src/server.rs",
     "crates/gen-zero-service/src/snapshot.rs",
     "crates/gen-zero-service/src/tangent_ssm.rs",
@@ -23460,7 +23503,7 @@
       "declared_modules": [
         "reflex_cmd"
       ],
-      "public_symbols": 2
+      "public_symbols": 3
     },
     {
       "file": "crates/gen-zero-cli/src/reflex_cmd.rs",
@@ -23559,7 +23602,7 @@
     {
       "file": "crates/gen-zero-lod/src/graph.rs",
       "declared_modules": [],
-      "public_symbols": 46
+      "public_symbols": 54
     },
     {
       "file": "crates/gen-zero-lod/src/lib.rs",
@@ -23569,6 +23612,7 @@
         "manifold",
         "node",
         "ppr",
+        "projection",
         "semiring",
         "weighted"
       ],
@@ -23582,12 +23626,17 @@
     {
       "file": "crates/gen-zero-lod/src/node.rs",
       "declared_modules": [],
-      "public_symbols": 19
+      "public_symbols": 22
     },
     {
       "file": "crates/gen-zero-lod/src/ppr.rs",
       "declared_modules": [],
       "public_symbols": 2
+    },
+    {
+      "file": "crates/gen-zero-lod/src/projection.rs",
+      "declared_modules": [],
+      "public_symbols": 4
     },
     {
       "file": "crates/gen-zero-lod/src/semiring.rs",
@@ -23616,8 +23665,10 @@
         "error",
         "mask",
         "patch",
+        "qwen",
         "reflex",
-        "sanitize"
+        "sanitize",
+        "semantic_qwen"
       ],
       "public_symbols": 0
     },
@@ -23632,6 +23683,11 @@
       "public_symbols": 9
     },
     {
+      "file": "crates/gen-zero-model/src/qwen.rs",
+      "declared_modules": [],
+      "public_symbols": 18
+    },
+    {
       "file": "crates/gen-zero-model/src/reflex.rs",
       "declared_modules": [],
       "public_symbols": 27
@@ -23640,6 +23696,11 @@
       "file": "crates/gen-zero-model/src/sanitize.rs",
       "declared_modules": [],
       "public_symbols": 2
+    },
+    {
+      "file": "crates/gen-zero-model/src/semantic_qwen.rs",
+      "declared_modules": [],
+      "public_symbols": 24
     },
     {
       "file": "crates/gen-zero-nanocore/src/core_type.rs",
@@ -23746,7 +23807,7 @@
     {
       "file": "crates/gen-zero-service/src/bridge.rs",
       "declared_modules": [],
-      "public_symbols": 24
+      "public_symbols": 26
     },
     {
       "file": "crates/gen-zero-service/src/closed_loop.rs",
@@ -23756,7 +23817,7 @@
     {
       "file": "crates/gen-zero-service/src/cognitive.rs",
       "declared_modules": [],
-      "public_symbols": 45
+      "public_symbols": 47
     },
     {
       "file": "crates/gen-zero-service/src/error.rs",
@@ -23786,6 +23847,7 @@
         "pipeline_verb",
         "reflex_adapter",
         "reflex_registry",
+        "semantic",
         "server",
         "snapshot",
         "tangent_ssm",
@@ -23822,9 +23884,14 @@
       "public_symbols": 8
     },
     {
+      "file": "crates/gen-zero-service/src/semantic.rs",
+      "declared_modules": [],
+      "public_symbols": 13
+    },
+    {
       "file": "crates/gen-zero-service/src/server.rs",
       "declared_modules": [],
-      "public_symbols": 14
+      "public_symbols": 15
     },
     {
       "file": "crates/gen-zero-service/src/snapshot.rs",
@@ -23844,7 +23911,7 @@
     {
       "file": "crates/gen-zero-service/src/zero.rs",
       "declared_modules": [],
-      "public_symbols": 35
+      "public_symbols": 37
     },
     {
       "file": "crates/gen-zero-storage/src/error.rs",
@@ -23940,7 +24007,7 @@
     {
       "file": "crates/gen-zero-worldmodel/src/symplectic_dynamics.rs",
       "declared_modules": [],
-      "public_symbols": 10
+      "public_symbols": 11
     }
   ],
   "deletion_evidence": []

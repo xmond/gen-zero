@@ -184,6 +184,7 @@ impl KvCache {
 pub struct QwenModel {
     cfg: QwenConfig,
     format: WeightFormat,
+    #[allow(dead_code)]
     source: PathBuf,
     embed: Tensor,
     layers: Vec<Layer>,
@@ -235,6 +236,10 @@ impl QwenModel {
 
     pub fn format(&self) -> &WeightFormat {
         &self.format
+    }
+
+    pub fn source(&self) -> &Path {
+        &self.source
     }
 
     pub fn device(&self) -> &Device {
