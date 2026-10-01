@@ -321,12 +321,14 @@ fn invalid(detail: impl Into<String>) -> Rejection {
 /// duplicate entity 409, a missing entity 404, a
 /// confidence evolution that did not converge inside its step bound, or whose
 /// map is not a contraction on some cycle, 422; so is a deposited edge that
-/// admission refuses because it closes such a cycle. A CSR
+/// admission refuses because it closes such a cycle, or one too slow to
+/// converge inside the step budget. A CSR
 /// or checkpoint failure is an engine fault, 500.
 pub(crate) fn graph_rejection(e: LodError) -> Rejection {
     let (code, status) = match &e {
         LodError::FixedPointDiverged { .. } => ("FixedPointDiverged", 422),
         LodError::FixedPointNotContractive { .. } => ("FixedPointNotContractive", 422),
+        LodError::FixedPointTooSlow { .. } => ("FixedPointTooSlow", 422),
         LodError::SpineBreatheOutOfBounds { .. } => ("BandOutOfRange", 409),
         LodError::DuplicateEntity(_) => ("DuplicateEntity", 409),
         LodError::EntityNotFound(_) | LodError::NodeNotFound(_) => ("EntityNotFound", 404),

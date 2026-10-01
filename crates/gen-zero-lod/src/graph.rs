@@ -16,8 +16,9 @@
 //! dependency graph is cut into strongly connected components (Tarjan) and
 //! solved sources first: a node on no cycle in one evaluation, a cycle by its
 //! own contraction, refused when it has none. Admission keeps such cycles out:
-//! an edge that would close one at [`ADMISSION_BETA`], [`ADMISSION_GAMMA`] is
-//! refused when it is added. Evidence enters through
+//! an edge that would close one at [`ADMISSION_BETA`], [`ADMISSION_GAMMA`], or
+//! one too slow to finish in [`MAX_FIXED_POINT_STEPS`], is refused when it is
+//! added. Evidence enters through
 //! `falsify_node` and leaves through `retract_falsification`; the next
 //! evolution moves every dependent accordingly, in either direction.
 //!
@@ -426,7 +427,8 @@ enum OnNonContractive {
 }
 
 /// A cyclic block whose internal falsifier gain an evolution lowered, because at
-/// the requested gain its map was not a contraction.
+/// the requested gain its map was not a contraction, or not one that surely
+/// converges inside the step budget.
 ///
 /// Only falsifier edges with both ends inside the block run at `applied_gamma`.
 /// Support edges, and falsifiers from outside the block, keep their weight. The
@@ -438,7 +440,8 @@ pub struct AdaptedBlock {
     pub nodes: Vec<u32>,
     pub requested_gamma: f64,
     pub applied_gamma: f64,
-    /// Lipschitz bound at `requested_gamma` (`>= 1`).
+    /// Lipschitz bound at `requested_gamma`: `>= 1`, or below 1 but so close
+    /// that the block may not converge inside its step budget.
     pub requested_contraction: f64,
     /// Lipschitz bound at `applied_gamma` (`< 1`).
     pub contraction: f64,
@@ -447,7 +450,8 @@ pub struct AdaptedBlock {
 /// How [`LodGraph::reflect_failure`] revoked the action.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ReflectionRevocation {
-    /// The evolution pressed the action's confidence below the threshold.
+    /// The evolution left the action's node `Falsified`: its confidence fell
+    /// below the threshold, or it was already refuted by evidence.
     Evolution,
     /// The evolution left the action at or above the threshold (other support
     /// outweighs the observation). The action is revoked by hand, as
@@ -907,20 +911,47 @@ fn adapted_gain(beta: f64, gamma: f64, inside: &[(f64, f64)]) -> Option<(f64, f6
     (gain.is_finite() && q.is_finite() && q < 1.0).then_some((gain, q))
 }
 
-/// The first cyclic block whose map is not a contraction at `beta`, `gamma`,
-/// as the error an evolution would refuse it with.
-fn non_contractive_block(rows: &SignedRows, beta: f64, gamma: f64) -> Option<LodError> {
+/// Steps a block with Lipschitz bound `q < 1` may need to reach `tolerance`
+/// from any start: `k_max` of [`iterate_block`] at `||x^1 - x^0||_inf = 1`, the
+/// largest it can be, since every confidence lies in [0, 1].
+fn worst_case_steps(q: f64, tolerance: f64) -> usize {
+    if q == 0.0 {
+        1
+    } else {
+        // The cast saturates.
+        ((tolerance * (1.0 - q)).ln() / q.ln()).ceil() as usize
+    }
+}
+
+/// The first cyclic block admission refuses, as its error: one whose map is
+/// not a contraction at [`ADMISSION_BETA`], [`ADMISSION_GAMMA`]
+/// ([`LodError::FixedPointNotContractive`]), or contracts so slowly that an
+/// evolution at the reflection tolerance may run out of
+/// [`MAX_FIXED_POINT_STEPS`] ([`LodError::FixedPointTooSlow`]; about
+/// `q > 0.9998`).
+fn inadmissible_block(rows: &SignedRows) -> Option<LodError> {
+    let (beta, gamma) = (f64::from(ADMISSION_BETA), f64::from(ADMISSION_GAMMA));
     let blocks = Blocks::of(rows);
     (0..blocks.condensation.component_count()).find_map(|k| {
         if !blocks.is_cyclic(rows, k) {
             return None;
         }
         let (q, _, _) = blocks.weights(rows, k, beta, gamma, None);
-        (q.is_nan() || q >= 1.0).then(|| LodError::FixedPointNotContractive {
-            block_size: blocks.condensation.component(k).len(),
+        let block_size = blocks.condensation.component(k).len();
+        if q.is_nan() || q >= 1.0 {
+            return Some(LodError::FixedPointNotContractive {
+                block_size,
+                contraction: q,
+                beta,
+                gamma,
+            });
+        }
+        let k_max = worst_case_steps(q, f64::from(REFLECTION_TOLERANCE));
+        (k_max > MAX_FIXED_POINT_STEPS).then_some(LodError::FixedPointTooSlow {
+            block_size,
             contraction: q,
-            beta,
-            gamma,
+            k_max,
+            max_steps: MAX_FIXED_POINT_STEPS,
         })
     })
 }
@@ -990,29 +1021,50 @@ fn solve_by_blocks(
             solve.node_updates += 1;
             continue;
         }
-        let refusal = LodError::FixedPointNotContractive {
-            block_size: members.len(),
-            contraction: requested,
-            beta,
-            gamma,
+        let contracts = !requested.is_nan() && requested < 1.0;
+        let steps = if contracts {
+            worst_case_steps(requested, tolerance)
+        } else {
+            usize::MAX
         };
-        let (q, inner) = if requested.is_nan() || requested >= 1.0 {
-            match on_non_contractive {
-                OnNonContractive::Refuse => return Err(refusal),
-                OnNonContractive::AdaptGain => {
-                    let (gain, q) = adapted_gain(beta, gamma, &inside).ok_or(refusal)?;
-                    solve.adapted.push(AdaptedBlock {
-                        nodes: members.to_vec(),
-                        requested_gamma: gamma,
-                        applied_gamma: gain,
-                        requested_contraction: requested,
-                        contraction: q,
-                    });
-                    (q, Some((blocks.block_of.as_slice(), gain)))
+        // Refuse: only a missing contraction is refused here; a slow one runs
+        // and fails against its step budget. AdaptGain also adapts a block that
+        // may not finish inside the budget.
+        let adapt = match on_non_contractive {
+            OnNonContractive::Refuse => false,
+            OnNonContractive::AdaptGain => steps > max_steps,
+        };
+        let refusal = || {
+            if contracts {
+                LodError::FixedPointTooSlow {
+                    block_size: members.len(),
+                    contraction: requested,
+                    k_max: steps,
+                    max_steps,
+                }
+            } else {
+                LodError::FixedPointNotContractive {
+                    block_size: members.len(),
+                    contraction: requested,
+                    beta,
+                    gamma,
                 }
             }
-        } else {
+        };
+        let (q, inner) = if adapt {
+            let (gain, q) = adapted_gain(beta, gamma, &inside).ok_or_else(refusal)?;
+            solve.adapted.push(AdaptedBlock {
+                nodes: members.to_vec(),
+                requested_gamma: gamma,
+                applied_gamma: gain,
+                requested_contraction: requested,
+                contraction: q,
+            });
+            (q, Some((blocks.block_of.as_slice(), gain)))
+        } else if contracts {
             (requested, None)
+        } else {
+            return Err(refusal());
         };
         let run = iterate_block(
             rows, prior, members, q, beta, gamma, inner, tolerance, max_steps, &mut c,
@@ -1083,7 +1135,7 @@ fn admission_refusal(
     pending: &[BufferedEdge],
 ) -> Option<LodError> {
     let rows = signed_rows(nodes, snapshot, pending, ADMISSION_GAMMA > 0.0);
-    non_contractive_block(&rows, f64::from(ADMISSION_BETA), f64::from(ADMISSION_GAMMA))
+    inadmissible_block(&rows)
 }
 
 /// Edges along which confidence is inherited: the target depends on the source.
@@ -1446,9 +1498,11 @@ impl LodGraph {
     /// Admission: an edge that closes a cycle of confidence-carrying or
     /// `Falsifies` edges is refused with [`LodError::FixedPointNotContractive`]
     /// when some cycle of the resulting graph is not a contraction at
-    /// [`ADMISSION_BETA`], [`ADMISSION_GAMMA`]. The graph then never holds a
-    /// cycle an evolution at those parameters, the reflection's among them,
-    /// must refuse. An edge that closes no cycle only dilutes its target's row
+    /// [`ADMISSION_BETA`], [`ADMISSION_GAMMA`], and with
+    /// [`LodError::FixedPointTooSlow`] when it contracts so slowly that the
+    /// reflection's evolution may exhaust [`MAX_FIXED_POINT_STEPS`]. The graph
+    /// then never holds a cycle an evolution at those parameters, the
+    /// reflection's among them, must refuse or can fail to finish. An edge that closes no cycle only dilutes its target's row
     /// and is admitted after a reachability walk from the target; a cycle-closing
     /// edge costs one `O(V + E)` check.
     pub fn add_edge(
@@ -2489,10 +2543,11 @@ impl LodGraph {
     /// not calibrated real-world causality. Identical payloads reuse evidence.
     ///
     /// The evolution runs at [`ADMISSION_BETA`], [`ADMISSION_GAMMA`], so on a
-    /// graph built through [`Self::add_edge`] every cycle contracts. A cycle that
-    /// does not (an invariant broken some other way) does not fail the
-    /// reflection: its internal falsifier gain is lowered until it contracts and
-    /// the block is listed in [`FixedPointReport::adapted_blocks`]. The
+    /// graph built through [`Self::add_edge`] every cycle contracts inside the
+    /// step budget. A cycle that does not (an invariant broken some other way)
+    /// does not fail the reflection: its internal falsifier gain is lowered
+    /// until it does and the block is listed in
+    /// [`FixedPointReport::adapted_blocks`]. The
     /// observation's own `Falsifies` edge comes from a node with no incoming
     /// edge, so it is never inside a cycle and always presses at full gain.
     ///
@@ -2587,7 +2642,9 @@ impl LodGraph {
                 MAX_FIXED_POINT_STEPS,
                 OnNonContractive::AdaptGain,
             )?;
-            let revocation = if staged.revocations.contains(&entity) {
+            // Judged by the action's own status, not by the revocation set: an
+            // earlier quarantine or manual revocation is already in that set.
+            let revocation = if staged.nodes[target as usize].status.is_falsified() {
                 ReflectionRevocation::Evolution
             } else {
                 staged.revocations.insert(entity);
@@ -4736,6 +4793,60 @@ mod tests {
         assert!((ca - ta).abs() <= report.error_bound + 1e-5, "{ca} vs {ta}");
         assert!((cb - tb).abs() <= report.error_bound + 1e-5, "{cb} vs {tb}");
         assert_eq!(f64::from(reflection.target_confidence), ca);
+    }
+
+    /// A cycle that contracts (`q = 1 - 1e-5`) but too slowly for the step
+    /// budget, injected past admission: the plain evolution runs out of steps;
+    /// the reflection lowers the block's internal falsifier gain, reports it
+    /// and converges.
+    #[test]
+    fn reflection_adapts_a_cycle_too_slow_for_the_step_budget() {
+        let graph = LodGraph::new();
+        let p = |e: u64, prior: f32| graph.add_node(node("n", e).with_prior(prior)).unwrap();
+        let (a, b, c, d) = (p(1, 1.0), p(2, 1.0), p(3, 1.0 - 6.0e-5), p(4, 1.0 - 6.0e-5));
+        let zero = p(5, 0.0);
+        p(99, 0.9);
+        let mut edges = vec![
+            (b, a, EdgeType::DependsOn, 1.0),
+            (a, b, EdgeType::DependsOn, 1.0),
+            (d, c, EdgeType::DependsOn, 1.0),
+            (c, d, EdgeType::DependsOn, 1.0),
+        ];
+        for (source, target) in [(c, a), (d, b), (a, c), (b, d)] {
+            edges.push((zero, target, EdgeType::Falsifies, 8235412.0));
+            edges.push((source, target, EdgeType::Falsifies, 1764588.0));
+        }
+        assert!(matches!(
+            graph.add_edges(&edges),
+            Err(LodError::FixedPointTooSlow { block_size: 4, .. })
+        ));
+        inject_unadmitted(&graph, &edges);
+        let before = confidences(&graph);
+        let refused = graph.evolve_signed_epistemic_fixed_point_within(
+            ADMISSION_BETA,
+            ADMISSION_GAMMA,
+            REFLECTION_TOLERANCE,
+            REFLECTION_THETA_LO,
+            REFLECTION_THETA_HI,
+            MAX_FIXED_POINT_STEPS,
+        );
+        assert!(
+            matches!(refused, Err(LodError::FixedPointDiverged { iterations, .. })
+                if iterations == MAX_FIXED_POINT_STEPS),
+            "{refused:?}"
+        );
+        assert_eq!(confidences(&graph), before);
+
+        let reflection = graph.reflect_failure(99, "observation", 1).unwrap();
+        assert!(graph.is_revoked(99));
+        let adapted = &reflection.evolution.adapted_blocks;
+        assert_eq!(adapted.len(), 1);
+        assert_eq!(adapted[0].nodes.len(), 4);
+        assert!(adapted[0].requested_contraction < 1.0);
+        assert!(adapted[0].requested_contraction > 0.9999);
+        assert!(adapted[0].applied_gamma < 1.0);
+        assert!(adapted[0].contraction <= 0.5 * (1.0 + f64::from(ADMISSION_BETA)) + 1e-12);
+        assert!(reflection.evolution.iterations < MAX_FIXED_POINT_STEPS);
     }
 
     /// A non-finite value in either kind of block is a refusal, never a value.
