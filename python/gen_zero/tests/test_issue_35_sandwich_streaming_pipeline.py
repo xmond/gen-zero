@@ -161,7 +161,7 @@ class TestDeterministicGraphAST(unittest.TestCase):
         mermaid = self.ast.to_mermaid()
         self.assertIn("flowchart TD", mermaid)
         self.assertIn("n1[\"角色A: 步骤一\"]", mermaid)
-        self.assertIn("n2[\"角色B: 步骤二 [草稿?]\"]", mermaid)
+        self.assertIn("n2[\"角色B: 步骤二 [Draft?]\"]", mermaid)
         self.assertIn("n1 --> n2", mermaid)
 
     def test_drawio_xml_export_validity(self):
