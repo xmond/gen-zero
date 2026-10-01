@@ -1,6 +1,9 @@
 //! Semantic bridge client: Rust `zero` tool -> Python semantic scorer.
 //!
-//! This is the remote variant of [`crate::semantic::SemanticBackend`]. The
+//! This is the external bridge mode, the remote variant of
+//! [`crate::semantic::SemanticBackend`]. It is optional: with
+//! `GENZERO_QWEN_MODEL_PATH` (or `--qwen-model`) the service runs in pure
+//! Rust and this client is not used. The
 //! in-process variant (native Qwen on candle) returns the same response types
 //! and passes the same validators ([`validate_ask`], [`validate_risk`],
 //! [`validate_route`]).

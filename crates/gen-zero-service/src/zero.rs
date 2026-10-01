@@ -36,11 +36,27 @@
 //! mount is refused, never served from a default. A request that names a
 //! `mount_version` other than the captured one is `EpochMismatch`.
 //!
-//! Requests that carry numeric manifold coordinates (`cognitive`) go through
-//! [`CognitiveRuntime`]: tangent map, parallel SSM scan, geometry gate and the
-//! action verifier. Its refusals are typed ([`Rejection`]) and every entry
-//! maps them to a non-success status. Text requests use a deterministic
-//! projection when a 128-dimensional cognitive mount is available.
+//! Two separate decision pathways run here and neither feeds the other:
+//!
+//! 1. Semantic prior. `ask`, `route` and `imagine` rank text candidates by
+//!    the token log-likelihood of the 0.5B language model, and the risk
+//!    check gates the request text fail-closed. This is text scoring, not a
+//!    world model.
+//! 2. Continuous cognitive manifold. Requests that carry numeric manifold
+//!    coordinates (`cognitive`) go through [`CognitiveRuntime`]: tangent map,
+//!    parallel SSM scan, geometry gate and the action verifier. Its refusals
+//!    are typed ([`Rejection`]) and every entry maps them to a non-success
+//!    status. The latent world-model verbs and planner modes also belong to
+//!    this numeric side.
+//!
+//! Text reaches pathway 2 only through `text_manifold_point`: an untrained,
+//! deterministic feature hash of the request text into a 128-dimensional
+//! point of the Poincare ball. When the captured mount is 128-dimensional,
+//! `scan_text` runs that point through one SSM step and reports the trace in
+//! `_meta.cognitive_runtime` (`"engaged"`); otherwise it reports the typed
+//! rejection there. The trace is evidence that the runtime ran. It does not
+//! change the semantic score, the gate tier or the chosen candidate, and the
+//! hash carries no learned meaning.
 
 use crate::bridge::{AskInput, BridgeError, SemanticRiskResponse};
 use crate::cognitive::{

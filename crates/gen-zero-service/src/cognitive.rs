@@ -49,8 +49,10 @@
 //! - No trained entailment model. The Busemann test is closed-form geometry on
 //!   coordinates the caller supplies; its thresholds are presets and its
 //!   `confidence` is a margin, not a calibrated probability.
-//! - No text encoder. A request without numeric manifold coordinates does not
-//!   enter this runtime, and the entry says so in `_meta`.
+//! - No trained text encoder. The `zero` router can project request text
+//!   into a 128-dimensional point by feature hashing and scan it here when
+//!   the mount is 128-dimensional (`_meta.cognitive_runtime`). That hash is
+//!   deterministic and untrained. Entailment takes numeric points only.
 //! - No trained fiber dynamics. `entailment.dynamics` is an operator-stated
 //!   generator; the gauge is derived from the sealed geometry, not learned.
 //!   Nothing shows yet that the cross-difference improves any benchmark.
