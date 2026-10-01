@@ -1,6 +1,6 @@
 """Gen-Zero Universal Decision Microservice.
 
-100% Compatible with OpenRouter / TypeSafe Zero 1.13 Decision API protocol:
+Fast non-autoregressive decision API protocol:
 - POST /api/alpha/decisions
 - POST /v1/decisions
 - GET  /v1/models
@@ -81,7 +81,7 @@ def verify_api_token(credentials: Optional[HTTPAuthorizationCredentials] = Secur
 
 app = FastAPI(
     title="Gen-Zero Decision API (Zero 1.13 Compatible)",
-    description="Universal non-autoregressive decision model server compatible with OpenRouter and TypeSafe Zero 1.13",
+    description="Universal non-autoregressive decision model server",
     version="1.13.0"
 )
 
@@ -243,7 +243,7 @@ def root():
         "name": "Gen-Zero Decision Server",
         "version": "1.13.0",
         "endpoints": [
-            "POST /api/alpha/decisions (OpenRouter compatible, supports state and batch states)",
+            "POST /api/alpha/decisions (supports state and batch states)",
             "POST /v1/decisions",
             "POST /v1/decide_step (Composite 4-tuple decision)",
             "POST /v1/score (Minimal non-autoregressive scoring)",

@@ -154,6 +154,7 @@ jobs:
           persist-credentials: false
           sparse-checkout: |
             crates
+            python
 
       - name: Install Rust toolchain
         run: rustup toolchain install 1.88.0 --profile minimal --target ${{ matrix.target }}
