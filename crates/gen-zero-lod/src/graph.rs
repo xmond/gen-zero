@@ -423,6 +423,20 @@ impl std::ops::IndexMut<usize> for NodeChunks {
     }
 }
 
+/// Add the checkpoint range `(after, upto]` to sorted, disjoint `discarded`.
+fn discard_range(discarded: &mut Vec<(u64, u64)>, after: u64, upto: u64) {
+    discarded.push((after, upto));
+    discarded.sort_unstable();
+    let mut merged: Vec<(u64, u64)> = Vec::with_capacity(discarded.len());
+    for &(a, b) in discarded.iter() {
+        match merged.last_mut() {
+            Some(last) if a <= last.1 => last.1 = last.1.max(b),
+            _ => merged.push((a, b)),
+        }
+    }
+    *discarded = merged;
+}
+
 /// Mutable graph state. One lock guards all of it, so a checkpoint or a rollback
 /// reads or restores a single consistent state.
 ///
@@ -1541,6 +1555,9 @@ pub struct LodGraph {
     /// A private transaction candidate ([`LodGraph::transact`]). Its writes
     /// change it in place; nothing else can see it until it is published.
     candidate: bool,
+    /// Checkpoint numbers this candidate issued. If it is dropped unpublished,
+    /// they are discarded in the graph it came from.
+    issued: Mutex<Vec<u64>>,
 }
 
 impl Default for LodGraph {
@@ -1598,6 +1615,7 @@ impl LodGraph {
             txn_lock: Mutex::new(()),
             persistence: None,
             candidate: false,
+            issued: Mutex::new(Vec::new()),
         })
     }
 
@@ -1619,6 +1637,7 @@ impl LodGraph {
             txn_lock: Mutex::new(()),
             persistence: None,
             candidate: true,
+            issued: Mutex::new(Vec::new()),
         }
     }
 
@@ -1636,9 +1655,32 @@ impl LodGraph {
         let mut live = self.state.write();
         // A flush built against the replaced state must not commit.
         staged.generation = staged.generation.max(live.generation) + 1;
+        // Dry runs dropped while this candidate ran discarded into live.
+        for &(after, upto) in &live.discarded {
+            discard_range(&mut staged.discarded, after, upto);
+        }
         *live = staged;
         self.csr_snapshot.store(csr);
         Ok(())
+    }
+
+    /// A candidate dropped unpublished: its checkpoints describe states that
+    /// never existed here, so no rollback may restore them.
+    fn discard_unpublished(&self, candidate: LodGraph) {
+        let seqs = candidate.issued.into_inner();
+        if seqs.is_empty() {
+            return;
+        }
+        {
+            let _flush = self.flush_lock.lock();
+            let mut st = self.state.write();
+            for &seq in &seqs {
+                discard_range(&mut st.discarded, seq - 1, seq);
+            }
+        }
+        if self.candidate {
+            self.issued.lock().extend(seqs);
+        }
     }
 
     /// Run one direct write. A candidate changes in place. A persistent live
@@ -2956,7 +2998,13 @@ impl LodGraph {
     fn capture(&self, st: &GraphState) -> GraphCheckpoint {
         GraphCheckpoint {
             graph_id: self.graph_id,
-            seq: self.checkpoint_seq.fetch_add(1, Ordering::Relaxed) + 1,
+            seq: {
+                let seq = self.checkpoint_seq.fetch_add(1, Ordering::Relaxed) + 1;
+                if self.candidate {
+                    self.issued.lock().push(seq);
+                }
+                seq
+            },
             node_states: st.nodes.iter().map(NodeMutable::of).collect(),
             csr: self.csr_snapshot.load_full(),
             edge_buffer: st.edge_buffer.clone(),
@@ -3064,7 +3112,13 @@ impl LodGraph {
         let _txn = self.txn_lock.lock();
         self.check_persistence()?;
         let candidate = self.fork();
-        let value = f(&candidate)?;
+        let value = match f(&candidate) {
+            Ok(value) => value,
+            Err(error) => {
+                self.discard_unpublished(candidate);
+                return Err(error);
+            }
+        };
         self.publish(candidate)?;
         Ok(value)
     }
@@ -3076,7 +3130,10 @@ impl LodGraph {
         &self,
         f: impl FnOnce(&LodGraph) -> Result<T, LodError>,
     ) -> Result<T, LodError> {
-        f(&self.fork())
+        let candidate = self.fork();
+        let result = f(&candidate);
+        self.discard_unpublished(candidate);
+        result
     }
 
     /// Fail-closed prior check over the action, its coarse ancestors and causal
@@ -3156,7 +3213,9 @@ impl LodGraph {
     /// On failure no staged evidence is published and the caller receives the
     /// error. A refused reflection quarantines the target durably, by a second
     /// transaction. A reflection or quarantine the disk refuses revokes the
-    /// target in memory only and poisons the graph: never fail open. An axiom cannot be silently rewritten.
+    /// target in memory only and poisons the graph: never fail open. Call it on
+    /// the live graph: inside a transaction the quarantine is part of the
+    /// outer candidate and is dropped with it if that transaction fails. An axiom cannot be silently rewritten.
     pub fn reflect_failure(
         &self,
         action: u32,

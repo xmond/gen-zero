@@ -1051,4 +1051,32 @@ mod tests {
         let inside = graph.transact(|g| Ok(g.create_checkpoint().seq)).unwrap();
         assert!(graph.create_checkpoint().seq > inside);
     }
+
+    /// A checkpoint taken inside a dropped candidate describes a state that
+    /// was never published; no rollback may restore it.
+    #[test]
+    fn checkpoints_of_dropped_candidates_cannot_be_restored() {
+        let graph = LodGraph::new();
+        graph.add_node(node(1)).unwrap();
+        let mut stash = None;
+        let _ = graph.transact(|g| {
+            g.falsify_node(0)?;
+            stash = Some(g.create_checkpoint());
+            Err::<(), _>(LodError::InvalidQuery("abort".into()))
+        });
+        assert!(graph.rollback_checkpoint(&stash.unwrap()).is_err());
+        let dry = graph
+            .dry_run(|g| {
+                g.falsify_node(0)?;
+                Ok(g.create_checkpoint())
+            })
+            .unwrap();
+        assert!(graph.rollback_checkpoint(&dry).is_err());
+        assert!(!graph.get_node(0).unwrap().status.is_falsified());
+        // A checkpoint of the live graph itself still restores.
+        let live = graph.create_checkpoint();
+        graph.falsify_node(0).unwrap();
+        graph.rollback_checkpoint(&live).unwrap();
+        assert!(!graph.get_node(0).unwrap().status.is_falsified());
+    }
 }
