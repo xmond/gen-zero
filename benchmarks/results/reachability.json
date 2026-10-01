@@ -23602,7 +23602,7 @@
     {
       "file": "crates/gen-zero-lod/src/graph.rs",
       "declared_modules": [],
-      "public_symbols": 54
+      "public_symbols": 56
     },
     {
       "file": "crates/gen-zero-lod/src/lib.rs",
@@ -23626,7 +23626,7 @@
     {
       "file": "crates/gen-zero-lod/src/node.rs",
       "declared_modules": [],
-      "public_symbols": 22
+      "public_symbols": 28
     },
     {
       "file": "crates/gen-zero-lod/src/ppr.rs",
@@ -23636,7 +23636,7 @@
     {
       "file": "crates/gen-zero-lod/src/projection.rs",
       "declared_modules": [],
-      "public_symbols": 4
+      "public_symbols": 8
     },
     {
       "file": "crates/gen-zero-lod/src/semiring.rs",

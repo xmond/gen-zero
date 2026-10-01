@@ -5,9 +5,10 @@
 //! coordinates) and its 16-coordinate Lod graph chart (H^4 x R^8 x S^3) under the
 //! graph's `GeometryParams`, Banach fixed-point confidence evolution over the
 //! dependency edges, coarse-graining across Lod bands, atomic graph checkpoints
-//! with rollback, discrete and soft relation semirings, and text retrieval: a
-//! lexical text-to-chart projector, payload-carrying nodes and a three-stage
-//! hybrid search (HDC prefilter, geodesic rerank, PPR diffusion).
+//! with rollback, discrete and soft relation semirings, and retrieval: a
+//! lexical text-to-chart projector, a dense-vector-to-chart projector for
+//! embeddings an external model made, payload-carrying nodes with aliases, and
+//! a three-stage hybrid search (HDC prefilter, geodesic rerank, PPR diffusion).
 
 #![allow(clippy::manual_is_multiple_of)]
 
@@ -22,9 +23,10 @@ pub mod weighted;
 
 pub use error::LodError;
 pub use graph::{
-    BufferedEdge, CsrGraph, EdgeType, FixedPointReport, FlushReport, GraphCheckpoint,
+    AnchorMatch, BufferedEdge, CsrGraph, EdgeType, FixedPointReport, FlushReport, GraphCheckpoint,
     HybridRagResult, LodGraph, PprRanking, RagDiffusion, RagHit, StatusTransition,
-    DEFAULT_FALSIFICATION_GAIN, HYBRID_PPR_TOLERANCE, MAX_FIXED_POINT_STEPS,
+    ALIAS_LINK_WEIGHT, DEFAULT_FALSIFICATION_GAIN, HYBRID_PPR_TOLERANCE, MAX_ALIAS_HOLDERS,
+    MAX_FIXED_POINT_STEPS,
 };
 pub use manifold::{
     ContainmentCriteria, ContainmentScore, Digest, Epochs, FiberId, GeometryParams, Layout,
@@ -33,11 +35,14 @@ pub use manifold::{
 };
 pub use node::{
     band_from_scale, band_scale_width, hdc_hamming_distance_256, max_chart_depth, normalized_depth,
-    payload_digest, scale_from_depth, EpistemicStatus, LodBand, LodNode, ZoomDirection,
-    MAX_PAYLOAD_BYTES, MAX_SOURCE_URI_BYTES,
+    payload_digest, scale_from_depth, ChartAnchor, EpistemicStatus, LodBand, LodNode, Placement,
+    ZoomDirection, MAX_ALIASES, MAX_ALIAS_BYTES, MAX_EMBEDDING_DIM, MAX_PAYLOAD_BYTES,
+    MAX_SOURCE_URI_BYTES, MIN_EMBEDDING_DIM,
 };
 pub use ppr::{compute_ppr_csr, PprScores};
-pub use projection::{TextEmbeddingProjector, HDC_BITS, PROJECTOR_VERSION};
+pub use projection::{
+    TextEmbeddingProjector, DENSE_PROJECTOR_VERSION, HDC_BITS, PROJECTOR_VERSION,
+};
 pub use semiring::{
     AssociativityReport, AssociativityViolation, FoldOutcome, Gender, RelId, RelationKey,
     RelationSemiring, ResultSet, SoftResultSet, SoftSetError, BUDGET_EXCEEDED_REASON,

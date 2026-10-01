@@ -1090,6 +1090,381 @@ async fn graph_rag_and_text_deposits_fail_closed() {
     assert_eq!(out.meta["graph_op"]["graph"]["nodes"], 4, "{:?}", out.meta);
 }
 
+const CLOSE_MAIN_VALVE: &str = "关闭主阀";
+const HANDWHEEL: &str = "turn the handwheel clockwise until the stem stops";
+
+/// Thirteen facts that are not about closing a valve. The first two share a
+/// word with "valve closure". With `top_k` 1 the Stage 1 pool holds 4 nodes, so
+/// most of these and anything lexically unrelated fall outside it.
+fn distractors() -> Vec<Value> {
+    [
+        "the relief valve was replaced last week",
+        "closure of the quarterly accounts is due friday",
+        PUMP,
+        LOG,
+        BUDGET,
+        "the night shift supervisor signed the handover log",
+        "spare bearings are stored in warehouse three",
+        "the canteen menu changes every monday",
+        "calibration of the flow meter is overdue",
+        "the forklift battery needs charging",
+        "fire drill scheduled for the second floor",
+        "new safety boots arrive next month",
+        "the turbine hall lighting was upgraded",
+    ]
+    .iter()
+    .enumerate()
+    .map(|(i, text)| text_node(100 + i as u64, text, "validated"))
+    .collect()
+}
+
+fn hit_entities(op: &Value) -> Vec<u64> {
+    op["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| h["entity_id"].as_u64().unwrap())
+        .collect()
+}
+
+/// The valve facts in two languages on top of the distractors, with or
+/// without the aliases that name them the same thing.
+async fn deposit_valve_facts(engine: &PolymorphicZeroEngine, aliases: bool) -> Value {
+    let mut zh = text_node(1, CLOSE_MAIN_VALVE, "validated");
+    let mut en = text_node(2, HANDWHEEL, "validated");
+    if aliases {
+        zh["aliases"] = json!(["valve closure", "主阀关断"]);
+        en["aliases"] = json!(["Valve  CLOSURE"]);
+    }
+    let mut nodes = distractors();
+    nodes.extend([zh, en]);
+    let out = run(
+        engine,
+        json!({"action": "graph_deposit", "graph": {"nodes": nodes}}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    out.meta["graph_op"].clone()
+}
+
+async fn rag_text(engine: &PolymorphicZeroEngine, text: &str, top_k: usize) -> Value {
+    let out = run(
+        engine,
+        json!({"action": "graph_rag", "graph": {"query_text": text, "top_k": top_k}}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    out.meta["graph_op"].clone()
+}
+
+/// A query in one language reaches the fact written in the other only through
+/// the alias. The control engine holds the same facts without aliases and
+/// misses them.
+#[tokio::test]
+async fn graph_rag_recalls_a_translation_through_aliases_and_the_control_misses_it() {
+    let control = engine();
+    let deposited = deposit_valve_facts(&control, false).await;
+    assert_eq!(deposited["alias_link_edges"], 0);
+    let op = rag_text(&control, "valve closure", 1).await;
+    assert_eq!(op["searchable_nodes"], 15);
+    assert_eq!(op["stage1_candidates"], 4);
+    let missed = hit_entities(&op);
+    assert!(!missed.contains(&1) && !missed.contains(&2), "{op}");
+    assert!([100, 101].contains(&missed[0]), "{op}");
+    let op = rag_text(&control, CLOSE_MAIN_VALVE, 1).await;
+    assert_eq!(hit_entities(&op), vec![1], "{op}");
+
+    let engine = engine();
+    let deposited = deposit_valve_facts(&engine, true).await;
+    // One pair of nodes shares the alias: one semantic edge each way.
+    assert_eq!(deposited["alias_link_edges"], 2);
+    assert_eq!(deposited["flush"]["merged_edges"], 2);
+    let nodes = deposited["nodes"].as_array().unwrap();
+    assert_eq!(nodes[13]["aliases"], json!(["valve closure", "主阀关断"]));
+    assert_eq!(nodes[13]["placement"], "chart");
+
+    // The English name finds both facts, each by its alias.
+    let op = rag_text(&engine, "valve closure", 2).await;
+    let mut anchors = hit_entities(&op);
+    anchors.truncate(2);
+    anchors.sort_unstable();
+    assert_eq!(anchors, vec![1, 2], "{op}");
+    for hit in &op["hits"].as_array().unwrap()[..2] {
+        assert_eq!(hit["via"], "anchor");
+        assert_eq!(hit["matched"], "alias");
+        assert!(hit["anchor_distance"].as_f64().unwrap() < 1e-6);
+    }
+    let zh = op["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|h| h["entity_id"] == 1)
+        .unwrap();
+    assert_eq!(zh["matched_alias"], "valve closure");
+    assert_eq!(zh["payload"], CLOSE_MAIN_VALVE);
+
+    // The Chinese text anchors its own fact; the alias link carries the
+    // diffusion to the English one, which shares no n-gram with the query.
+    let op = rag_text(&engine, CLOSE_MAIN_VALVE, 1).await;
+    assert_eq!(op["anchors"].as_array().unwrap().len(), 1);
+    assert_eq!(hit_entities(&op), vec![1, 2], "{op}");
+    let hits = op["hits"].as_array().unwrap();
+    assert_eq!(hits[0]["matched"], "primary");
+    assert_eq!(hits[1]["via"], "diffusion");
+    assert!(hits[1]["matched"].is_null());
+    assert_eq!(hits[1]["payload"], HANDWHEEL);
+    assert!(hits[1]["ppr_score"].as_f64().unwrap() > 0.0);
+}
+
+/// `dim` values in [-1, 1) fixed by `seed` (SplitMix64).
+fn random_vector(seed: u64, dim: usize) -> Vec<f32> {
+    (0..dim as u64)
+        .map(|i| {
+            let mut z = seed
+                .wrapping_mul(0xD6E8_FEB8_6659_FD93)
+                .wrapping_add((i + 1).wrapping_mul(0x9E37_79B9_7F4A_7C15));
+            z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+            z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+            z ^= z >> 31;
+            ((z >> 11) as f64 / (1_u64 << 53) as f64 * 2.0 - 1.0) as f32
+        })
+        .collect()
+}
+
+/// `base` with `noise` of the given size mixed in.
+fn near(base: &[f32], noise: f32, seed: u64) -> Vec<f32> {
+    base.iter()
+        .zip(random_vector(seed, base.len()))
+        .map(|(b, n)| b + noise * n)
+        .collect()
+}
+
+const VECTOR_DIM: usize = 128;
+
+/// Thirteen embedding-only distractors, a leak fact near `topic` (entity 1,
+/// embedding only), a text fact with its own embedding (entity 3) and a
+/// text-only procedure (entity 2) the leak fact points to.
+async fn deposit_embedded(engine: &PolymorphicZeroEngine, topic: &[f32], link: bool) -> Value {
+    let embedded = |entity: u64, label: &str, embedding: Vec<f32>| {
+        json!({
+            "entity_id": entity, "label": label, "band": 0, "status": "validated",
+            "confidence": 0.9, "embedding": embedding,
+        })
+    };
+    let mut nodes: Vec<Value> = (0..13)
+        .map(|i| embedded(100 + i, "distractor", random_vector(900 + i, VECTOR_DIM)))
+        .collect();
+    nodes.push(embedded(1, "冷却液泄漏", near(topic, 0.3, 7)));
+    nodes.push(text_node(2, HANDWHEEL, "validated"));
+    let mut both = text_node(3, PUMP, "validated");
+    both["embedding"] = json!(random_vector(55, VECTOR_DIM));
+    nodes.push(both);
+    let edges = if link {
+        json!([{"source": {"entity_id": 1}, "target": {"entity_id": 2}, "type": "semantic", "weight": 1.0}])
+    } else {
+        json!([])
+    };
+    let out = run(
+        engine,
+        json!({"action": "graph_deposit", "graph": {"nodes": nodes, "edges": edges}}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    out.meta["graph_op"].clone()
+}
+
+/// `query_vector` over HTTP `/message`: the dense track anchors the node whose
+/// embedding is closest, PPR carries on to a text-only node, and the response
+/// says which track and which anchor answered.
+#[tokio::test]
+async fn http_graph_rag_takes_a_query_vector_and_diffuses_from_the_embedding_anchor() {
+    let topic = random_vector(42, VECTOR_DIM);
+    let engine = Arc::new(engine());
+    let deposited = deposit_embedded(&engine, &topic, true).await;
+    let nodes = deposited["nodes"].as_array().unwrap();
+    assert_eq!(nodes[13]["placement"], "embedding");
+    assert_eq!(nodes[13]["embedding_dim"], VECTOR_DIM);
+    assert_eq!(nodes[14]["placement"], "chart");
+    assert!(nodes[14]["embedding_dim"].is_null());
+    // Payload and embedding together: placed by the text, searchable by both.
+    assert_eq!(nodes[15]["placement"], "chart");
+    assert_eq!(nodes[15]["embedding_dim"], VECTOR_DIM);
+
+    let (status, body) = http_zero(
+        &engine,
+        json!({"action": "graph_rag", "graph": {"query_vector": topic, "top_k": 1}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["result"]["verb"], "graph_rag");
+    let op = &body["result"]["meta"]["graph_op"];
+    assert_eq!(op["query"]["kind"], "vector");
+    assert_eq!(
+        op["query"]["dense_projector"],
+        gen_zero_lod::DENSE_PROJECTOR_VERSION
+    );
+    assert!(op["query"]["projector"].is_null());
+    assert_eq!(op["query"]["vector_dim"], VECTOR_DIM);
+    // 15 of the 16 nodes carry an embedding; the pool is 4 of them.
+    assert_eq!(op["searchable_nodes"], 15);
+    assert_eq!(op["stage1_candidates"], 4);
+    assert_eq!(op["anchors"][0]["entity_id"], 1);
+    assert_eq!(hit_entities(op), vec![1, 2], "{op}");
+    let hits = op["hits"].as_array().unwrap();
+    assert_eq!(hits[0]["matched"], "embedding");
+    assert_eq!(hits[0]["label"], "冷却液泄漏");
+    assert_eq!(hits[1]["via"], "diffusion");
+    assert_eq!(hits[1]["payload"], HANDWHEEL);
+    assert_eq!(op["diffusion"]["converged"], true);
+
+    // Text and vector in one request: one anchor from each track.
+    let (status, body) = http_zero(
+        &engine,
+        json!({"action": "graph_rag", "graph": {
+            "query_text": "handwheel clockwise", "query_vector": topic, "top_k": 1,
+        }}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    let op = &body["result"]["meta"]["graph_op"];
+    assert_eq!(op["query"]["kind"], "text+vector");
+    assert_eq!(op["query"]["projector"], gen_zero_lod::PROJECTOR_VERSION);
+    assert_eq!(op["searchable_nodes"], 16);
+    let matched: Vec<(u64, &str)> = op["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|h| h["via"] == "anchor")
+        .map(|h| {
+            (
+                h["entity_id"].as_u64().unwrap(),
+                h["matched"].as_str().unwrap(),
+            )
+        })
+        .collect();
+    assert_eq!(matched.len(), 2, "{op}");
+    assert!(matched.contains(&(1, "embedding")), "{op}");
+    assert!(matched.contains(&(2, "primary")), "{op}");
+
+    // A text query alone never lands on an embedding-only node.
+    let op = rag_text(&engine, "handwheel clockwise", 1).await;
+    assert_eq!(op["searchable_nodes"], 2);
+    assert_eq!(op["hits"][0]["entity_id"], 2);
+
+    // Control: the same facts without the edge do not recall the procedure.
+    let control = Arc::new(self::engine());
+    deposit_embedded(&control, &topic, false).await;
+    let (_, body) = http_zero(
+        &control,
+        json!({"action": "graph_rag", "graph": {"query_vector": topic, "top_k": 1}}),
+    )
+    .await;
+    assert_eq!(
+        hit_entities(&body["result"]["meta"]["graph_op"]),
+        vec![1],
+        "{body}"
+    );
+}
+
+#[tokio::test]
+async fn aliases_embeddings_and_query_vectors_fail_closed() {
+    let engine = engine();
+    let vector = random_vector(1, VECTOR_DIM);
+    // No node carries an embedding yet: a vector has nothing to be compared with.
+    let out = run(
+        &engine,
+        json!({"action": "graph_deposit", "graph": {"nodes": [text_node(60, BUDGET, "validated")]}}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let out = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {"query_vector": vector, "top_k": 1}}),
+    )
+    .await;
+    assert!(out.is_error);
+    assert_eq!(code(&out), "InvalidParams");
+    assert!(
+        out.rejection.as_ref().unwrap().detail.contains("no node"),
+        "{:?}",
+        out.rejection
+    );
+
+    deposit_embedded(&engine, &vector, false).await;
+    let nodes_before = 1 + 16;
+    for (req, want) in [
+        (
+            json!({"query_vector": random_vector(2, 256), "top_k": 1}),
+            "InvalidParams",
+        ),
+        (json!({"query_vector": [], "top_k": 1}), "InvalidParams"),
+        (
+            json!({"query_vector": vec![0.0; VECTOR_DIM], "top_k": 1}),
+            "InvalidParams",
+        ),
+        (
+            json!({"query_vector": vector, "top_k": 1, "coord": origin(), "hdc": [0, 0, 0, 0]}),
+            "InvalidParams",
+        ),
+        (
+            json!({"query_vector": vector, "query_text": " ", "top_k": 1}),
+            "EmptyInput",
+        ),
+        (
+            json!({"query_vector": "not a vector", "top_k": 1}),
+            "InvalidParams",
+        ),
+    ] {
+        let out = run(
+            &engine,
+            json!({"action": "graph_rag", "graph": req.clone()}),
+        )
+        .await;
+        assert!(out.is_error, "{req}");
+        assert_eq!(code(&out), want, "{req}");
+    }
+
+    let with = |entity: u64, key: &str, value: Value| {
+        let mut n = text_node(entity, "a fact", "validated");
+        n[key] = value;
+        n
+    };
+    let mut embedding_no_band = json!({
+        "entity_id": 44, "label": "v", "status": "validated", "confidence": 0.5,
+        "embedding": vector,
+    });
+    let many: Vec<String> = (0..17).map(|i| format!("name {i}")).collect();
+    for (bad, want) in [
+        (
+            with(40, "embedding", json!(random_vector(3, 256))),
+            "InvalidParams",
+        ),
+        (
+            with(41, "embedding", json!(vec![0.0; VECTOR_DIM])),
+            "InvalidParams",
+        ),
+        (with(42, "aliases", json!(many)), "InvalidParams"),
+        (with(43, "aliases", json!(["ok", "  "])), "EmptyInput"),
+        (
+            with(45, "aliases", json!(["same", "SAME"])),
+            "InvalidParams",
+        ),
+        (with(46, "aliases", json!("not a list")), "InvalidParams"),
+        (embedding_no_band.take(), "InvalidParams"),
+    ] {
+        // A good node rides along: the whole deposit must be refused.
+        let out = run(
+            &engine,
+            json!({"action": "graph_deposit", "graph": {"nodes": [text_node(50, LOG, "validated"), bad.clone()]}}),
+        )
+        .await;
+        assert!(out.is_error, "{bad}");
+        assert_eq!(code(&out), want, "{bad}");
+    }
+    let op = rag_text(&engine, PUMP, 1).await;
+    assert_eq!(op["graph"]["nodes"], nodes_before, "{op}");
+}
+
 /// `zero` over HTTP: `POST /message` with the verb's request as the body.
 async fn http_zero(engine: &Arc<PolymorphicZeroEngine>, req: Value) -> (StatusCode, Value) {
     let resp = McpServer::build_router(Arc::clone(engine), None)

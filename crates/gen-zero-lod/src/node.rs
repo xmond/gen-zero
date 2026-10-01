@@ -181,6 +181,39 @@ pub const MAX_PAYLOAD_BYTES: usize = 64 * 1024;
 /// Largest `source_uri` a node can carry, in bytes.
 pub const MAX_SOURCE_URI_BYTES: usize = 2048;
 
+/// Most aliases one node can carry. Each alias adds one fingerprint to the
+/// Stage-1 Hamming scan of every chart query.
+pub const MAX_ALIASES: usize = 16;
+
+/// Largest alias, in bytes.
+pub const MAX_ALIAS_BYTES: usize = 256;
+
+/// Dense embedding dimensions a node or a query may carry.
+pub const MIN_EMBEDDING_DIM: usize = 16;
+pub const MAX_EMBEDDING_DIM: usize = 8192;
+
+/// One retrieval anchor: a chart coordinate with its 256-bit fingerprint.
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ChartAnchor {
+    pub coord: MixedCurvatureCoord,
+    pub hdc_fingerprint: [u64; 4],
+}
+
+/// Which projection made a node's own `coord` and `hdc_fingerprint`. The two
+/// projections land in unrelated places, so a query is compared only with
+/// anchors of its own kind.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Placement {
+    /// A caller-given chart coordinate or the lexical projection of a text.
+    /// Text and coordinate queries search it.
+    #[default]
+    Chart,
+    /// The dense projection of the node's `embedding`. Only vector queries
+    /// search it.
+    Embedding,
+}
+
 /// BLAKE3 digest of a payload's UTF-8 bytes.
 pub fn payload_digest(text: &str) -> [u8; 32] {
     *blake3::hash(text.as_bytes()).as_bytes()
@@ -228,6 +261,28 @@ pub struct LodNode {
     /// BLAKE3 digest of `payload`; all zero when there is no payload.
     #[serde(default)]
     pub payload_digest: [u8; 32],
+    /// Other names of this node: synonyms, translations, tags. Each one is a
+    /// retrieval anchor of its own, equal to the node's coordinate in a text or
+    /// coordinate query. At most [`MAX_ALIASES`], each at most
+    /// [`MAX_ALIAS_BYTES`]. Fixed at insert.
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    /// Lexical projection of each alias, parallel to `aliases`. The graph
+    /// computes it at insert and overwrites whatever the caller put here.
+    #[serde(default)]
+    pub alias_anchors: Vec<ChartAnchor>,
+    /// Dense embedding of this node from an external model,
+    /// [`MIN_EMBEDDING_DIM`]..=[`MAX_EMBEDDING_DIM`] finite values. Fixed at
+    /// insert.
+    #[serde(default)]
+    pub embedding: Option<Vec<f32>>,
+    /// Dense projection of `embedding`, the anchor vector queries search. The
+    /// graph computes it at insert and overwrites whatever the caller put here.
+    #[serde(default)]
+    pub embedding_anchor: Option<ChartAnchor>,
+    /// Which projection made `coord` and `hdc_fingerprint`.
+    #[serde(default)]
+    pub placement: Placement,
 }
 
 impl LodNode {
@@ -254,7 +309,58 @@ impl LodNode {
             source_uri: None,
             timestamp_ns: 0,
             payload_digest: [0; 32],
+            aliases: Vec::new(),
+            alias_anchors: Vec::new(),
+            embedding: None,
+            embedding_anchor: None,
+            placement: Placement::Chart,
         }
+    }
+
+    /// Set the aliases. The graph checks them ([`Self::validate_aliases`]) and
+    /// projects them at insert.
+    pub fn with_aliases<S: Into<String>>(mut self, aliases: impl IntoIterator<Item = S>) -> Self {
+        self.aliases = aliases.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Attach a dense embedding. The graph projects it at insert, so vector
+    /// queries can reach this node.
+    pub fn with_embedding(mut self, embedding: Vec<f32>) -> Self {
+        self.embedding = Some(embedding);
+        self
+    }
+
+    /// Place the node by its embedding: at insert the graph replaces `coord`
+    /// and `hdc_fingerprint` with the dense projection of `embedding`. Text and
+    /// coordinate queries then reach the node only through its aliases and
+    /// through diffusion.
+    pub fn placed_by_embedding(mut self) -> Self {
+        self.placement = Placement::Embedding;
+        self
+    }
+
+    /// Check the alias invariants: at most [`MAX_ALIASES`], none blank, none
+    /// over [`MAX_ALIAS_BYTES`].
+    pub fn validate_aliases(&self) -> Result<(), LodError> {
+        if self.aliases.len() > MAX_ALIASES {
+            return Err(LodError::InvalidNode(format!(
+                "a node carries at most {MAX_ALIASES} aliases, got {}",
+                self.aliases.len()
+            )));
+        }
+        for alias in &self.aliases {
+            if alias.trim().is_empty() {
+                return Err(LodError::EmptyInput("alias is blank".into()));
+            }
+            if alias.len() > MAX_ALIAS_BYTES {
+                return Err(LodError::InvalidNode(format!(
+                    "alias of {} bytes is over {MAX_ALIAS_BYTES}",
+                    alias.len()
+                )));
+            }
+        }
+        Ok(())
     }
 
     /// Attach knowledge text, its source and its version time. The digest is

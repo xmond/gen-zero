@@ -21,9 +21,16 @@
 //!
 //! `hybrid_rag_search` chains the three retrieval stages under one read lock:
 //! HDC Hamming prefilter, product-geodesic rerank, then PPR diffusion from the
-//! reranked anchors, and returns each hit with its payload and source. The
-//! `_text` variant first projects the query with the graph's own
-//! [`TextEmbeddingProjector`], the one deposits use.
+//! reranked anchors, and returns each hit with its payload and source.
+//! `hybrid_rag_search_query` first projects a query text, a query vector or
+//! both with the graph's own [`TextEmbeddingProjector`], the one inserts use.
+//!
+//! A node has up to three kinds of retrieval anchor. Its own coordinate and
+//! the lexical projection of each alias are chart anchors: text and coordinate
+//! queries take the closest of them. The dense projection of its embedding is
+//! the anchor vector queries search. The two kinds are never compared with
+//! each other. Nodes that share an alias are linked by `Semantic` edges at
+//! insert, so diffusion from one reaches the other.
 //!
 //! `create_checkpoint` / `rollback_checkpoint` restore the whole mutable graph state
 //! atomically. Nothing here touches a search tree: the planner's MCTS is sequential
@@ -31,9 +38,12 @@
 
 use crate::error::LodError;
 use crate::manifold::{Epochs, GeometryParams, MixedCurvatureCoord, ProductManifold, Version};
-use crate::node::{hdc_hamming_distance_256, EpistemicStatus, LodBand, LodNode, ZoomDirection};
+use crate::node::{
+    hdc_hamming_distance_256, ChartAnchor, EpistemicStatus, LodBand, LodNode, Placement,
+    ZoomDirection,
+};
 use crate::ppr::compute_ppr_csr;
-use crate::projection::TextEmbeddingProjector;
+use crate::projection::{normalized, TextEmbeddingProjector};
 use arc_swap::ArcSwap;
 use gen_zero_core::GraphFactProvider;
 use parking_lot::{Mutex, RwLock};
@@ -312,6 +322,10 @@ struct GraphState {
     manual_revocations: HashSet<u64>,
     privileges: HashMap<u64, Vec<u32>>,
     validated_deps: HashSet<(u64, u64)>,
+    /// Nodes holding each alias, keyed by the alias in normalized form.
+    alias_index: HashMap<String, Vec<u32>>,
+    /// Dimension of every node embedding in this graph, fixed by the first one.
+    embedding_dim: Option<usize>,
     /// Bumped by every CSR store and every rollback. A flush built against an
     /// older generation is discarded.
     generation: u64,
@@ -321,7 +335,7 @@ struct GraphState {
 }
 
 /// The node fields a graph method may change after insert. Label, coordinate,
-/// fingerprint, entity and prior are fixed at insert.
+/// fingerprint, aliases, embedding, entity and prior are fixed at insert.
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct NodeMutable {
     status: EpistemicStatus,
@@ -353,8 +367,8 @@ impl NodeMutable {
 
 /// Everything a rollback restores: the node count, each node's mutable fields
 /// ([`NodeMutable`]: status, confidence, refutation mark, band and parent), the
-/// CSR snapshot reference, pending edges, revocations, privileges and validated
-/// dependencies.
+/// CSR snapshot reference, pending edges, revocations, privileges, validated
+/// dependencies and the embedding dimension. The alias index follows the nodes.
 /// The edge ticket counter is never rewound, so tickets stay unique.
 ///
 /// Memory is O(nodes + pending edges + revocations + dependencies) per checkpoint.
@@ -369,6 +383,7 @@ pub struct GraphCheckpoint {
     manual_revocations: HashSet<u64>,
     privileges: HashMap<u64, Vec<u32>>,
     validated_deps: HashSet<(u64, u64)>,
+    embedding_dim: Option<usize>,
 }
 
 impl GraphCheckpoint {
@@ -943,6 +958,66 @@ pub struct PprRanking {
 /// PPR convergence tolerance of [`LodGraph::hybrid_rag_search`].
 pub const HYBRID_PPR_TOLERANCE: f32 = 1e-6;
 
+/// Most nodes that can hold one alias. Each new holder is linked to every
+/// earlier one, so this bounds the edges one insert adds.
+pub const MAX_ALIAS_HOLDERS: usize = 64;
+
+/// Weight of the `Semantic` edges between two nodes that share an alias.
+pub const ALIAS_LINK_WEIGHT: f32 = 1.0;
+
+/// Which anchor of a node was closest to the query.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub enum AnchorMatch {
+    /// The node's own coordinate.
+    Primary,
+    /// The alias at this index of `LodNode::aliases`.
+    Alias(usize),
+    /// The dense projection of the node's embedding.
+    Embedding,
+}
+
+/// One query coordinate with its fingerprint, and the kind of anchor it may be
+/// compared with.
+#[derive(Clone, Copy)]
+struct Probe {
+    coord: MixedCurvatureCoord,
+    hdc: [u64; 4],
+    space: Placement,
+}
+
+/// Anchors of [`LodGraph::recall_in`] with the Stage 1 counts.
+struct Recall {
+    /// `(node id, distance, closest anchor)`, closest first.
+    anchors: Vec<(u32, f32, AnchorMatch)>,
+    stage1_candidates: usize,
+    searchable_nodes: usize,
+}
+
+/// The anchors of `node` a probe of `space` is compared with.
+fn anchors_in(
+    node: &LodNode,
+    space: Placement,
+) -> impl Iterator<Item = (AnchorMatch, &MixedCurvatureCoord, &[u64; 4])> {
+    let chart = space == Placement::Chart;
+    let primary = (chart && node.placement == Placement::Chart).then_some((
+        AnchorMatch::Primary,
+        &node.coord,
+        &node.hdc_fingerprint,
+    ));
+    let aliases = node
+        .alias_anchors
+        .iter()
+        .enumerate()
+        .filter(move |_| chart)
+        .map(|(i, a)| (AnchorMatch::Alias(i), &a.coord, &a.hdc_fingerprint));
+    let dense = node
+        .embedding_anchor
+        .as_ref()
+        .filter(|_| !chart)
+        .map(|a| (AnchorMatch::Embedding, &a.coord, &a.hdc_fingerprint));
+    primary.into_iter().chain(aliases).chain(dense)
+}
+
 /// One hit of [`LodGraph::hybrid_rag_search`], with its evidence.
 #[derive(Clone, Debug, PartialEq)]
 pub struct RagHit {
@@ -955,9 +1030,13 @@ pub struct RagHit {
     pub confidence: f32,
     /// PPR relevance from the anchors; the ranking key.
     pub ppr_score: f32,
-    /// Product-geodesic distance to the query when the node is an anchor;
-    /// `None` when diffusion alone reached it.
+    /// Product-geodesic distance from the query to the node's closest anchor
+    /// when the node is an anchor; `None` when diffusion alone reached it.
     pub anchor_distance: Option<f32>,
+    /// Which of the node's anchors that was; `None` with `anchor_distance`.
+    pub anchor_match: Option<AnchorMatch>,
+    /// The node's aliases.
+    pub aliases: Vec<String>,
     pub payload: Option<String>,
     pub source_uri: Option<String>,
     pub timestamp_ns: u64,
@@ -985,6 +1064,11 @@ pub struct HybridRagResult {
     pub anchors: Vec<(u32, f32)>,
     /// Live nodes kept by the Stage 1 Hamming prefilter.
     pub stage1_candidates: usize,
+    /// Live nodes with an anchor the query can be compared with. A vector
+    /// query sees only nodes that carry an embedding; a text or coordinate
+    /// query does not see a node placed by its embedding that has no alias.
+    /// The rest can only be reached by diffusion.
+    pub searchable_nodes: usize,
     /// `None` when there was no anchor, so no diffusion ran.
     pub diffusion: Option<RagDiffusion>,
 }
@@ -1084,6 +1168,15 @@ impl LodGraph {
         self.projector.project_text(text)
     }
 
+    /// Project a dense embedding to a coordinate of this graph's chart and a
+    /// 256-bit HDC fingerprint ([`TextEmbeddingProjector::project_dense`]).
+    pub fn project_dense(
+        &self,
+        embedding: &[f32],
+    ) -> Result<(MixedCurvatureCoord, [u64; 4]), LodError> {
+        self.projector.project_dense(embedding)
+    }
+
     /// Distance between two coordinates under this graph's geometry.
     fn distance(&self, a: &MixedCurvatureCoord, b: &MixedCurvatureCoord) -> Result<f32, LodError> {
         let (alphas, c, r) = self.metric;
@@ -1098,6 +1191,19 @@ impl LodGraph {
     ///
     /// An `Axiomatic` node gets confidence 1. A `Falsified` node is refuted by
     /// evidence: confidence 0, entity revoked.
+    ///
+    /// Each alias is projected with the graph's text projector and becomes an
+    /// anchor of the node. For every earlier node that holds the same alias
+    /// (same tokens, any case and spacing) two `Semantic` edges of weight
+    /// [`ALIAS_LINK_WEIGHT`] are appended, one each way; like every edge they
+    /// reach diffusion at the next flush. An embedding is projected with
+    /// [`Self::project_dense`]; a node with [`Placement::Embedding`] takes that
+    /// projection as its coordinate and fingerprint. Also refused: an alias
+    /// that breaks [`LodNode::validate_aliases`], has no alphanumeric
+    /// character, repeats another alias of the node or already has
+    /// [`MAX_ALIAS_HOLDERS`] holders; an embedding [`Self::project_dense`]
+    /// refuses or whose dimension differs from the graph's earlier embeddings;
+    /// and [`Placement::Embedding`] without an embedding.
     pub fn add_node(&self, node: LodNode) -> Result<u32, LodError> {
         let mut st = self.state.write();
         self.insert_node(&mut st, node)
@@ -1105,6 +1211,53 @@ impl LodGraph {
 
     /// [`Self::add_node`] under a held write lock.
     fn insert_node(&self, st: &mut GraphState, mut node: LodNode) -> Result<u32, LodError> {
+        node.validate_aliases()?;
+        let mut alias_keys: Vec<String> = Vec::with_capacity(node.aliases.len());
+        node.alias_anchors.clear();
+        for alias in &node.aliases {
+            let (coord, hdc_fingerprint) = self.projector.project_text(alias)?;
+            let key = normalized(alias);
+            if alias_keys.contains(&key) {
+                return Err(LodError::InvalidNode(format!(
+                    "alias `{alias}` repeats another alias of the node"
+                )));
+            }
+            let holders = st.alias_index.get(&key).map_or(0, Vec::len);
+            if holders >= MAX_ALIAS_HOLDERS {
+                return Err(LodError::InvalidNode(format!(
+                    "alias `{alias}` already has {holders} holders, the most one alias can link"
+                )));
+            }
+            alias_keys.push(key);
+            node.alias_anchors.push(ChartAnchor {
+                coord,
+                hdc_fingerprint,
+            });
+        }
+        node.embedding_anchor = match &node.embedding {
+            Some(embedding) => {
+                let (coord, hdc_fingerprint) = self.projector.project_dense(embedding)?;
+                if st.embedding_dim.is_some_and(|dim| dim != embedding.len()) {
+                    return Err(LodError::InvalidNode(format!(
+                        "embedding has {} dimensions but this graph's embeddings have {}",
+                        embedding.len(),
+                        st.embedding_dim.unwrap_or_default()
+                    )));
+                }
+                Some(ChartAnchor {
+                    coord,
+                    hdc_fingerprint,
+                })
+            }
+            None => None,
+        };
+        if node.placement == Placement::Embedding {
+            let anchor = node.embedding_anchor.ok_or_else(|| {
+                LodError::InvalidNode("a node placed by its embedding needs an embedding".into())
+            })?;
+            node.coord = anchor.coord;
+            node.hdc_fingerprint = anchor.hdc_fingerprint;
+        }
         node.coord.to_point(&self.manifold)?;
         node.validate_payload()?;
         if !(node.prior.is_finite() && (0.0..=1.0).contains(&node.prior)) {
@@ -1149,7 +1302,23 @@ impl LodGraph {
             st.revocations.insert(node.entity_id);
         }
         st.entity_index.insert(node.entity_id, id);
+        if st.embedding_dim.is_none() {
+            st.embedding_dim = node.embedding.as_ref().map(Vec::len);
+        }
         st.nodes.push(node);
+        // Nothing below can fail: both ends exist and the weight is valid.
+        let mut linked = HashSet::new();
+        for key in alias_keys {
+            let holders = st.alias_index.entry(key).or_default();
+            let earlier = holders.clone();
+            holders.push(id);
+            for holder in earlier {
+                if linked.insert(holder) {
+                    self.push_edge(st, id, holder, EdgeType::Semantic, ALIAS_LINK_WEIGHT)?;
+                    self.push_edge(st, holder, id, EdgeType::Semantic, ALIAS_LINK_WEIGHT)?;
+                }
+            }
+        }
         Ok(id)
     }
 
@@ -1511,15 +1680,17 @@ impl LodGraph {
 
     /// Two-Stage Memory Recall:
     /// Stage 1: HDC Hamming distance over every live node (a linear POPCNT scan),
-    /// keeping the `4 * top_k` closest.
+    /// keeping the `4 * top_k` closest. A node's distance is the smallest over
+    /// its chart anchors: its own fingerprint and one per alias.
     /// Stage 2: product geodesic rerank of those candidates under this graph's
-    /// geometry (curvature, radius and the three metric weights), with a
-    /// Corrective RAG (CRAG) margin: when the top two are closer than
-    /// `crag_margin`, the 1-hop CSR neighbors of the top one join the rerank.
+    /// geometry (curvature, radius and the three metric weights), again by each
+    /// node's closest chart anchor, with a Corrective RAG (CRAG) margin: when
+    /// the top two are closer than `crag_margin`, the 1-hop CSR neighbors of the
+    /// top one join the rerank.
     ///
-    /// Excludes falsified and revoked nodes. `top_k` must be at least 1 and
-    /// `crag_margin` finite and nonnegative; a coordinate outside this graph's
-    /// geometry is an error.
+    /// Excludes falsified and revoked nodes, and nodes placed by their embedding
+    /// that have no alias. `top_k` must be at least 1 and `crag_margin` finite
+    /// and nonnegative; a coordinate outside this graph's geometry is an error.
     pub fn two_stage_recall(
         &self,
         query_coord: &MixedCurvatureCoord,
@@ -1528,21 +1699,25 @@ impl LodGraph {
         crag_margin: f32,
     ) -> Result<Vec<(u32, f32)>, LodError> {
         let st = self.state.read();
-        Ok(self
-            .recall_in(&st, query_coord, query_hdc, top_k, crag_margin)?
-            .0)
+        let probe = Probe {
+            coord: *query_coord,
+            hdc: *query_hdc,
+            space: Placement::Chart,
+        };
+        let recall = self.recall_in(&st, &probe, top_k, crag_margin)?;
+        Ok(recall.anchors.iter().map(|&(id, d, _)| (id, d)).collect())
     }
 
-    /// [`Self::two_stage_recall`] under a held read lock. Also returns the
-    /// number of Stage 1 candidates.
+    /// Stages 1 and 2 under a held read lock, for one probe. A node is measured
+    /// by the closest of its anchors of the probe's kind ([`anchors_in`]); a
+    /// node with no such anchor is not a candidate.
     fn recall_in(
         &self,
         st: &GraphState,
-        query_coord: &MixedCurvatureCoord,
-        query_hdc: &[u64; 4],
+        probe: &Probe,
         top_k: usize,
         crag_margin: f32,
-    ) -> Result<(Vec<(u32, f32)>, usize), LodError> {
+    ) -> Result<Recall, LodError> {
         if top_k == 0 {
             return Err(LodError::InvalidQuery("top_k must be at least 1".into()));
         }
@@ -1551,23 +1726,21 @@ impl LodGraph {
                 "crag_margin must be finite and nonnegative, got {crag_margin}"
             )));
         }
-        query_coord.to_point(&self.manifold)?;
+        probe.coord.to_point(&self.manifold)?;
         let (nodes, revs) = (&st.nodes, &st.revocations);
+        let live = |n: &LodNode| !n.status.is_falsified() && !revs.contains(&n.entity_id);
 
         let mut candidates: Vec<(u32, u32)> = nodes
             .iter()
-            .filter(|n| !n.status.is_falsified() && !revs.contains(&n.entity_id))
-            .map(|n| {
-                (
-                    n.id,
-                    hdc_hamming_distance_256(&n.hdc_fingerprint, query_hdc),
-                )
+            .filter(|n| live(n))
+            .filter_map(|n| {
+                anchors_in(n, probe.space)
+                    .map(|(_, _, fp)| hdc_hamming_distance_256(fp, &probe.hdc))
+                    .min()
+                    .map(|hamming| (n.id, hamming))
             })
             .collect();
-
-        if candidates.is_empty() {
-            return Ok((Vec::new(), 0));
-        }
+        let searchable_nodes = candidates.len();
 
         let candidate_pool_size = top_k.saturating_mul(4).min(candidates.len());
         if candidate_pool_size < candidates.len() {
@@ -1577,9 +1750,21 @@ impl LodGraph {
         }
 
         // An out-of-domain coordinate aborts the recall instead of being skipped.
-        let mut reranked: Vec<(u32, f32)> = Vec::with_capacity(candidates.len());
+        let closest = |node: &LodNode| -> Result<Option<(f32, AnchorMatch)>, LodError> {
+            let mut best: Option<(f32, AnchorMatch)> = None;
+            for (matched, coord, _) in anchors_in(node, probe.space) {
+                let distance = self.distance(coord, &probe.coord)?;
+                if best.is_none_or(|(d, _)| distance < d) {
+                    best = Some((distance, matched));
+                }
+            }
+            Ok(best)
+        };
+        let mut reranked: Vec<(u32, f32, AnchorMatch)> = Vec::with_capacity(candidates.len());
         for &(id, _) in &candidates {
-            reranked.push((id, self.distance(&nodes[id as usize].coord, query_coord)?));
+            if let Some((distance, matched)) = closest(&nodes[id as usize])? {
+                reranked.push((id, distance, matched));
+            }
         }
         reranked.sort_by(|a, b| a.1.total_cmp(&b.1));
 
@@ -1587,19 +1772,28 @@ impl LodGraph {
             let snapshot = self.csr_snapshot.load();
             let top1_id = reranked[0].0;
             for (nbr, _, _) in snapshot.neighbors(top1_id) {
-                if reranked.iter().any(|(id, _)| *id == nbr) {
+                if reranked.iter().any(|r| r.0 == nbr) {
                     continue;
                 }
                 let nbr_node = &nodes[nbr as usize];
-                if !nbr_node.status.is_falsified() && !revs.contains(&nbr_node.entity_id) {
-                    reranked.push((nbr, self.distance(&nbr_node.coord, query_coord)?));
+                if !live(nbr_node) {
+                    continue;
+                }
+                // A neighbor the query cannot be compared with stays out of the
+                // rerank; diffusion still reaches it.
+                if let Some((distance, matched)) = closest(nbr_node)? {
+                    reranked.push((nbr, distance, matched));
                 }
             }
             reranked.sort_by(|a, b| a.1.total_cmp(&b.1));
         }
 
         reranked.truncate(top_k);
-        Ok((reranked, candidate_pool_size))
+        Ok(Recall {
+            anchors: reranked,
+            stage1_candidates: candidate_pool_size,
+            searchable_nodes,
+        })
     }
 
     /// Three-stage hybrid retrieval over one consistent state (one read lock):
@@ -1612,7 +1806,12 @@ impl LodGraph {
     /// 3. Personalized PageRank over the committed CSR snapshot, seeded with
     ///    each anchor at weight `1 / (1 + distance)` (normalized by PPR), teleport
     ///    probability `ppr_alpha`, at most `ppr_iters` iterations, tolerance
-    ///    [`HYBRID_PPR_TOLERANCE`].
+    ///    [`HYBRID_PPR_TOLERANCE`]. PPR follows every edge type, in the edge's
+    ///    direction only: an anchor reaches the targets of its `Semantic`,
+    ///    `Validates` and other out-edges, not their sources.
+    ///
+    /// In stages 1 and 2 a node counts by its closest chart anchor, so a query
+    /// that matches an alias makes the node an anchor ([`RagHit::anchor_match`]).
     ///
     /// Hits are every anchor plus the `top_k` best other live nodes with a
     /// positive PPR score (at most `2 * top_k`), all ordered by PPR score,
@@ -1634,6 +1833,94 @@ impl LodGraph {
         ppr_alpha: f32,
         ppr_iters: usize,
     ) -> Result<HybridRagResult, LodError> {
+        let probe = Probe {
+            coord: *query_coord,
+            hdc: *query_hdc,
+            space: Placement::Chart,
+        };
+        let st = self.state.read();
+        self.rag_in(&st, &[probe], top_k, crag_margin, ppr_alpha, ppr_iters)
+    }
+
+    /// [`Self::hybrid_rag_search`] for a query given as text, as a dense
+    /// vector, or as both.
+    ///
+    /// The text is projected with [`Self::project_text`] and compared with the
+    /// chart anchors of each node (its own coordinate and its aliases). The
+    /// vector is projected with [`Self::project_dense`] and compared with the
+    /// embedding anchors only. With both, each track runs stages 1 and 2 on its
+    /// own and gives up to `top_k` anchors; a node both tracks found counts
+    /// once, by the closer of the two. So there are at most `2 * top_k` anchors
+    /// and `3 * top_k` hits, `stage1_candidates` is the sum over the tracks,
+    /// and neither track can crowd the other out.
+    ///
+    /// Refused: neither given, blank text ([`LodError::EmptyInput`]), a vector
+    /// [`Self::project_dense`] refuses, and a vector whose dimension is not the
+    /// one this graph's node embeddings have. A graph with no node embedding
+    /// refuses every vector: it has nothing to compare one with.
+    pub fn hybrid_rag_search_query(
+        &self,
+        query_text: Option<&str>,
+        query_vector: Option<&[f32]>,
+        top_k: usize,
+        crag_margin: f32,
+        ppr_alpha: f32,
+        ppr_iters: usize,
+    ) -> Result<HybridRagResult, LodError> {
+        let mut probes = Vec::with_capacity(2);
+        if let Some(text) = query_text {
+            let (coord, hdc) = self.project_text(text)?;
+            probes.push(Probe {
+                coord,
+                hdc,
+                space: Placement::Chart,
+            });
+        }
+        if let Some(vector) = query_vector {
+            let (coord, hdc) = self.project_dense(vector)?;
+            probes.push(Probe {
+                coord,
+                hdc,
+                space: Placement::Embedding,
+            });
+        }
+        if probes.is_empty() {
+            return Err(LodError::InvalidQuery(
+                "a query needs a text, a vector or both".into(),
+            ));
+        }
+        let st = self.state.read();
+        if let Some(vector) = query_vector {
+            match st.embedding_dim {
+                Some(dim) if dim == vector.len() => {}
+                Some(dim) => {
+                    return Err(LodError::InvalidQuery(format!(
+                        "query vector has {} dimensions but this graph's embeddings have {dim}",
+                        vector.len()
+                    )))
+                }
+                None => {
+                    return Err(LodError::InvalidQuery(
+                        "no node of this graph carries an embedding, so a query vector has \
+                         nothing to be compared with"
+                            .into(),
+                    ))
+                }
+            }
+        }
+        self.rag_in(&st, &probes, top_k, crag_margin, ppr_alpha, ppr_iters)
+    }
+
+    /// The three stages under a held read lock.
+    fn rag_in(
+        &self,
+        st: &GraphState,
+        probes: &[Probe],
+        top_k: usize,
+        crag_margin: f32,
+        ppr_alpha: f32,
+        ppr_iters: usize,
+    ) -> Result<HybridRagResult, LodError> {
         if !(ppr_alpha > 0.0 && ppr_alpha < 1.0) {
             return Err(LodError::InvalidQuery(format!(
                 "ppr_alpha must lie in (0, 1), got {ppr_alpha}"
@@ -1644,14 +1931,40 @@ impl LodGraph {
                 "ppr_iters must be at least 1".into(),
             ));
         }
-        let st = self.state.read();
-        let (anchors, stage1_candidates) =
-            self.recall_in(&st, query_coord, query_hdc, top_k, crag_margin)?;
+        let mut matched: Vec<(u32, f32, AnchorMatch)> = Vec::new();
+        let (mut stage1_candidates, mut searchable_nodes) = (0, 0);
+        for probe in probes {
+            let recall = self.recall_in(st, probe, top_k, crag_margin)?;
+            stage1_candidates += recall.stage1_candidates;
+            searchable_nodes = recall.searchable_nodes;
+            for anchor in recall.anchors {
+                match matched.iter_mut().find(|m| m.0 == anchor.0) {
+                    Some(seen) if anchor.1 < seen.1 => *seen = anchor,
+                    Some(_) => {}
+                    None => matched.push(anchor),
+                }
+            }
+        }
+        if probes.len() > 1 {
+            matched.sort_by(|a, b| a.1.total_cmp(&b.1));
+            searchable_nodes = st
+                .nodes
+                .iter()
+                .filter(|n| !n.status.is_falsified() && !st.revocations.contains(&n.entity_id))
+                .filter(|n| {
+                    probes
+                        .iter()
+                        .any(|p| anchors_in(n, p.space).next().is_some())
+                })
+                .count();
+        }
+        let anchors: Vec<(u32, f32)> = matched.iter().map(|&(id, d, _)| (id, d)).collect();
         if anchors.is_empty() {
             return Ok(HybridRagResult {
                 hits: Vec::new(),
                 anchors,
                 stage1_candidates,
+                searchable_nodes,
                 diffusion: None,
             });
         }
@@ -1659,7 +1972,7 @@ impl LodGraph {
             .iter()
             .map(|&(id, dist)| (id, 1.0 / (1.0 + dist)))
             .collect();
-        let ranking = self.ppr_in(&st, &seeds, ppr_alpha, ppr_iters, HYBRID_PPR_TOLERANCE)?;
+        let ranking = self.ppr_in(st, &seeds, ppr_alpha, ppr_iters, HYBRID_PPR_TOLERANCE)?;
         let mut expanded = 0;
         let hits = ranking
             .ranked
@@ -1674,6 +1987,7 @@ impl LodGraph {
             })
             .map(|&(id, ppr_score)| {
                 let node = &st.nodes[id as usize];
+                let anchor = matched.iter().find(|a| a.0 == id);
                 RagHit {
                     node_id: id,
                     entity_id: node.entity_id,
@@ -1682,7 +1996,9 @@ impl LodGraph {
                     status: node.status,
                     confidence: node.confidence,
                     ppr_score,
-                    anchor_distance: anchors.iter().find(|a| a.0 == id).map(|a| a.1),
+                    anchor_distance: anchor.map(|a| a.1),
+                    anchor_match: anchor.map(|a| a.2),
+                    aliases: node.aliases.clone(),
                     payload: node.payload.clone(),
                     source_uri: node.source_uri.clone(),
                     timestamp_ns: node.timestamp_ns,
@@ -1694,6 +2010,7 @@ impl LodGraph {
             hits,
             anchors,
             stage1_candidates,
+            searchable_nodes,
             diffusion: Some(RagDiffusion {
                 alpha: ppr_alpha,
                 max_iters: ppr_iters,
@@ -1703,20 +2020,6 @@ impl LodGraph {
                 converged: ranking.converged,
             }),
         })
-    }
-
-    /// [`Self::hybrid_rag_search`] for a text query, projected with
-    /// [`Self::project_text`]. Blank text is [`LodError::EmptyInput`].
-    pub fn hybrid_rag_search_text(
-        &self,
-        query_text: &str,
-        top_k: usize,
-        crag_margin: f32,
-        ppr_alpha: f32,
-        ppr_iters: usize,
-    ) -> Result<HybridRagResult, LodError> {
-        let (coord, hdc) = self.project_text(query_text)?;
-        self.hybrid_rag_search(&coord, &hdc, top_k, crag_margin, ppr_alpha, ppr_iters)
     }
 
     /// Record direct evidence against a node: it becomes `Falsified` and refuted,
@@ -2001,13 +2304,15 @@ impl LodGraph {
             manual_revocations: st.manual_revocations.clone(),
             privileges: st.privileges.clone(),
             validated_deps: st.validated_deps.clone(),
+            embedding_dim: st.embedding_dim,
         }
     }
 
     /// Restore `checkpoint` atomically: nodes added after it are removed (their
-    /// ids become free again), statuses, confidences, refutation marks, bands,
-    /// parents, CSR
-    /// snapshot, pending edges, revocations, privileges and validated dependencies return to its values.
+    /// ids become free again, with their aliases and the edges those linked),
+    /// statuses, confidences, refutation marks, bands, parents, CSR snapshot,
+    /// pending edges, revocations, privileges, validated dependencies and the
+    /// embedding dimension return to its values.
     ///
     /// Every write since the checkpoint is discarded, including writes by other
     /// threads; use [`Self::transact`] to keep writers serialized. Refused: a
@@ -2037,6 +2342,11 @@ impl LodGraph {
 
         st.nodes.truncate(keep);
         st.entity_index.retain(|_, id| (*id as usize) < keep);
+        st.alias_index.retain(|_, holders| {
+            holders.retain(|id| (*id as usize) < keep);
+            !holders.is_empty()
+        });
+        st.embedding_dim = checkpoint.embedding_dim;
         for (node, state) in st.nodes.iter_mut().zip(&checkpoint.node_states) {
             state.restore(node);
         }
@@ -3718,7 +4028,14 @@ mod tests {
         graph.flush_edges_to_csr().unwrap();
 
         let result = graph
-            .hybrid_rag_search_text("coolant pump failed during night shift", 1, 0.0, 0.15, 200)
+            .hybrid_rag_search_query(
+                Some("coolant pump failed during night shift"),
+                None,
+                1,
+                0.0,
+                0.15,
+                200,
+            )
             .unwrap();
         assert_eq!(result.anchors.len(), 1);
         assert_eq!(result.anchors[0].0, pump);
@@ -3787,7 +4104,7 @@ mod tests {
     fn hybrid_search_fails_closed_on_bad_input_and_is_empty_on_an_empty_graph() {
         let graph = LodGraph::new();
         let empty = graph
-            .hybrid_rag_search_text(PUMP, 3, 0.0, 0.15, 50)
+            .hybrid_rag_search_query(Some(PUMP), None, 3, 0.0, 0.15, 50)
             .unwrap();
         assert!(empty.hits.is_empty() && empty.anchors.is_empty());
         assert_eq!(empty.diffusion, None);
@@ -3795,21 +4112,21 @@ mod tests {
         graph.add_node(text_node(&graph, PUMP, 1)).unwrap();
         for text in ["", "   ", "?!"] {
             assert!(matches!(
-                graph.hybrid_rag_search_text(text, 3, 0.0, 0.15, 50),
+                graph.hybrid_rag_search_query(Some(text), None, 3, 0.0, 0.15, 50),
                 Err(LodError::EmptyInput(_))
             ));
         }
         for (alpha, iters) in [(0.0, 50), (1.0, 50), (f32::NAN, 50), (0.15, 0)] {
             assert!(matches!(
-                graph.hybrid_rag_search_text(PUMP, 3, 0.0, alpha, iters),
+                graph.hybrid_rag_search_query(Some(PUMP), None, 3, 0.0, alpha, iters),
                 Err(LodError::InvalidQuery(_))
             ));
         }
         assert!(graph
-            .hybrid_rag_search_text(PUMP, 0, 0.0, 0.15, 50)
+            .hybrid_rag_search_query(Some(PUMP), None, 0, 0.0, 0.15, 50)
             .is_err());
         assert!(graph
-            .hybrid_rag_search_text(PUMP, 1, -1.0, 0.15, 50)
+            .hybrid_rag_search_query(Some(PUMP), None, 1, -1.0, 0.15, 50)
             .is_err());
     }
 
@@ -3835,12 +4152,435 @@ mod tests {
         let checkpoint = graph.create_checkpoint();
         graph.add_node(text_node(&graph, LOG, 2)).unwrap();
         graph.rollback_checkpoint(&checkpoint).unwrap();
-        let result = graph.hybrid_rag_search_text(LOG, 2, 0.0, 0.15, 50).unwrap();
+        let result = graph
+            .hybrid_rag_search_query(Some(LOG), None, 2, 0.0, 0.15, 50)
+            .unwrap();
         assert!(result
             .hits
             .iter()
             .all(|h| h.payload.as_deref() != Some(LOG)));
         assert_eq!(graph.node_for_entity(2), None);
+    }
+
+    // ------------------------------------------------- aliases and embeddings
+
+    use crate::projection::test_vectors;
+
+    /// Thirteen texts with no token of the queries below except where noted, so
+    /// a `top_k` of 1 or 2 leaves most of them outside the Stage 1 pool.
+    const DISTRACTORS: [&str; 13] = [
+        // These two share a word with "valve closure".
+        "the relief valve was replaced last week",
+        "closure of the quarterly accounts is due friday",
+        "the reactor coolant pump failed during the night shift",
+        "maintenance ticket 4411 replaced seal kit on unit two",
+        "quarterly marketing budget for the new espresso brand",
+        "the night shift supervisor signed the handover log",
+        "spare bearings are stored in warehouse three",
+        "the canteen menu changes every monday",
+        "calibration of the flow meter is overdue",
+        "the forklift battery needs charging",
+        "fire drill scheduled for the second floor",
+        "new safety boots arrive next month",
+        "the turbine hall lighting was upgraded",
+    ];
+
+    const CLOSE_MAIN_VALVE: &str = "关闭主阀";
+    const HANDWHEEL: &str = "turn the handwheel clockwise until the stem stops";
+
+    fn with_distractors() -> LodGraph {
+        let graph = LodGraph::new();
+        for (i, text) in DISTRACTORS.iter().enumerate() {
+            graph
+                .add_node(text_node(&graph, text, 100 + i as u64))
+                .unwrap();
+        }
+        graph
+    }
+
+    fn hit_entities(result: &HybridRagResult) -> Vec<u64> {
+        result.hits.iter().map(|h| h.entity_id).collect()
+    }
+
+    #[test]
+    fn an_alias_recalls_a_translation_the_lexical_projection_misses() {
+        let query = "valve closure";
+        // Control: the Chinese node has no alias. It shares no n-gram with the
+        // query, falls outside the Stage 1 pool of 4 and is not a hit.
+        let control = with_distractors();
+        control
+            .add_node(text_node(&control, CLOSE_MAIN_VALVE, 1))
+            .unwrap();
+        let missed = control
+            .hybrid_rag_search_query(Some(query), None, 1, 0.0, 0.15, 100)
+            .unwrap();
+        assert_eq!(missed.searchable_nodes, 14);
+        assert_eq!(missed.stage1_candidates, 4);
+        assert!(!hit_entities(&missed).contains(&1), "{missed:?}");
+        // The lexical winner is a text that shares a word with the query.
+        assert!([100, 101].contains(&missed.hits[0].entity_id), "{missed:?}");
+
+        // Same graph, same query, the node now carries the English alias.
+        let graph = with_distractors();
+        let target = graph
+            .add_node(
+                text_node(&graph, CLOSE_MAIN_VALVE, 1).with_aliases(["主阀关断", "Valve closure"]),
+            )
+            .unwrap();
+        let result = graph
+            .hybrid_rag_search_query(Some(query), None, 1, 0.0, 0.15, 100)
+            .unwrap();
+        assert_eq!(result.anchors.len(), 1);
+        assert_eq!(result.anchors[0].0, target);
+        let top = &result.hits[0];
+        assert_eq!(top.entity_id, 1);
+        assert_eq!(top.anchor_match, Some(AnchorMatch::Alias(1)));
+        assert!(top.anchor_distance.unwrap() < 1e-6);
+        assert_eq!(top.payload.as_deref(), Some(CLOSE_MAIN_VALVE));
+        assert_eq!(top.aliases, ["主阀关断", "Valve closure"]);
+        // The node's own text still finds it, by its own coordinate.
+        let own = graph
+            .hybrid_rag_search_query(Some(CLOSE_MAIN_VALVE), None, 1, 0.0, 0.15, 100)
+            .unwrap();
+        assert_eq!(own.hits[0].anchor_match, Some(AnchorMatch::Primary));
+        // Recall takes the same closest anchor.
+        let (coord, hdc) = graph.project_text(query).unwrap();
+        let recall = graph.two_stage_recall(&coord, &hdc, 1, 0.0).unwrap();
+        assert_eq!(recall, result.anchors);
+    }
+
+    #[test]
+    fn diffusion_recalls_synonyms_along_alias_links_and_validates_edges() {
+        // Control: no shared alias, no edge. The Chinese query anchors its own
+        // node and nothing else about the valve comes back.
+        let control = with_distractors();
+        control
+            .add_node(text_node(&control, CLOSE_MAIN_VALVE, 1))
+            .unwrap();
+        control.add_node(text_node(&control, HANDWHEEL, 2)).unwrap();
+        control.flush_edges_to_csr().unwrap();
+        let missed = control
+            .hybrid_rag_search_query(Some(CLOSE_MAIN_VALVE), None, 1, 0.0, 0.15, 200)
+            .unwrap();
+        assert_eq!(hit_entities(&missed), vec![1], "{missed:?}");
+
+        let graph = with_distractors();
+        let zh = graph
+            .add_node(text_node(&graph, CLOSE_MAIN_VALVE, 1).with_aliases(["valve closure"]))
+            .unwrap();
+        assert_eq!(graph.pending_edge_count(), 0);
+        // Same alias in another case and spacing: linked both ways at insert.
+        let en = graph
+            .add_node(text_node(&graph, HANDWHEEL, 2).with_aliases(["  Valve   CLOSURE "]))
+            .unwrap();
+        assert_eq!(graph.pending_edge_count(), 2);
+        let proof = graph
+            .add_node(text_node(
+                &graph,
+                "leak test passed at forty bar after isolation",
+                3,
+            ))
+            .unwrap();
+        graph.add_edge(zh, proof, EdgeType::Validates, 1.0).unwrap();
+        graph.flush_edges_to_csr().unwrap();
+        let csr = graph.csr_snapshot();
+        assert!(csr
+            .neighbors(zh)
+            .any(|(v, t, w)| v == en && t == EdgeType::Semantic && w == ALIAS_LINK_WEIGHT));
+        assert!(csr
+            .neighbors(en)
+            .any(|(v, t, _)| v == zh && t == EdgeType::Semantic));
+
+        let result = graph
+            .hybrid_rag_search_query(Some(CLOSE_MAIN_VALVE), None, 1, 0.0, 0.15, 200)
+            .unwrap();
+        assert_eq!(result.anchors, vec![(zh, result.anchors[0].1)]);
+        assert_eq!(result.stage1_candidates, 4);
+        // top_k 1 admits one diffusion-only node; ask for 2 to see both.
+        assert_eq!(result.hits.len(), 2);
+        let result = graph
+            .hybrid_rag_search_query(Some(CLOSE_MAIN_VALVE), None, 2, 0.0, 0.15, 200)
+            .unwrap();
+        let ids = hit_entities(&result);
+        assert_eq!(ids[0], 1, "{result:?}");
+        for synonym in [2, 3] {
+            let hit = result
+                .hits
+                .iter()
+                .find(|h| h.entity_id == synonym)
+                .unwrap_or_else(|| panic!("entity {synonym} not recalled: {ids:?}"));
+            assert_eq!(hit.anchor_distance, None);
+            assert_eq!(hit.anchor_match, None);
+            assert!(hit.ppr_score > 0.0);
+        }
+        assert!(result.diffusion.unwrap().converged);
+    }
+
+    #[test]
+    fn alias_rules_are_enforced_and_nothing_is_inserted_on_refusal() {
+        let graph = LodGraph::new();
+        let base = || text_node(&graph, HANDWHEEL, 1);
+        let too_many: Vec<String> = (0..=crate::node::MAX_ALIASES)
+            .map(|i| format!("name {i}"))
+            .collect();
+        assert!(matches!(
+            graph.add_node(base().with_aliases(too_many)),
+            Err(LodError::InvalidNode(_))
+        ));
+        let long = "x".repeat(crate::node::MAX_ALIAS_BYTES + 1);
+        assert!(matches!(
+            graph.add_node(base().with_aliases([long])),
+            Err(LodError::InvalidNode(_))
+        ));
+        for blank in ["", "  ", "?!"] {
+            assert!(matches!(
+                graph.add_node(base().with_aliases([blank])),
+                Err(LodError::EmptyInput(_))
+            ));
+        }
+        assert!(matches!(
+            graph.add_node(base().with_aliases(["shut off", "Shut  OFF"])),
+            Err(LodError::InvalidNode(_))
+        ));
+        assert_eq!(graph.node_count(), 0);
+        assert_eq!(graph.pending_edge_count(), 0);
+
+        // Anchors a caller puts on the node are replaced by the graph's own.
+        let mut forged = base().with_aliases(["shut off"]);
+        forged.alias_anchors = vec![
+            ChartAnchor {
+                coord: MixedCurvatureCoord::origin(),
+                hdc_fingerprint: [u64::MAX; 4],
+            };
+            3
+        ];
+        forged.embedding_anchor = forged.alias_anchors.first().copied();
+        let id = graph.add_node(forged).unwrap();
+        let stored = graph.get_node(id).unwrap();
+        let (coord, hdc_fingerprint) = graph.project_text("shut off").unwrap();
+        assert_eq!(
+            stored.alias_anchors,
+            vec![ChartAnchor {
+                coord,
+                hdc_fingerprint
+            }]
+        );
+        assert_eq!(stored.embedding_anchor, None);
+    }
+
+    #[test]
+    fn one_alias_links_at_most_the_holder_cap() {
+        let graph = LodGraph::new();
+        for i in 0..MAX_ALIAS_HOLDERS as u64 {
+            graph
+                .add_node(node("n", i).with_aliases(["shared tag"]))
+                .unwrap();
+        }
+        // Holder k links to the k earlier ones, both ways.
+        let n = MAX_ALIAS_HOLDERS;
+        assert_eq!(graph.pending_edge_count(), n * (n - 1));
+        assert!(matches!(
+            graph.add_node(node("n", 999).with_aliases(["Shared Tag"])),
+            Err(LodError::InvalidNode(_))
+        ));
+        assert_eq!(graph.node_count(), n);
+        assert_eq!(graph.pending_edge_count(), n * (n - 1));
+    }
+
+    #[test]
+    fn rollback_forgets_aliases_links_and_the_embedding_dimension() {
+        let graph = LodGraph::new();
+        graph
+            .add_node(node("kept", 1).with_aliases(["tag"]))
+            .unwrap();
+        let checkpoint = graph.create_checkpoint();
+        graph
+            .add_node(
+                node("dropped", 2)
+                    .with_aliases(["tag", "other"])
+                    .with_embedding(test_vectors::random(1, 128)),
+            )
+            .unwrap();
+        assert_eq!(graph.pending_edge_count(), 2);
+        graph.rollback_checkpoint(&checkpoint).unwrap();
+        assert_eq!(graph.pending_edge_count(), 0);
+        // "other" has no holder again and "tag" has one: one pair of links.
+        graph
+            .add_node(node("again", 3).with_aliases(["other"]))
+            .unwrap();
+        assert_eq!(graph.pending_edge_count(), 0);
+        graph
+            .add_node(node("again", 4).with_aliases(["tag"]))
+            .unwrap();
+        assert_eq!(graph.pending_edge_count(), 2);
+        // The 128-dimension embedding is gone, so another dimension is accepted.
+        graph
+            .add_node(node("vec", 5).with_embedding(test_vectors::random(2, 256)))
+            .unwrap();
+    }
+
+    /// A graph of 13 embedding-placed distractors, a target near `query` and a
+    /// text-only procedure node the target points to.
+    fn embedded_graph(query: &[f32], link: bool) -> (LodGraph, u32, u32) {
+        let graph = LodGraph::new();
+        for i in 0..13_u64 {
+            graph
+                .add_node(
+                    node("distractor", 100 + i)
+                        .with_embedding(test_vectors::random(900 + i, 256))
+                        .placed_by_embedding(),
+                )
+                .unwrap();
+        }
+        let target = graph
+            .add_node(
+                node("冷却液泄漏", 1)
+                    .with_embedding(test_vectors::at_cosine(query, 0.9, 77))
+                    .placed_by_embedding(),
+            )
+            .unwrap();
+        let procedure = graph.add_node(text_node(&graph, HANDWHEEL, 2)).unwrap();
+        if link {
+            graph
+                .add_edge(target, procedure, EdgeType::Semantic, 1.0)
+                .unwrap();
+        }
+        graph.flush_edges_to_csr().unwrap();
+        (graph, target, procedure)
+    }
+
+    #[test]
+    fn a_vector_query_anchors_by_embedding_and_diffuses_to_text_nodes() {
+        let query = test_vectors::random(42, 256);
+        let (graph, target, procedure) = embedded_graph(&query, true);
+        let result = graph
+            .hybrid_rag_search_query(None, Some(&query), 1, 0.0, 0.15, 200)
+            .unwrap();
+        // The text-only node has no embedding: 14 of 15 nodes are searchable.
+        assert_eq!(result.searchable_nodes, 14);
+        assert_eq!(result.stage1_candidates, 4);
+        assert_eq!(result.anchors.len(), 1);
+        assert_eq!(result.anchors[0].0, target);
+        let ids: Vec<u32> = result.hits.iter().map(|h| h.node_id).collect();
+        assert_eq!(ids, vec![target, procedure], "{result:?}");
+        assert_eq!(result.hits[0].anchor_match, Some(AnchorMatch::Embedding));
+        assert_eq!(result.hits[1].anchor_distance, None);
+        assert_eq!(result.hits[1].payload.as_deref(), Some(HANDWHEEL));
+        assert!(result.hits[1].ppr_score > 0.0);
+        // The anchor distance is the geodesic distance to the dense projection.
+        let (qc, _) = graph.project_dense(&query).unwrap();
+        let stored = graph.get_node(target).unwrap();
+        assert_eq!(stored.placement, Placement::Embedding);
+        assert_eq!(Some(stored.coord), stored.embedding_anchor.map(|a| a.coord));
+        assert_eq!(
+            result.anchors[0].1,
+            graph.distance(&stored.coord, &qc).unwrap()
+        );
+
+        // Control: without the edge the procedure node is not recalled.
+        let (control, target, _) = embedded_graph(&query, false);
+        let missed = control
+            .hybrid_rag_search_query(None, Some(&query), 1, 0.0, 0.15, 200)
+            .unwrap();
+        let ids: Vec<u32> = missed.hits.iter().map(|h| h.node_id).collect();
+        assert_eq!(ids, vec![target]);
+    }
+
+    #[test]
+    fn text_and_vector_tracks_never_cross_and_combine_in_one_query() {
+        let query = test_vectors::random(42, 256);
+        let (graph, target, procedure) = embedded_graph(&query, false);
+        // A text query sees only the one node with a chart anchor.
+        let text_only = graph
+            .hybrid_rag_search_query(Some("handwheel clockwise"), None, 3, 0.0, 0.15, 100)
+            .unwrap();
+        assert_eq!(text_only.searchable_nodes, 1);
+        assert_eq!(text_only.anchors.len(), 1);
+        assert_eq!(text_only.anchors[0].0, procedure);
+        // The same holds for a coordinate query and for recall.
+        let (coord, hdc) = graph.project_text("handwheel clockwise").unwrap();
+        assert_eq!(
+            graph.two_stage_recall(&coord, &hdc, 3, 0.0).unwrap().len(),
+            1
+        );
+        // Both tracks in one query: each gives its own top anchor, and the
+        // partly matching text is not crowded out by the dense track.
+        let both = graph
+            .hybrid_rag_search_query(Some("handwheel clockwise"), Some(&query), 1, 0.0, 0.15, 100)
+            .unwrap();
+        assert_eq!(both.searchable_nodes, 15);
+        assert_eq!(both.stage1_candidates, 1 + 4);
+        assert_eq!(both.anchors.len(), 2);
+        assert!(both.anchors[0].1 <= both.anchors[1].1);
+        let matched: HashMap<u32, AnchorMatch> = both
+            .hits
+            .iter()
+            .filter_map(|h| h.anchor_match.map(|m| (h.node_id, m)))
+            .collect();
+        assert_eq!(matched.len(), 2);
+        assert_eq!(matched.get(&target), Some(&AnchorMatch::Embedding));
+        assert_eq!(matched.get(&procedure), Some(&AnchorMatch::Primary));
+    }
+
+    #[test]
+    fn embeddings_and_vector_queries_fail_closed() {
+        let graph = LodGraph::new();
+        let vector = test_vectors::random(1, 128);
+        // No node carries an embedding: a vector has nothing to be compared with.
+        graph.add_node(text_node(&graph, PUMP, 1)).unwrap();
+        assert!(matches!(
+            graph.hybrid_rag_search_query(None, Some(&vector), 1, 0.0, 0.15, 50),
+            Err(LodError::InvalidQuery(_))
+        ));
+        assert!(matches!(
+            graph.hybrid_rag_search_query(None, None, 1, 0.0, 0.15, 50),
+            Err(LodError::InvalidQuery(_))
+        ));
+        assert!(matches!(
+            graph.add_node(node("no vector", 2).placed_by_embedding()),
+            Err(LodError::InvalidNode(_))
+        ));
+        let mut broken = vector.clone();
+        broken[0] = f32::NAN;
+        assert!(graph
+            .add_node(node("nan", 2).with_embedding(broken.clone()))
+            .is_err());
+        assert!(graph
+            .add_node(node("short", 2).with_embedding(vec![1.0; 4]))
+            .is_err());
+        assert_eq!(graph.node_count(), 1);
+
+        graph
+            .add_node(node("vec", 2).with_embedding(vector.clone()))
+            .unwrap();
+        // The first embedding fixes the dimension for nodes and for queries.
+        assert!(matches!(
+            graph.add_node(node("other dim", 3).with_embedding(test_vectors::random(2, 256))),
+            Err(LodError::InvalidNode(_))
+        ));
+        assert!(matches!(
+            graph.hybrid_rag_search_query(
+                None,
+                Some(&test_vectors::random(2, 256)),
+                1,
+                0.0,
+                0.15,
+                50
+            ),
+            Err(LodError::InvalidQuery(_))
+        ));
+        assert!(graph
+            .hybrid_rag_search_query(None, Some(&broken), 1, 0.0, 0.15, 50)
+            .is_err());
+        let ok = graph
+            .hybrid_rag_search_query(None, Some(&vector), 1, 0.0, 0.15, 50)
+            .unwrap();
+        assert_eq!(ok.hits[0].entity_id, 2);
+        assert!(ok.hits[0].anchor_distance.unwrap() < 1e-6);
+        // A node with an embedding but a chart placement keeps its own
+        // coordinate and answers both kinds of query.
+        assert_eq!(graph.get_node(1).unwrap().placement, Placement::Chart);
+        assert_eq!(ok.searchable_nodes, 1);
     }
 
     // ---------------------------------------------------------------- SCC blocks
