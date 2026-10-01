@@ -1,12 +1,25 @@
-//! Text to `(MixedCurvatureCoord, 256-bit HDC fingerprint)` projection.
+//! Text and dense-vector to `(MixedCurvatureCoord, 256-bit HDC fingerprint)`
+//! projection.
 //!
-//! [`TextEmbeddingProjector`] is a lexical hashing embedding, not a learned
-//! semantic one. Two texts land close when they share words, word pairs and
-//! character trigrams; paraphrases with no shared n-grams do not. It is
-//! deterministic, needs no model file and no corpus statistics (there is no
-//! IDF: every n-gram kind has the same weight).
+//! [`TextEmbeddingProjector`] has two entries.
 //!
-//! The pipeline:
+//! [`TextEmbeddingProjector::project_text`] is a lexical hashing embedding, not
+//! a learned semantic one. Two texts land close when they share words, word
+//! pairs and character trigrams; paraphrases and translations with no shared
+//! n-grams do not. It is deterministic, needs no model file and no corpus
+//! statistics (there is no IDF: every n-gram kind has the same weight).
+//!
+//! [`TextEmbeddingProjector::project_dense`] takes a dense embedding that an
+//! external model made (16 to 8192 values) and hashes it the same way, each
+//! axis as one feature weighted by its signed value. It adds no meaning: two
+//! vectors land close exactly when their cosine is high, so the result is as
+//! semantic as the model behind the vectors, and no model lives in this crate.
+//! The fingerprint keeps the angle (`256 * theta / pi` expected Hamming bits).
+//! The coordinate is a 16-number sketch of the direction: it orders clearly
+//! different cosines and blurs close ones. Vectors of different dimensions, and
+//! text and dense projections, share no hyperplane and must not be compared.
+//!
+//! The text pipeline:
 //!
 //! 1. Normalize: lowercase, split on every character that is not alphanumeric.
 //! 2. Features: word unigrams, adjacent word bigrams, and character trigrams of
@@ -38,11 +51,16 @@
 
 use crate::error::LodError;
 use crate::manifold::MixedCurvatureCoord;
-use crate::node::MAX_PAYLOAD_BYTES;
+use crate::node::{MAX_EMBEDDING_DIM, MAX_PAYLOAD_BYTES, MIN_EMBEDDING_DIM};
 
 /// Identity of the projection. A text projected under another version lands
 /// somewhere else, so stored nodes and queries must share it.
 pub const PROJECTOR_VERSION: &str = "gen-zero-lod/lexical-ngram-simhash/v1";
+
+/// Identity of the dense projection, [`TextEmbeddingProjector::project_dense`].
+/// It names the hashing only: which model made the vectors is the caller's to
+/// keep fixed.
+pub const DENSE_PROJECTOR_VERSION: &str = "gen-zero-lod/dense-signed-random-projection/v1";
 
 /// Bits in an HDC fingerprint.
 pub const HDC_BITS: usize = 256;
@@ -56,6 +74,8 @@ const COORD_ROWS: usize = 16;
 const UNIGRAM: u8 = 1;
 const BIGRAM: u8 = 2;
 const TRIGRAM: u8 = 3;
+/// One axis of a dense embedding.
+const DENSE_AXIS: u8 = 4;
 
 /// Deterministic text projector for one ball curvature.
 #[derive(Clone, Debug)]
@@ -86,12 +106,59 @@ impl TextEmbeddingProjector {
     /// Project `text` to a chart coordinate and a 256-bit SimHash fingerprint.
     /// See the module docs for the construction and the refusals.
     pub fn project_text(&self, text: &str) -> Result<(MixedCurvatureCoord, [u64; 4]), LodError> {
-        let features = self.features(text)?;
+        self.project_features(&self.features(text)?)
+    }
+
+    /// Project a dense embedding to a chart coordinate and a 256-bit SimHash
+    /// fingerprint. See the module docs. Refused: a dimension outside
+    /// [`MIN_EMBEDDING_DIM`]..=[`MAX_EMBEDDING_DIM`], a value that is not
+    /// finite, and a vector of norm 0.
+    pub fn project_dense(
+        &self,
+        embedding: &[f32],
+    ) -> Result<(MixedCurvatureCoord, [u64; 4]), LodError> {
+        let dim = embedding.len();
+        if !(MIN_EMBEDDING_DIM..=MAX_EMBEDDING_DIM).contains(&dim) {
+            return Err(LodError::InvalidQuery(format!(
+                "embedding dimension must be {MIN_EMBEDDING_DIM}..={MAX_EMBEDDING_DIM}, got {dim}"
+            )));
+        }
+        if let Some(i) = embedding.iter().position(|v| !v.is_finite()) {
+            return Err(LodError::InvalidQuery(format!(
+                "embedding[{i}] is not finite"
+            )));
+        }
+        if embedding.iter().all(|&v| v == 0.0) {
+            return Err(LodError::InvalidQuery("embedding has norm 0".into()));
+        }
+        // One feature per axis, keyed by the dimension: vectors of two
+        // dimensions never share a hyperplane.
+        let dim_bytes = (dim as u64).to_le_bytes();
+        let features: Vec<(u64, f64)> = embedding
+            .iter()
+            .enumerate()
+            .map(|(axis, &v)| {
+                let axis_bytes = (axis as u64).to_le_bytes();
+                (
+                    self.hash(DENSE_AXIS, &[&dim_bytes, &axis_bytes]),
+                    f64::from(v),
+                )
+            })
+            .collect();
+        self.project_features(&features)
+    }
+
+    /// Fingerprint and coordinate of one weighted feature vector: SimHash signs
+    /// and the 16-row random projection, both seeded by the feature hashes. The
+    /// sums run in slice order.
+    fn project_features(
+        &self,
+        features: &[(u64, f64)],
+    ) -> Result<(MixedCurvatureCoord, [u64; 4]), LodError> {
         let mut signs = [0.0_f64; HDC_BITS];
         let mut rows = [0.0_f64; COORD_ROWS];
         let mut norm_sq = 0.0_f64;
-        // `features` is sorted by hash, so the float sums run in one fixed order.
-        for &(hash, weight) in &features {
+        for &(hash, weight) in features {
             for word in 0..SIGN_WORDS {
                 let bits = mix(hash, word);
                 for bit in 0..64 {
@@ -188,6 +255,12 @@ impl TextEmbeddingProjector {
     }
 }
 
+/// `text` as its tokens joined by one space: the form under which two aliases
+/// are the same name. Empty when the text has no alphanumeric character.
+pub(crate) fn normalized(text: &str) -> String {
+    tokenize(text).join(" ")
+}
+
 /// Lowercased maximal runs of alphanumeric characters.
 fn tokenize(text: &str) -> Vec<String> {
     let mut tokens = Vec::new();
@@ -216,6 +289,40 @@ fn mix(hash: u64, stream: u64) -> u64 {
 /// The top 53 bits of `bits` as a uniform value in `[-1, 1)`.
 fn uniform(bits: u64) -> f64 {
     (bits >> 11) as f64 / (1_u64 << 53) as f64 * 2.0 - 1.0
+}
+
+/// Deterministic pseudo-random vectors with a chosen cosine, for tests.
+#[cfg(test)]
+pub(crate) mod test_vectors {
+    use super::{mix, uniform};
+
+    /// A vector of `dim` values uniform in `[-1, 1)`, fixed by `seed`.
+    pub fn random(seed: u64, dim: usize) -> Vec<f32> {
+        (0..dim as u64)
+            .map(|i| uniform(mix(seed, i)) as f32)
+            .collect()
+    }
+
+    /// A unit vector at cosine `cos` to `base`: `base` turned toward the part
+    /// of `random(seed)` orthogonal to it.
+    pub fn at_cosine(base: &[f32], cos: f64, seed: u64) -> Vec<f32> {
+        let norm = |v: &[f64]| v.iter().map(|x| x * x).sum::<f64>().sqrt();
+        let b: Vec<f64> = base.iter().map(|&v| f64::from(v)).collect();
+        let b_norm = norm(&b);
+        let b: Vec<f64> = b.iter().map(|v| v / b_norm).collect();
+        let r: Vec<f64> = random(seed, base.len())
+            .iter()
+            .map(|&v| f64::from(v))
+            .collect();
+        let along: f64 = r.iter().zip(&b).map(|(x, y)| x * y).sum();
+        let orth: Vec<f64> = r.iter().zip(&b).map(|(x, y)| x - along * y).collect();
+        let orth_norm = norm(&orth);
+        let sin = (1.0 - cos * cos).sqrt();
+        b.iter()
+            .zip(&orth)
+            .map(|(x, o)| (cos * x + sin * o / orth_norm) as f32)
+            .collect()
+    }
 }
 
 #[cfg(test)]
@@ -314,6 +421,136 @@ mod tests {
                 crate::node::normalized_depth(&coord.hyperbolic, geometry.curvature).unwrap();
             }
         }
+    }
+
+    #[test]
+    fn a_translation_with_no_shared_ngram_is_as_far_as_an_unrelated_text() {
+        // The limit the aliases and the dense track exist for.
+        for (a, b) in [
+            ("valve closure", "关闭主阀"),
+            ("coolant leak", "冷却液泄漏"),
+            ("pressure drop", "decompression"),
+        ] {
+            let h = hdc_hamming_distance_256(&project(a).1, &project(b).1);
+            assert!((80..=176).contains(&h), "{a:?} / {b:?}: {h} bits");
+        }
+    }
+
+    #[test]
+    fn dense_projection_is_deterministic_scale_free_and_refuses_bad_vectors() {
+        let p = TextEmbeddingProjector::new(1.0).unwrap();
+        let v = test_vectors::random(7, 128);
+        let (coord, fp) = p.project_dense(&v).unwrap();
+        assert_eq!(p.project_dense(&v).unwrap(), (coord, fp));
+        // Only the direction counts: a rescaled vector has the same fingerprint.
+        let scaled: Vec<f32> = v.iter().map(|x| x * 37.5).collect();
+        let (scaled_coord, scaled_fp) = p.project_dense(&scaled).unwrap();
+        assert_eq!(scaled_fp, fp);
+        assert!(distance(&coord, &scaled_coord) < 1e-4);
+        // The opposite vector has the opposite fingerprint.
+        let negated: Vec<f32> = v.iter().map(|x| -x).collect();
+        let h = hdc_hamming_distance_256(&fp, &p.project_dense(&negated).unwrap().1);
+        assert_eq!(h, 256);
+
+        for dim in [MIN_EMBEDDING_DIM - 1, 0, MAX_EMBEDDING_DIM + 1] {
+            assert!(matches!(
+                p.project_dense(&vec![1.0; dim]),
+                Err(LodError::InvalidQuery(_))
+            ));
+        }
+        p.project_dense(&[1.0; MIN_EMBEDDING_DIM]).unwrap();
+        p.project_dense(&[1.0; MAX_EMBEDDING_DIM]).unwrap();
+        assert!(p.project_dense(&[0.0; 128]).is_err());
+        for bad in [f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {
+            let mut broken = v.clone();
+            broken[5] = bad;
+            assert!(p.project_dense(&broken).is_err(), "{bad}");
+        }
+    }
+
+    #[test]
+    fn dense_projection_stays_inside_the_ball_of_every_curvature() {
+        for c in [0.25_f32, 1.0, 4.0, 25.0] {
+            let p = TextEmbeddingProjector::new(c).unwrap();
+            for (seed, dim) in [(1, 16), (2, 128), (3, 256), (4, 512), (5, 896)] {
+                let (coord, _) = p.project_dense(&test_vectors::random(seed, dim)).unwrap();
+                let norm_sq: f32 = coord.hyperbolic.iter().map(|v| v * v).sum();
+                assert!(c * norm_sq < 1.0, "c {c} dim {dim}");
+                assert!(coord.euclidean.iter().all(|v| v.abs() < 1.0));
+                let s_norm: f32 = coord.spherical.iter().map(|v| v * v).sum::<f32>().sqrt();
+                assert!((s_norm - 1.0).abs() < 1e-5);
+            }
+        }
+    }
+
+    #[test]
+    fn dense_fingerprint_keeps_the_angle_between_vectors() {
+        let p = TextEmbeddingProjector::new(1.0).unwrap();
+        for dim in [128, 256, 512] {
+            for cos in [0.95_f64, 0.8, 0.5, 0.0, -0.5] {
+                let expected = 256.0 * cos.acos() / std::f64::consts::PI;
+                let trials = 64;
+                let mean = (0..trials)
+                    .map(|t| {
+                        let a = test_vectors::random(1000 + t, dim);
+                        let b = test_vectors::at_cosine(&a, cos, 5000 + t);
+                        let (fa, fb) = (
+                            p.project_dense(&a).unwrap().1,
+                            p.project_dense(&b).unwrap().1,
+                        );
+                        f64::from(hdc_hamming_distance_256(&fa, &fb))
+                    })
+                    .sum::<f64>()
+                    / trials as f64;
+                println!("dim {dim} cos {cos}: mean hamming {mean:.2}, expected {expected:.2}");
+                // One fingerprint pair has a standard deviation of at most 8
+                // bits, so the mean of 64 has 1; allow 4 of those.
+                assert!(
+                    (mean - expected).abs() < 4.0,
+                    "dim {dim} cos {cos}: {mean} vs {expected}"
+                );
+            }
+        }
+    }
+
+    /// How often each stage puts a vector at cosine `near` ahead of one at
+    /// cosine `far`, over 400 triples of 256 dimensions.
+    fn ordering_rates(near: f64, far: f64) -> (f64, f64) {
+        let p = TextEmbeddingProjector::new(1.0).unwrap();
+        let trials = 400_u64;
+        let (mut hamming_ok, mut geodesic_ok) = (0_u32, 0_u32);
+        for t in 0..trials {
+            let q = test_vectors::random(t, 256);
+            let (cq, fq) = p.project_dense(&q).unwrap();
+            let (cn, fnear) = p
+                .project_dense(&test_vectors::at_cosine(&q, near, 10_000 + t))
+                .unwrap();
+            let (cf, ffar) = p
+                .project_dense(&test_vectors::at_cosine(&q, far, 20_000 + t))
+                .unwrap();
+            hamming_ok += u32::from(
+                hdc_hamming_distance_256(&fq, &fnear) < hdc_hamming_distance_256(&fq, &ffar),
+            );
+            geodesic_ok += u32::from(distance(&cq, &cn) < distance(&cq, &cf));
+        }
+        (
+            f64::from(hamming_ok) / trials as f64,
+            f64::from(geodesic_ok) / trials as f64,
+        )
+    }
+
+    #[test]
+    fn dense_stages_order_clear_cosine_gaps_and_blur_close_ones() {
+        let (hamming, geodesic) = ordering_rates(0.9, 0.3);
+        println!("cos 0.9 vs 0.3: hamming {hamming:.3}, geodesic {geodesic:.3}");
+        assert!(hamming >= 0.99, "hamming {hamming}");
+        assert!(geodesic >= 0.95, "geodesic {geodesic}");
+        // The 16-number coordinate cannot split close cosines reliably. This
+        // records the limit; it is not a target.
+        let (hamming, geodesic) = ordering_rates(0.8, 0.7);
+        println!("cos 0.8 vs 0.7: hamming {hamming:.3}, geodesic {geodesic:.3}");
+        assert!(hamming > geodesic, "hamming {hamming} geodesic {geodesic}");
+        assert!(geodesic > 0.5, "geodesic {geodesic}");
     }
 
     #[test]

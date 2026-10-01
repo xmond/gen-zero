@@ -81,8 +81,35 @@ text retrieval over payload-carrying nodes.
     expansion) to `top_k` anchors, then PPR from the anchors seeded
     `1 / (1 + distance)`. Hits are every anchor plus up to `top_k` nodes reached
     only by diffusion, ordered by PPR score, each with its confidence, payload,
-    `source_uri`, `timestamp_ns` and digest. `hybrid_rag_search_text` projects
-    the query with the graph's own projector first (`LodGraph::project_text`).
+    `source_uri`, `timestamp_ns` and digest.
+    `hybrid_rag_search_query(text?, vector?, ...)` projects a query text
+    (`LodGraph::project_text`), a query vector (`LodGraph::project_dense`) or
+    both with the graph's own projector first. With both, each track gives up
+    to `top_k` anchors (at most `3 * top_k` hits).
+  - Anchors: a node is measured by its closest anchor. Text and coordinate
+    queries see its own coordinate and one lexical projection per alias
+    (`LodNode::aliases`, at most 16); vector queries see only the dense
+    projection of its `embedding`. The two kinds are never compared, and
+    `HybridRagResult::searchable_nodes` counts the nodes a query could be
+    compared with. `RagHit::anchor_match` names the anchor that won. A node
+    with `Placement::Embedding` takes the dense projection as its coordinate.
+    All embeddings of one graph have one dimension, fixed by the first.
+  - Alias links: at insert, a node is linked by two `Semantic` edges (one each
+    way, weight 1) to every earlier node holding the same alias (same tokens,
+    any case and spacing; at most 64 holders per alias). PPR follows every edge
+    type in the edge's direction, so a query that anchors one of them reaches
+    the other after the next flush.
+  - Limits, measured by the unit tests in `projection.rs`: the lexical
+    projection puts a translation ("valve closure" / "关闭主阀") as far away as
+    an unrelated text, so such a pair is found only through an alias, an edge
+    or the dense track. The dense track is as good as the caller's embedding
+    model; this crate holds none and was tested with synthetic vectors only.
+    The dense fingerprint tracks the angle (mean Hamming within 2 bits of
+    `256 * theta / pi` at 128, 256 and 512 dimensions). The 16-number
+    coordinate is a coarse sketch: over 400 random triples at 256 dimensions it
+    ordered cosine 0.9 against 0.3 correctly in 99.8% of them, and cosine 0.8
+    against 0.7 in 74.5% (the fingerprint: 88.5%). Stage 2 can therefore
+    reorder close candidates worse than Stage 1 ranked them.
     The Hamming scan is a linear `count_ones` loop; it is not benchmarked and
     uses a hardware POPCNT only when the build enables that target feature.
 - `manifold`: Spec 25 mixed-curvature product manifolds,
@@ -109,6 +136,9 @@ text retrieval over payload-carrying nodes.
   Texts are close when they share n-grams; it is not a semantic embedding, and
   the hyperbolic depth of a projected point carries no hierarchy. Blank text or
   text with no alphanumeric token is `LodError::EmptyInput`.
+  `project_dense` hashes a dense embedding from an external model (16 to 8192
+  finite values, norm above 0) the same way, one signed feature per axis: close
+  means high cosine, nothing more.
 - `ppr`: Personalized PageRank sparse flow engine. Lock-free, CSR-based sparse
   power iteration for context diffusion, `p_{t+1} = (1-alpha) * W_semantic * p_t + alpha * e_seed`.
 - `semiring`: learned relation semiring (Spec 24 §8.6.2). `P(R)` under
@@ -132,7 +162,11 @@ text retrieval over payload-carrying nodes.
   `MAX_FIXED_POINT_STEPS`: graph topology, transactions and confidence evolution.
 - `HybridRagResult`, `RagHit`, `RagDiffusion`, `HYBRID_PPR_TOLERANCE`: hybrid
   retrieval output.
-- `TextEmbeddingProjector`, `PROJECTOR_VERSION`, `HDC_BITS`: text projection.
+- `AnchorMatch`, `ChartAnchor`, `Placement`, `MAX_ALIASES`, `MAX_ALIAS_BYTES`,
+  `MAX_ALIAS_HOLDERS`, `ALIAS_LINK_WEIGHT`, `MIN_EMBEDDING_DIM`,
+  `MAX_EMBEDDING_DIM`: aliases, embeddings and their anchors.
+- `TextEmbeddingProjector`, `PROJECTOR_VERSION`, `DENSE_PROJECTOR_VERSION`,
+  `HDC_BITS`: text and dense-vector projection.
 - `ContainmentCriteria`, `ContainmentScore`, `Digest`, `Epochs`, `FiberId`,
   `GeometryParams`, `Layout`, `MixedCurvatureCoord`, `Point`, `ProductGeometry`,
   `ProductManifold`, `Reject`, `GeometryResult`, `Tangent`, `TopologyPreset`,

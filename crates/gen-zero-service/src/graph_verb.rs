@@ -6,9 +6,12 @@
 //! - `graph_recall`: two-stage HDC + manifold recall under the graph's geometry.
 //! - `graph_rag`: three-stage retrieval (`LodGraph::hybrid_rag_search`): HDC
 //!   prefilter, geodesic rerank to anchors, PPR diffusion from the anchors.
-//!   The query is text (`query_text`, projected with the graph's own
-//!   projector) or a `coord` + `hdc` pair. Every hit carries its payload,
-//!   source and digest.
+//!   The query is text (`query_text`, lexical projection), a dense vector
+//!   from an external embedding model (`query_vector`, dense projection), both
+//!   at once, or a `coord` + `hdc` pair. Text and coordinates are compared
+//!   with each node's own coordinate and its aliases; a vector only with node
+//!   embeddings. Every hit carries its payload, source, digest and aliases,
+//!   and names the anchor that matched.
 //! - `graph_ppr`: Personalized PageRank diffusion from seed entities.
 //! - `graph_prune`: record evidence against one entity, then evolve every
 //!   confidence to the fixed point; dependents that fall below `theta_lo` are
@@ -35,8 +38,14 @@
 //! A deposited node may carry a `payload` (knowledge text, at most 64 KiB) with
 //! an optional `source_uri` and `timestamp_ns` (default: the deposit's wall-clock
 //! time, echoed). A node without `coord` and `hdc` is placed by projecting its
-//! payload; it must then name its `band`, because the depth of a hashed
-//! projection carries no hierarchy.
+//! payload, or, with no payload, its `embedding`; it must then name its `band`,
+//! because the depth of a hashed projection carries no hierarchy.
+//!
+//! A deposited node may carry `aliases` (other names: synonyms, translations)
+//! and an `embedding`. Each alias is one more anchor for text queries, and
+//! nodes that share an alias are linked by `semantic` edges both ways
+//! (`alias_link_edges` in the response). The engine holds no embedding model:
+//! the caller makes the vectors, all of one dimension per graph.
 //!
 //! The graph's geometry (curvature, sphere radius, metric weights) is fixed when
 //! the engine starts (`GENZERO_GRAPH_GEOMETRY`) and echoed in every response.
@@ -51,9 +60,9 @@
 use crate::cognitive::Rejection;
 use crate::zero::action_id;
 use gen_zero_lod::{
-    EdgeType, EpistemicStatus, FixedPointReport, HybridRagResult, LodBand, LodError, LodGraph,
-    LodNode, MixedCurvatureCoord, ZoomDirection, ADMISSION_BETA, ADMISSION_GAMMA,
-    PROJECTOR_VERSION,
+    AnchorMatch, EdgeType, EpistemicStatus, FixedPointReport, HybridRagResult, LodBand, LodError,
+    LodGraph, LodNode, MixedCurvatureCoord, Placement, ZoomDirection, ADMISSION_BETA,
+    ADMISSION_GAMMA, DEFAULT_FALSIFICATION_GAIN, DENSE_PROJECTOR_VERSION, PROJECTOR_VERSION,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -70,8 +79,9 @@ pub const MAX_TOP_K: usize = 256;
 pub const MAX_PPR_SEEDS: usize = 64;
 pub const MAX_PPR_ITERS: usize = 1000;
 const MAX_LABEL_BYTES: usize = 256;
-/// Most anchors one `graph_rag` asks for. A response holds at most
-/// `2 * MAX_RAG_TOP_K` hits of at most 64 KiB payload each: 4 MiB.
+/// Most anchors one `graph_rag` asks for per track. A response holds at most
+/// `3 * MAX_RAG_TOP_K` hits (text and vector together) of at most 64 KiB
+/// payload each: 6 MiB.
 pub const MAX_RAG_TOP_K: usize = 32;
 /// CRAG margin of `graph_rag` when the request names none: 0 turns the
 /// neighbor expansion off. Echoed in every response.
@@ -151,13 +161,17 @@ struct NodeSpec {
     /// Absent: the band the coordinate implies.
     band: Option<u8>,
     status: String,
-    /// With `hdc`, or neither: then the payload is projected.
+    /// With `hdc`, or neither: then the payload is projected, or with no
+    /// payload the embedding.
     coord: Option<CoordSpec>,
     hdc: Option<[u64; 4]>,
     confidence: f32,
     payload: Option<String>,
     source_uri: Option<String>,
     timestamp_ns: Option<u64>,
+    #[serde(default)]
+    aliases: Vec<String>,
+    embedding: Option<Vec<f32>>,
 }
 
 #[derive(Deserialize)]
@@ -191,8 +205,9 @@ struct RecallSpec {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RagSpec {
-    /// Either `query_text`, or `coord` with `hdc`.
+    /// `query_text`, `query_vector` or both; or `coord` with `hdc` alone.
     query_text: Option<String>,
+    query_vector: Option<Vec<f32>>,
     coord: Option<CoordSpec>,
     hdc: Option<[u64; 4]>,
     top_k: usize,
@@ -425,6 +440,13 @@ fn status_name(status: EpistemicStatus) -> &'static str {
     }
 }
 
+fn placement_name(placement: Placement) -> &'static str {
+    match placement {
+        Placement::Chart => "chart",
+        Placement::Embedding => "embedding",
+    }
+}
+
 fn parse<T: for<'de> Deserialize<'de>>(block: &Value, op: GraphOp) -> Result<T, Rejection> {
     T::deserialize(block).map_err(|e| invalid(format!("invalid {} request: {e}", op.name())))
 }
@@ -454,6 +476,9 @@ fn node_json(graph: &LodGraph, id: u32) -> Value {
             "payload_digest": n.payload.as_ref().map(|_| digest_hex(&n.payload_digest)),
             "source_uri": n.source_uri,
             "timestamp_ns": n.payload.as_ref().map(|_| n.timestamp_ns),
+            "aliases": n.aliases,
+            "embedding_dim": n.embedding.as_ref().map(Vec::len),
+            "placement": placement_name(n.placement),
         }),
         None => json!({"node": id, "missing": true}),
     }
@@ -544,20 +569,27 @@ fn deposit(
                 "nodes[{i}].label must be 1..={MAX_LABEL_BYTES} bytes"
             )));
         }
-        let (place, hdc) = match (&n.coord, n.hdc, &n.payload) {
-            (Some(c), Some(hdc), _) => (coord(graph, c)?, hdc),
-            (None, None, Some(text)) => {
-                if n.band.is_none() {
-                    return Err(invalid(format!(
-                        "nodes[{i}] is placed by projecting its payload and must name its \
-                         `band`: a hashed projection's depth carries no hierarchy"
-                    )));
-                }
-                graph.project_text(text).map_err(graph_rejection)?
+        let projected = n.coord.is_none() && n.hdc.is_none();
+        if projected && n.band.is_none() && (n.payload.is_some() || n.embedding.is_some()) {
+            return Err(invalid(format!(
+                "nodes[{i}] is placed by projecting its payload or embedding and must name \
+                 its `band`: a hashed projection's depth carries no hierarchy"
+            )));
+        }
+        let (place, hdc, placement) = match (&n.coord, n.hdc, &n.payload, &n.embedding) {
+            (Some(c), Some(hdc), _, _) => (coord(graph, c)?, hdc, Placement::Chart),
+            (None, None, Some(text), _) => {
+                let (place, hdc) = graph.project_text(text).map_err(graph_rejection)?;
+                (place, hdc, Placement::Chart)
             }
-            (None, None, None) => {
+            (None, None, None, Some(embedding)) => {
+                let (place, hdc) = graph.project_dense(embedding).map_err(graph_rejection)?;
+                (place, hdc, Placement::Embedding)
+            }
+            (None, None, None, None) => {
                 return Err(invalid(format!(
-                    "nodes[{i}] needs `coord` and `hdc`, or a `payload` to project"
+                    "nodes[{i}] needs `coord` and `hdc`, or a `payload` or an `embedding` to \
+                     project"
                 )))
             }
             _ => {
@@ -569,7 +601,14 @@ fn deposit(
         let mut node = LodNode::new(0, LodBand::Lod0Atomic, place, label, entity_id)
             .with_status(parse_status(&n.status, allow_axiomatic)?)
             .with_hdc_fingerprint(hdc)
-            .with_prior(n.confidence);
+            .with_prior(n.confidence)
+            .with_aliases(n.aliases.iter().map(String::as_str));
+        if let Some(embedding) = &n.embedding {
+            node = node.with_embedding(embedding.clone());
+        }
+        if placement == Placement::Embedding {
+            node = node.placed_by_embedding();
+        }
         match &n.payload {
             Some(text) => {
                 let timestamp_ns = match n.timestamp_ns {
@@ -610,7 +649,7 @@ fn deposit(
         edges.push((source, target, parse_edge_type(&e.edge_type)?, e.weight));
     }
 
-    let (node_ids, tickets, flush) = graph
+    let (node_ids, alias_link_edges, tickets, flush) = graph
         .transact(|g| {
             if g.node_count() + nodes.len() > MAX_GRAPH_NODES {
                 return Err(LodError::InvalidNode(format!(
@@ -618,9 +657,12 @@ fn deposit(
                 )));
             }
             let mut ids = Vec::with_capacity(nodes.len());
+            let pending_before = g.pending_edge_count();
             for node in nodes {
                 ids.push(g.add_node(node)?);
             }
+            // Inserts append edges only between nodes that share an alias.
+            let alias_link_edges = g.pending_edge_count() - pending_before;
             let mut resolved = Vec::with_capacity(edges.len());
             for &(source, target, edge_type, weight) in &edges {
                 let s = g
@@ -634,14 +676,16 @@ fn deposit(
             // One admission pass for the whole deposit.
             let tickets = g.add_edges(&resolved)?;
             let flush = g.flush_edges_to_csr()?;
-            Ok((ids, tickets, flush))
+            Ok((ids, alias_link_edges, tickets, flush))
         })
         .map_err(graph_rejection)?;
 
     let summary = format!(
-        "graph_deposit: {} node(s), {} edge(s) committed; CSR now {} edge(s)",
+        "graph_deposit: {} node(s), {} edge(s) and {} alias link edge(s) committed; CSR now \
+         {} edge(s)",
         node_ids.len(),
         tickets.len(),
+        alias_link_edges,
         flush.csr_edges
     );
     let deposited: Vec<Value> = node_ids.iter().map(|&id| node_json(graph, id)).collect();
@@ -650,6 +694,7 @@ fn deposit(
         json!({
             "nodes": deposited,
             "edge_tickets": tickets,
+            "alias_link_edges": alias_link_edges,
             "flush": {
                 "merged_edges": flush.merged_edges,
                 "csr_nodes": flush.csr_nodes,
@@ -695,14 +740,24 @@ fn rag(graph: &LodGraph, spec: RagSpec) -> Result<(String, Value), Rejection> {
             "max_iters must be at most {MAX_PPR_ITERS}"
         )));
     }
-    let (result, query) = match (&spec.query_text, &spec.coord, spec.hdc) {
-        (Some(text), None, None) => (
+    let (text, vector) = (spec.query_text.as_deref(), spec.query_vector.as_deref());
+    let (result, query) = match (text.is_some() || vector.is_some(), &spec.coord, spec.hdc) {
+        (true, None, None) => (
             graph
-                .hybrid_rag_search_text(text, spec.top_k, crag_margin, alpha, max_iters)
+                .hybrid_rag_search_query(text, vector, spec.top_k, crag_margin, alpha, max_iters)
                 .map_err(graph_rejection)?,
-            json!({"kind": "text", "projector": PROJECTOR_VERSION}),
+            json!({
+                "kind": match (text, vector) {
+                    (Some(_), Some(_)) => "text+vector",
+                    (Some(_), None) => "text",
+                    _ => "vector",
+                },
+                "projector": text.map(|_| PROJECTOR_VERSION),
+                "dense_projector": vector.map(|_| DENSE_PROJECTOR_VERSION),
+                "vector_dim": vector.map(<[f32]>::len),
+            }),
         ),
-        (None, Some(c), Some(hdc)) => (
+        (false, Some(c), Some(hdc)) => (
             graph
                 .hybrid_rag_search(
                     &coord(graph, c)?,
@@ -717,7 +772,8 @@ fn rag(graph: &LodGraph, spec: RagSpec) -> Result<(String, Value), Rejection> {
         ),
         _ => {
             return Err(invalid(
-                "graph_rag needs exactly one query: `query_text`, or `coord` with `hdc`",
+                "graph_rag needs `query_text`, `query_vector` or both, or else `coord` with \
+                 `hdc` alone",
             ))
         }
     };
@@ -726,6 +782,7 @@ fn rag(graph: &LodGraph, spec: RagSpec) -> Result<(String, Value), Rejection> {
         hits,
         anchors,
         stage1_candidates,
+        searchable_nodes,
         diffusion,
     } = result;
     let hits: Vec<Value> = hits
@@ -741,6 +798,16 @@ fn rag(graph: &LodGraph, spec: RagSpec) -> Result<(String, Value), Rejection> {
                 "ppr_score": h.ppr_score,
                 "anchor_distance": h.anchor_distance,
                 "via": if h.anchor_distance.is_some() { "anchor" } else { "diffusion" },
+                "matched": h.anchor_match.map(|m| match m {
+                    AnchorMatch::Primary => "primary",
+                    AnchorMatch::Alias(_) => "alias",
+                    AnchorMatch::Embedding => "embedding",
+                }),
+                "matched_alias": match h.anchor_match {
+                    Some(AnchorMatch::Alias(i)) => h.aliases.get(i).cloned(),
+                    _ => None,
+                },
+                "aliases": h.aliases,
                 "payload_digest": h.payload.as_ref().map(|_| digest_hex(&h.payload_digest)),
                 "timestamp_ns": h.payload.as_ref().map(|_| h.timestamp_ns),
                 "payload": h.payload,
@@ -773,6 +840,7 @@ fn rag(graph: &LodGraph, spec: RagSpec) -> Result<(String, Value), Rejection> {
             "hits": hits,
             "anchors": anchors,
             "stage1_candidates": stage1_candidates,
+            "searchable_nodes": searchable_nodes,
             "diffusion": diffusion,
             "top_k": spec.top_k,
             "crag_margin": crag_margin,
