@@ -1702,13 +1702,29 @@ async fn durable_graph_restart_preserves_prune_and_evolve_gate_effects() {
 }
 
 #[tokio::test]
-async fn failed_graph_disk_commit_blocks_subsequent_service_decisions() {
+async fn failed_graph_disk_commits_never_serve_uncommitted_state() {
     let dir = tempfile::tempdir().unwrap();
     let engine = PolymorphicZeroEngine::try_from_config(persistent_config(dir.path()))
         .unwrap()
         .with_semantic(None);
     assert!(!deposit_world(&engine).await.is_error);
+    // A write that fails before the manifest rename changes nothing: the prune
+    // is refused as a server-side failure and entity 7 stays decidable.
     std::fs::create_dir(dir.path().join("WRITE.tmp")).unwrap();
+    let failure = run(
+        &engine,
+        json!({"action":"graph_prune","graph":{"entity_id":7}}),
+    )
+    .await;
+    assert!(failure.is_error, "{failure:?}");
+    assert_eq!(code(&failure), "GraphPersistence");
+    assert_eq!(failure.meta["reject"]["http_status"], 503);
+    assert!(!run(&engine, decide(&[7])).await.is_error);
+    std::fs::remove_dir(dir.path().join("WRITE.tmp")).unwrap();
+    // A failed manifest rename is ambiguous: the engine stops serving.
+    std::fs::remove_file(dir.path().join("CURRENT.sha256")).unwrap();
+    std::fs::create_dir(dir.path().join("CURRENT.sha256")).unwrap();
+    std::fs::write(dir.path().join("CURRENT.sha256").join("occupied"), b"x").unwrap();
     let failure = engine
         .execute(&json!({"action":"graph_prune","graph":{"entity_id":7}}))
         .await;

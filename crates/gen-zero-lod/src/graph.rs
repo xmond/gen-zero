@@ -334,16 +334,128 @@ fn check_edge(num_nodes: usize, source: u32, target: u32, weight: f32) -> Result
     Ok(())
 }
 
+/// Nodes per copy-on-write chunk, and per persisted node block.
+const NODE_CHUNK: usize = 128;
+
+/// Nodes in copy-on-write chunks of [`NODE_CHUNK`]. A clone shares every
+/// chunk and a write copies only the chunk it touches, so the nodes of a
+/// transaction candidate cost `O(nodes / NODE_CHUNK)` to share, and
+/// persistence finds the chunks a commit changed by pointer identity alone.
+#[derive(Clone, Default)]
+struct NodeChunks {
+    chunks: Vec<Arc<Vec<LodNode>>>,
+    len: usize,
+}
+
+impl NodeChunks {
+    fn len(&self) -> usize {
+        self.len
+    }
+
+    fn get(&self, id: usize) -> Option<&LodNode> {
+        (id < self.len).then(|| &self.chunks[id / NODE_CHUNK][id % NODE_CHUNK])
+    }
+
+    /// Copies the node's chunk first when another state shares it.
+    fn get_mut(&mut self, id: usize) -> Option<&mut LodNode> {
+        (id < self.len)
+            .then(|| &mut Arc::make_mut(&mut self.chunks[id / NODE_CHUNK])[id % NODE_CHUNK])
+    }
+
+    fn push(&mut self, node: LodNode) {
+        if self.len % NODE_CHUNK == 0 {
+            self.chunks.push(Arc::new(Vec::with_capacity(NODE_CHUNK)));
+        }
+        let last = self.chunks.last_mut().expect("a chunk was just ensured");
+        Arc::make_mut(last).push(node);
+        self.len += 1;
+    }
+
+    fn truncate(&mut self, len: usize) {
+        if len >= self.len {
+            return;
+        }
+        self.chunks.truncate(len.div_ceil(NODE_CHUNK));
+        if len % NODE_CHUNK != 0 {
+            let last = self.chunks.last_mut().expect("len > 0 keeps a chunk");
+            Arc::make_mut(last).truncate(len % NODE_CHUNK);
+        }
+        self.len = len;
+    }
+
+    fn iter(&self) -> impl Iterator<Item = &LodNode> + '_ {
+        self.chunks.iter().flat_map(|chunk| chunk.iter())
+    }
+
+    fn chunks(&self) -> &[Arc<Vec<LodNode>>] {
+        &self.chunks
+    }
+
+    /// Reassemble restored chunks. Every chunk but the last must be full.
+    fn from_chunks(chunks: Vec<Arc<Vec<LodNode>>>) -> Result<Self, LodError> {
+        let mut len = 0;
+        for (i, chunk) in chunks.iter().enumerate() {
+            let last = i + 1 == chunks.len();
+            if chunk.is_empty() || chunk.len() > NODE_CHUNK || (!last && chunk.len() != NODE_CHUNK)
+            {
+                return Err(LodError::Persistence(format!(
+                    "node block {i} holds {} nodes, not a {NODE_CHUNK}-node chunk",
+                    chunk.len()
+                )));
+            }
+            len += chunk.len();
+        }
+        Ok(Self { chunks, len })
+    }
+}
+
+impl std::ops::Index<usize> for NodeChunks {
+    type Output = LodNode;
+
+    fn index(&self, id: usize) -> &LodNode {
+        self.get(id).expect("node id out of range")
+    }
+}
+
+impl std::ops::IndexMut<usize> for NodeChunks {
+    fn index_mut(&mut self, id: usize) -> &mut LodNode {
+        self.get_mut(id).expect("node id out of range")
+    }
+}
+
+/// Add the checkpoint range `(after, upto]` to sorted, disjoint `discarded`.
+fn discard_range(discarded: &mut Vec<(u64, u64)>, after: u64, upto: u64) {
+    discarded.push((after, upto));
+    discarded.sort_unstable();
+    let mut merged: Vec<(u64, u64)> = Vec::with_capacity(discarded.len());
+    for &(a, b) in discarded.iter() {
+        match merged.last_mut() {
+            Some(last) if a <= last.1 => last.1 = last.1.max(b),
+            _ => merged.push((a, b)),
+        }
+    }
+    *discarded = merged;
+}
+
 /// Mutable graph state. One lock guards all of it, so a checkpoint or a rollback
 /// reads or restores a single consistent state.
+///
+/// Writers never change the live state in place: [`LodGraph::transact`] runs
+/// on a private candidate cloned from it and publishes the candidate whole,
+/// after a durable commit when the graph is persistent. Readers see only
+/// published states. Cost of a candidate: nodes and both indexes are shared
+/// copy-on-write, but pending edges, revocations, privileges and validated
+/// dependencies are cloned, and the first insert copies the entity index, a
+/// first alias the alias index: `O(nodes)` memory work, though no disk work.
 ///
 /// Lock order: `txn_lock` -> `flush_lock` -> `state`. The CSR snapshot is stored
 /// only while `state` is write-locked; methods that must see it consistent with
 /// the nodes load it while holding `state`.
-#[derive(Clone, Default, Serialize, Deserialize)]
+#[derive(Clone, Default)]
 struct GraphState {
-    nodes: Vec<LodNode>,
-    entity_index: HashMap<u64, u32>,
+    nodes: NodeChunks,
+    /// Shared copy-on-write: the first insert of a transaction copies the map.
+    entity_index: Arc<HashMap<u64, u32>>,
     /// Edges not yet merged into the CSR snapshot, in ticket order.
     edge_buffer: Vec<BufferedEdge>,
     revocations: HashSet<u64>,
@@ -353,7 +465,7 @@ struct GraphState {
     privileges: HashMap<u64, Vec<u32>>,
     validated_deps: HashSet<(u64, u64)>,
     /// Nodes holding each alias, keyed by the alias in normalized form.
-    alias_index: HashMap<String, Vec<u32>>,
+    alias_index: Arc<HashMap<String, Vec<u32>>>,
     /// Dimension of every node embedding in this graph, fixed by the first one.
     embedding_dim: Option<usize>,
     /// Bumped by every CSR store and every rollback. A flush built against an
@@ -1131,7 +1243,7 @@ fn solve_by_blocks(
 /// along edges that do: adding it closes a cycle. An edge that closes none
 /// cannot raise any block's Lipschitz bound, it only dilutes its target's row.
 fn closes_confidence_cycle(
-    nodes: &[LodNode],
+    nodes: &NodeChunks,
     snapshot: &CsrGraph,
     pending: &[BufferedEdge],
     edge: &BufferedEdge,
@@ -1172,7 +1284,7 @@ fn closes_confidence_cycle(
 /// first cycle that is not a contraction at [`ADMISSION_BETA`],
 /// [`ADMISSION_GAMMA`].
 fn admission_refusal(
-    nodes: &[LodNode],
+    nodes: &NodeChunks,
     snapshot: &CsrGraph,
     pending: &[BufferedEdge],
 ) -> Option<LodError> {
@@ -1220,7 +1332,7 @@ fn is_pinned(node: &LodNode) -> bool {
 /// when `with_falsifiers`, the positive-weight `Falsifies` edges, each kind over
 /// its own total.
 fn signed_rows(
-    nodes: &[LodNode],
+    nodes: &NodeChunks,
     snapshot: &CsrGraph,
     pending: &[BufferedEdge],
     with_falsifiers: bool,
@@ -1270,7 +1382,7 @@ fn signed_rows(
 
 /// The validated dependencies the current statuses and edges imply.
 fn validated_dependencies(
-    nodes: &[LodNode],
+    nodes: &NodeChunks,
     snapshot: &CsrGraph,
     pending: &[BufferedEdge],
 ) -> HashSet<(u64, u64)> {
@@ -1431,13 +1543,21 @@ pub struct LodGraph {
     projector: TextEmbeddingProjector,
     state: RwLock<GraphState>,
     csr_snapshot: ArcSwap<CsrGraph>,
-    ticket_counter: AtomicU64,
-    checkpoint_seq: AtomicU64,
+    /// Shared with every candidate of this graph, so a ticket or checkpoint
+    /// number is issued once, whichever copy issues it.
+    ticket_counter: Arc<AtomicU64>,
+    checkpoint_seq: Arc<AtomicU64>,
     /// Serializes flush builds against each other and against rollbacks.
     flush_lock: Mutex<()>,
-    /// Serializes [`LodGraph::transact`] writers.
+    /// Serializes writers: every transaction and every direct write.
     txn_lock: Mutex<()>,
     persistence: Option<persistence::Persistence>,
+    /// A private transaction candidate ([`LodGraph::transact`]). Its writes
+    /// change it in place; nothing else can see it until it is published.
+    candidate: bool,
+    /// Checkpoint numbers this candidate issued. If it is dropped unpublished,
+    /// they are discarded in the graph it came from.
+    issued: Mutex<Vec<u64>>,
 }
 
 impl Default for LodGraph {
@@ -1489,12 +1609,93 @@ impl LodGraph {
             projector: TextEmbeddingProjector::new(c)?,
             state: RwLock::new(GraphState::default()),
             csr_snapshot: ArcSwap::from_pointee(CsrGraph::empty()),
-            ticket_counter: AtomicU64::new(1),
-            checkpoint_seq: AtomicU64::new(0),
+            ticket_counter: Arc::new(AtomicU64::new(1)),
+            checkpoint_seq: Arc::new(AtomicU64::new(0)),
             flush_lock: Mutex::new(()),
             txn_lock: Mutex::new(()),
             persistence: None,
+            candidate: false,
+            issued: Mutex::new(Vec::new()),
         })
+    }
+
+    /// A private candidate holding this graph's current state. It shares the
+    /// graph id, so a checkpoint of this graph can be restored into it, and
+    /// shares its ticket and checkpoint counters.
+    fn fork(&self) -> LodGraph {
+        let st = self.state.read();
+        LodGraph {
+            graph_id: self.graph_id,
+            manifold: self.manifold.clone(),
+            metric: self.metric,
+            projector: self.projector.clone(),
+            state: RwLock::new(st.clone()),
+            csr_snapshot: ArcSwap::new(self.csr_snapshot.load_full()),
+            ticket_counter: Arc::clone(&self.ticket_counter),
+            checkpoint_seq: Arc::clone(&self.checkpoint_seq),
+            flush_lock: Mutex::new(()),
+            txn_lock: Mutex::new(()),
+            persistence: None,
+            candidate: true,
+            issued: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// Commit `candidate` durably when this graph is persistent, then make it
+    /// the live state in one step. On a commit error the live state is untouched.
+    /// The caller holds `txn_lock`.
+    fn publish(&self, candidate: LodGraph) -> Result<(), LodError> {
+        let csr = candidate.csr_snapshot.load_full();
+        let mut staged = candidate.state.into_inner();
+        if let Some(p) = &self.persistence {
+            let next_ticket = self.ticket_counter.load(Ordering::Relaxed);
+            p.commit(&staged, &csr, next_ticket, self.geometry())?;
+        }
+        let _flush = self.flush_lock.lock();
+        let mut live = self.state.write();
+        // A flush built against the replaced state must not commit.
+        staged.generation = staged.generation.max(live.generation) + 1;
+        // Dry runs dropped while this candidate ran discarded into live.
+        for &(after, upto) in &live.discarded {
+            discard_range(&mut staged.discarded, after, upto);
+        }
+        *live = staged;
+        self.csr_snapshot.store(csr);
+        Ok(())
+    }
+
+    /// A candidate dropped unpublished: its checkpoints describe states that
+    /// never existed here, so no rollback may restore them.
+    fn discard_unpublished(&self, candidate: LodGraph) {
+        let seqs = candidate.issued.into_inner();
+        if seqs.is_empty() {
+            return;
+        }
+        {
+            let _flush = self.flush_lock.lock();
+            let mut st = self.state.write();
+            for &seq in &seqs {
+                discard_range(&mut st.discarded, seq - 1, seq);
+            }
+        }
+        if self.candidate {
+            self.issued.lock().extend(seqs);
+        }
+    }
+
+    /// Run one direct write. A candidate changes in place. A persistent live
+    /// graph runs it as a [`Self::transact`], so it is durable before anyone
+    /// sees it. An in-memory live graph runs it in place under `txn_lock`, so
+    /// it cannot interleave with a transaction that would publish over it.
+    fn write<T>(&self, op: impl FnOnce(&LodGraph) -> Result<T, LodError>) -> Result<T, LodError> {
+        if self.candidate {
+            return op(self);
+        }
+        if self.persistence.is_some() {
+            return self.transact(op);
+        }
+        let _txn = self.txn_lock.lock();
+        op(self)
     }
 
     /// The geometry every distance of this graph uses.
@@ -1546,6 +1747,10 @@ impl LodGraph {
     /// refuses or whose dimension differs from the graph's earlier embeddings;
     /// and [`Placement::Embedding`] without an embedding.
     pub fn add_node(&self, node: LodNode) -> Result<u32, LodError> {
+        self.write(|g| g.add_node_now(node))
+    }
+
+    fn add_node_now(&self, node: LodNode) -> Result<u32, LodError> {
         let mut st = self.state.write();
         self.insert_node(&mut st, node)
     }
@@ -1642,7 +1847,7 @@ impl LodGraph {
         if node.status.is_falsified() {
             st.revocations.insert(node.entity_id);
         }
-        st.entity_index.insert(node.entity_id, id);
+        Arc::make_mut(&mut st.entity_index).insert(node.entity_id, id);
         if st.embedding_dim.is_none() {
             st.embedding_dim = node.embedding.as_ref().map(Vec::len);
         }
@@ -1650,7 +1855,7 @@ impl LodGraph {
         // Nothing below can fail: both ends exist and the weight is valid.
         let mut linked = HashSet::new();
         for key in alias_keys {
-            let holders = st.alias_index.entry(key).or_default();
+            let holders = Arc::make_mut(&mut st.alias_index).entry(key).or_default();
             let earlier = holders.clone();
             holders.push(id);
             for holder in earlier {
@@ -1710,6 +1915,16 @@ impl LodGraph {
         edge_type: EdgeType,
         weight: f32,
     ) -> Result<u64, LodError> {
+        self.write(|g| g.add_edge_now(source, target, edge_type, weight))
+    }
+
+    fn add_edge_now(
+        &self,
+        source: u32,
+        target: u32,
+        edge_type: EdgeType,
+        weight: f32,
+    ) -> Result<u64, LodError> {
         let mut st = self.state.write();
         self.push_edge(&mut st, source, target, edge_type, weight)
     }
@@ -1720,6 +1935,10 @@ impl LodGraph {
     /// one per edge, so a large deposit stays linear). Any refusal leaves the
     /// buffer as it was: no edge of the batch is added.
     pub fn add_edges(&self, edges: &[(u32, u32, EdgeType, f32)]) -> Result<Vec<u64>, LodError> {
+        self.write(|g| g.add_edges_now(edges))
+    }
+
+    fn add_edges_now(&self, edges: &[(u32, u32, EdgeType, f32)]) -> Result<Vec<u64>, LodError> {
         let mut st = self.state.write();
         let mut batch = Vec::with_capacity(edges.len());
         for &(source, target, edge_type, weight) in edges {
@@ -1815,10 +2034,14 @@ impl LodGraph {
     /// buffer. The new snapshot is the current snapshot plus the pending delta,
     /// grown to the current node count, and is validated before it is published.
     ///
-    /// On any error the old snapshot and the whole buffer are kept. Edges added
-    /// while the snapshot builds stay pending. A rollback during the build makes
-    /// this return `FlushConflict` without committing.
+    /// On any error the old snapshot and the whole buffer are kept. Like every
+    /// direct write it is serialized with the other writers (a transaction on a
+    /// persistent graph), so the build blocks writers, never readers.
     pub fn flush_edges_to_csr(&self) -> Result<FlushReport, LodError> {
+        self.write(|g| g.flush_edges_to_csr_now())
+    }
+
+    fn flush_edges_to_csr_now(&self) -> Result<FlushReport, LodError> {
         let _flush = self.flush_lock.lock();
         let (base, pending, num_nodes, generation) = {
             let st = self.state.read();
@@ -1860,6 +2083,10 @@ impl LodGraph {
     /// must stay strictly finer and every summary it belongs to strictly
     /// coarser. The coordinate is not moved.
     pub fn zoom_node(&self, node_id: u32, direction: ZoomDirection) -> Result<LodBand, LodError> {
+        self.write(|g| g.zoom_node_now(node_id, direction))
+    }
+
+    fn zoom_node_now(&self, node_id: u32, direction: ZoomDirection) -> Result<LodBand, LodError> {
         let mut st = self.state.write();
         let band = st
             .nodes
@@ -1880,6 +2107,10 @@ impl LodGraph {
     /// changes nothing. The whole move is refused, and nothing changes, when the
     /// target band breaks the coarse-grain order.
     pub fn migrate_band_to_coord(&self, node_id: u32) -> Result<(LodBand, LodBand), LodError> {
+        self.write(|g| g.migrate_band_to_coord_now(node_id))
+    }
+
+    fn migrate_band_to_coord_now(&self, node_id: u32) -> Result<(LodBand, LodBand), LodError> {
         let mut st = self.state.write();
         let node = st
             .nodes
@@ -1943,10 +2174,23 @@ impl LodGraph {
     /// Refused, with nothing changed: an empty cluster, a repeated or unknown
     /// member, a falsified or revoked member, a member that already has a parent,
     /// a summary band not above every member, a coordinate outside this graph's
-    /// geometry and an entity that already has a node. A flush failure is
-    /// returned after the summary and its pending edges are inserted; run the
-    /// call inside [`Self::transact`] to roll that back.
+    /// geometry and an entity that already has a node. On a persistent graph
+    /// the call is one transaction. On an in-memory graph a flush failure is
+    /// returned after the summary and its pending edges are inserted, visible to
+    /// readers; run the call inside [`Self::transact`] to make it atomic.
     pub fn coarse_grain_cluster(
+        &self,
+        cluster_node_ids: &[u32],
+        summary_entity_id: u64,
+        summary_coord: MixedCurvatureCoord,
+        hdc: [u64; 4],
+    ) -> Result<u32, LodError> {
+        self.write(|g| {
+            g.coarse_grain_cluster_now(cluster_node_ids, summary_entity_id, summary_coord, hdc)
+        })
+    }
+
+    fn coarse_grain_cluster_now(
         &self,
         cluster_node_ids: &[u32],
         summary_entity_id: u64,
@@ -2011,7 +2255,7 @@ impl LodGraph {
             }
             summary_id
         };
-        self.flush_edges_to_csr()?;
+        self.flush_edges_to_csr_now()?;
         Ok(summary_id)
     }
 
@@ -2437,6 +2681,10 @@ impl LodGraph {
     /// Returns the number of validated dependencies retracted. An unknown node or
     /// an axiom is an error.
     pub fn falsify_node(&self, node_id: u32) -> Result<usize, LodError> {
+        self.write(|g| g.falsify_node_now(node_id))
+    }
+
+    fn falsify_node_now(&self, node_id: u32) -> Result<usize, LodError> {
         let mut guard = self.state.write();
         let st = &mut *guard;
         let node = st
@@ -2467,6 +2715,10 @@ impl LodGraph {
     /// when the node's edges would close a cycle that admission
     /// ([`Self::add_edge`]) refuses.
     pub fn retract_falsification(&self, node_id: u32) -> Result<(), LodError> {
+        self.write(|g| g.retract_falsification_now(node_id))
+    }
+
+    fn retract_falsification_now(&self, node_id: u32) -> Result<(), LodError> {
         let mut guard = self.state.write();
         let st = &mut *guard;
         let node = st
@@ -2563,6 +2815,22 @@ impl LodGraph {
         theta_hi: f32,
         max_steps: usize,
     ) -> Result<FixedPointReport, LodError> {
+        self.write(|g| {
+            g.evolve_signed_epistemic_fixed_point_within_now(
+                beta, gamma, tolerance, theta_lo, theta_hi, max_steps,
+            )
+        })
+    }
+
+    fn evolve_signed_epistemic_fixed_point_within_now(
+        &self,
+        beta: f32,
+        gamma: f32,
+        tolerance: f32,
+        theta_lo: f32,
+        theta_hi: f32,
+        max_steps: usize,
+    ) -> Result<FixedPointReport, LodError> {
         let bad = |detail: String| Err(LodError::InvalidQuery(detail));
         if !(beta.is_finite() && beta > 0.0 && beta < 1.0) {
             return bad(format!("beta must satisfy 0 < beta < 1, got {beta}"));
@@ -2638,25 +2906,31 @@ impl LodGraph {
         let mut revoked_entities = Vec::new();
         let mut reinstated_entities = Vec::new();
         let mut pinned = 0;
-        for (node, &c) in st.nodes.iter_mut().zip(&run.confidences) {
+        for (id, &c) in run.confidences.iter().enumerate() {
             let confidence = c.clamp(0.0, 1.0) as f32;
-            node.confidence = confidence;
-            if is_pinned(node) {
-                pinned += 1;
-                continue;
-            }
+            let node = &st.nodes[id];
             let from = node.status;
-            let to = if confidence < theta_lo {
+            let to = if is_pinned(node) {
+                pinned += 1;
+                from
+            } else if confidence < theta_lo {
                 EpistemicStatus::Falsified
             } else if confidence > theta_hi {
                 EpistemicStatus::Validated
             } else {
                 from
             };
+            // Write only a node that changes: a write copies its chunk, and a
+            // copied chunk is a block the next durable commit must write.
+            if node.confidence.to_bits() != confidence.to_bits() || to != from {
+                let node = &mut st.nodes[id];
+                node.confidence = confidence;
+                node.status = to;
+            }
             if to == from {
                 continue;
             }
-            node.status = to;
+            let node = &st.nodes[id];
             transitions.push(StatusTransition {
                 node: node.id,
                 entity_id: node.entity_id,
@@ -2724,7 +2998,13 @@ impl LodGraph {
     fn capture(&self, st: &GraphState) -> GraphCheckpoint {
         GraphCheckpoint {
             graph_id: self.graph_id,
-            seq: self.checkpoint_seq.fetch_add(1, Ordering::Relaxed) + 1,
+            seq: {
+                let seq = self.checkpoint_seq.fetch_add(1, Ordering::Relaxed) + 1;
+                if self.candidate {
+                    self.issued.lock().push(seq);
+                }
+                seq
+            },
             node_states: st.nodes.iter().map(NodeMutable::of).collect(),
             csr: self.csr_snapshot.load_full(),
             edge_buffer: st.edge_buffer.clone(),
@@ -2747,6 +3027,10 @@ impl LodGraph {
     /// checkpoint of another graph, and one taken after an earlier checkpoint that
     /// has since been restored (its state no longer exists).
     pub fn rollback_checkpoint(&self, checkpoint: &GraphCheckpoint) -> Result<(), LodError> {
+        self.write(|g| g.rollback_checkpoint_now(checkpoint))
+    }
+
+    fn rollback_checkpoint_now(&self, checkpoint: &GraphCheckpoint) -> Result<(), LodError> {
         let _flush = self.flush_lock.lock();
         let mut st = self.state.write();
         if checkpoint.graph_id != self.graph_id {
@@ -2768,15 +3052,28 @@ impl LodGraph {
             )));
         }
 
-        st.nodes.truncate(keep);
-        st.entity_index.retain(|_, id| (*id as usize) < keep);
-        st.alias_index.retain(|_, holders| {
-            holders.retain(|id| (*id as usize) < keep);
-            !holders.is_empty()
-        });
+        // Copy-on-write: touch only what differs, so a rollback dirties
+        // only the chunks and indexes its discarded writes changed.
+        if keep < st.nodes.len() {
+            st.nodes.truncate(keep);
+            Arc::make_mut(&mut st.entity_index).retain(|_, id| (*id as usize) < keep);
+            if st
+                .alias_index
+                .values()
+                .flatten()
+                .any(|id| *id as usize >= keep)
+            {
+                Arc::make_mut(&mut st.alias_index).retain(|_, holders| {
+                    holders.retain(|id| (*id as usize) < keep);
+                    !holders.is_empty()
+                });
+            }
+        }
         st.embedding_dim = checkpoint.embedding_dim;
-        for (node, state) in st.nodes.iter_mut().zip(&checkpoint.node_states) {
-            state.restore(node);
+        for (id, state) in checkpoint.node_states.iter().enumerate() {
+            if NodeMutable::of(&st.nodes[id]) != *state {
+                state.restore(&mut st.nodes[id]);
+            }
         }
         st.edge_buffer = checkpoint.edge_buffer.clone();
         st.revocations = checkpoint.revocations.clone();
@@ -2800,28 +3097,43 @@ impl LodGraph {
         Ok(())
     }
 
-    /// Run `f` as one write transaction: writers through `transact` are
-    /// serialized, and an error from `f` rolls the graph back to its state before
-    /// `f`. Not reentrant: calling `transact` inside `f` deadlocks.
+    /// Run `f` as one write transaction on a private candidate of the graph.
+    /// Readers keep seeing the state before `f` until the candidate is
+    /// published whole: after its durable commit when the graph is persistent.
+    /// An error from `f` or from the commit drops the candidate; the live state
+    /// is never touched. Writers are serialized. A `transact` inside `f` runs
+    /// on a candidate of the candidate and publishes into it. `f` must write
+    /// through its argument: a direct write to this graph from inside `f`
+    /// waits for the transaction and deadlocks.
     pub fn transact<T>(
         &self,
         f: impl FnOnce(&LodGraph) -> Result<T, LodError>,
     ) -> Result<T, LodError> {
         let _txn = self.txn_lock.lock();
         self.check_persistence()?;
-        let checkpoint = self.create_checkpoint();
-        match f(self).and_then(|value| {
-            self.persist_commit()?;
-            Ok(value)
-        }) {
-            Ok(value) => Ok(value),
-            Err(error) => match self.rollback_checkpoint(&checkpoint) {
-                Ok(()) => Err(error),
-                Err(rollback) => Err(LodError::CheckpointRejected(format!(
-                    "transaction failed ({error}) and its rollback was refused: {rollback}"
-                ))),
-            },
-        }
+        let candidate = self.fork();
+        let value = match f(&candidate) {
+            Ok(value) => value,
+            Err(error) => {
+                self.discard_unpublished(candidate);
+                return Err(error);
+            }
+        };
+        self.publish(candidate)?;
+        Ok(value)
+    }
+
+    /// Run `f` on a private candidate and drop it: the report of a write that
+    /// is never applied. Nothing is published or persisted, so no reader can
+    /// see the trial state, not even for a moment.
+    pub fn dry_run<T>(
+        &self,
+        f: impl FnOnce(&LodGraph) -> Result<T, LodError>,
+    ) -> Result<T, LodError> {
+        let candidate = self.fork();
+        let result = f(&candidate);
+        self.discard_unpublished(candidate);
+        result
     }
 
     /// Fail-closed prior check over the action, its coarse ancestors and causal
@@ -2881,7 +3193,7 @@ impl LodGraph {
         Ok(facts)
     }
 
-    /// Record a model/policy observation and evolve under one exclusive lock.
+    /// Record a model/policy observation and evolve, as one transaction.
     /// Observation confidence expresses certainty that the diagnostic occurred,
     /// not calibrated real-world causality. Identical payloads reuse evidence.
     ///
@@ -2898,24 +3210,26 @@ impl LodGraph {
     /// falls below the threshold, otherwise by an explicit quarantine
     /// ([`ReflectionRevocation::Quarantine`]).
     ///
-    /// On failure no staged evidence is published; the target is quarantined and
-    /// the caller receives an error. An axiom cannot be silently rewritten.
+    /// On failure no staged evidence is published and the caller receives the
+    /// error. A refused reflection quarantines the target durably, by a second
+    /// transaction. A reflection or quarantine the disk refuses revokes the
+    /// target in memory only and poisons the graph: never fail open. Call it on
+    /// the live graph: inside a transaction the quarantine is part of the
+    /// outer candidate and is dropped with it if that transaction fails. An axiom cannot be silently rewritten.
     pub fn reflect_failure(
         &self,
         action: u32,
         payload: &str,
         timestamp_ns: u64,
     ) -> Result<ReflectionReport, LodError> {
-        let _txn = self.txn_lock.lock();
-        self.check_persistence()?;
-        let mut live = self.state.write();
-        let mut staged = live.clone();
-        let result = (|| {
+        let result = self.transact(|g| {
+            let mut guard = g.state.write();
+            let staged = &mut *guard;
             let entity = u64::from(action);
             let target = match staged.entity_index.get(&entity) {
                 Some(&id) => id,
-                None => self.insert_node(
-                    &mut staged,
+                None => g.insert_node(
+                    staged,
                     LodNode::new(
                         0,
                         LodBand::Lod0Atomic,
@@ -2938,7 +3252,7 @@ impl LodGraph {
                     if staged.nodes[id as usize].payload.as_deref() != Some(payload) {
                         return Err(LodError::InvalidQuery("reflection entity collision".into()));
                     }
-                    let csr = self.csr_snapshot.load_full();
+                    let csr = g.csr_snapshot.load_full();
                     let has_edge = csr
                         .neighbors(id)
                         .chain(
@@ -2972,13 +3286,13 @@ impl LodGraph {
                         Some("pipeline:failure-observation".into()),
                         timestamp_ns,
                     )?;
-                    let id = self.insert_node(&mut staged, node)?;
-                    self.push_edge(&mut staged, id, target, EdgeType::Falsifies, 1.0)?;
+                    let id = g.insert_node(staged, node)?;
+                    g.push_edge(staged, id, target, EdgeType::Falsifies, 1.0)?;
                     id
                 }
             };
-            let evolution = self.evolve_locked(
-                &mut staged,
+            let evolution = g.evolve_locked(
+                staged,
                 ADMISSION_BETA,
                 ADMISSION_GAMMA,
                 REFLECTION_TOLERANCE,
@@ -3003,26 +3317,45 @@ impl LodGraph {
                 target_confidence: staged.nodes[target as usize].confidence,
                 evolution,
             })
-        })();
-        match result {
-            Ok(report) => {
-                *live = staged;
-                drop(live);
-                self.persist_commit()?;
-                Ok(report)
+        });
+        result.map_err(|error| {
+            let entity = u64::from(action);
+            // The disk refused the reflection itself: no durable quarantine for
+            // a disk fault, but never fail open either. Revoke in memory and
+            // poison, so a host that honors `check_persistence` stops serving
+            // until a restart reloads the last committed state.
+            if matches!(error, LodError::Persistence(_)) {
+                tracing::error!(action, error = %error, "lodgraph: reflection not committed; revoked in memory and poisoned");
+                self.revoke_uncommitted(entity);
+                return error;
             }
-            Err(error) => {
-                live.revocations.insert(u64::from(action));
-                live.manual_revocations.insert(u64::from(action));
-                drop(live);
-                self.persist_commit()?;
-                Err(error)
+            // The reflection was refused on its merits: quarantine the action
+            // durably, in its own transaction.
+            if let Err(quarantine) = self.transact(|g| {
+                g.revoke_entity_now(entity);
+                Ok(())
+            }) {
+                tracing::error!(
+                    action,
+                    reflection = %error,
+                    quarantine = %quarantine,
+                    "lodgraph: quarantine not committed; revoked in memory and poisoned"
+                );
+                self.revoke_uncommitted(entity);
             }
-        }
+            error
+        })
     }
 
     /// Register a privilege bitflag for an agent.
-    pub fn add_privilege(&self, agent_id: u64, privilege: u32) {
+    pub fn add_privilege(&self, agent_id: u64, privilege: u32) -> Result<(), LodError> {
+        self.write(|g| {
+            g.add_privilege_now(agent_id, privilege);
+            Ok(())
+        })
+    }
+
+    fn add_privilege_now(&self, agent_id: u64, privilege: u32) {
         let mut st = self.state.write();
         let list = st.privileges.entry(agent_id).or_default();
         if !list.contains(&privilege) {
@@ -3032,7 +3365,14 @@ impl LodGraph {
 
     /// Explicitly revoke an entity ID in the cognitive graph. No confidence
     /// evolution and no evidence retraction lifts this revocation.
-    pub fn revoke_entity(&self, entity_id: u64) {
+    pub fn revoke_entity(&self, entity_id: u64) -> Result<(), LodError> {
+        self.write(|g| {
+            g.revoke_entity_now(entity_id);
+            Ok(())
+        })
+    }
+
+    fn revoke_entity_now(&self, entity_id: u64) {
         let mut st = self.state.write();
         st.revocations.insert(entity_id);
         st.manual_revocations.insert(entity_id);
@@ -3149,7 +3489,7 @@ mod tests {
             .add_node(node("false", 21).with_status(EpistemicStatus::Falsified))
             .unwrap();
         let revoked = graph.add_node(node("revoked", 22)).unwrap();
-        graph.revoke_entity(22);
+        graph.revoke_entity(22).unwrap();
         let result = graph
             .query_ppr(
                 &[(live, 1.0), (false_node, 1.0), (revoked, 1.0)],
@@ -3681,7 +4021,7 @@ mod tests {
         assert_eq!(supported.1.len(), 5);
 
         graph.falsify_node(a).unwrap();
-        graph.revoke_entity(5);
+        graph.revoke_entity(5).unwrap();
         let down = evolve(&graph, lo, hi);
         assert_eq!(down.transitions.len(), 3);
         for id in [a, b, c, d] {
@@ -4048,7 +4388,7 @@ mod tests {
         graph.flush_edges_to_csr().unwrap();
         graph.falsify_node(a).unwrap();
         evolve(&graph, 0.2, 0.8);
-        graph.add_privilege(9, 1);
+        graph.add_privilege(9, 1).unwrap();
         assert!(graph.is_revoked(1) && graph.is_revoked(2) && graph.is_revoked(3));
 
         graph.rollback_checkpoint(&checkpoint).unwrap();
