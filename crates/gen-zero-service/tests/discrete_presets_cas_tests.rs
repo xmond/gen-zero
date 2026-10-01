@@ -27,7 +27,7 @@ use tower::util::ServiceExt;
 const TOKEN: &str = "gz_test_discrete_presets";
 
 fn engine() -> Arc<PolymorphicZeroEngine> {
-    Arc::new(PolymorphicZeroEngine::new().with_bridge(None))
+    Arc::new(PolymorphicZeroEngine::new().with_semantic(None))
 }
 
 async fn send(engine: &Arc<PolymorphicZeroEngine>, path: &str, body: Value) -> (StatusCode, Value) {

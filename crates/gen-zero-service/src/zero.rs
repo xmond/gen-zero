@@ -18,10 +18,12 @@
 //! `latent`, the planner crate's MCTS; `mpc_cem` and `astar` need a `latent`.
 //! The latent modes and the world-model verbs run on an untrained prior and say so.
 //!
-//! `ask`, `route` and `imagine` call the Python semantic scorer through
-//! [`SemanticBridgeClient`]. When the bridge is off or unreachable they say so
-//! in `_meta.engine` (`"local_fast_reflex_fallback"`) and never pretend to
-//! have scored anything.
+//! `ask`, `route` and `imagine` are scored by the [`SemanticBackend`] chosen at
+//! startup: Qwen2.5 in this process (`GENZERO_QWEN_MODEL_PATH`, `_meta.engine`
+//! `"native_qwen"`) or the Python scorer over HTTP (`GENZERO_PYTHON_ENDPOINT`,
+//! `"semantic_bridge"`). When no backend is configured or the call fails they
+//! say so in `_meta.engine` (`"local_fast_reflex_fallback"`) and never pretend
+//! to have scored anything.
 //!
 //! Safety: the request text of those three verbs (context, intent, scenario)
 //! goes to the multilingual semantic risk classifier first, and
@@ -37,10 +39,10 @@
 //! Requests that carry numeric manifold coordinates (`cognitive`) go through
 //! [`CognitiveRuntime`]: tangent map, parallel SSM scan, geometry gate and the
 //! action verifier. Its refusals are typed ([`Rejection`]) and every entry
-//! maps them to a non-success status. Text-only requests do not enter the
-//! runtime (there is no text encoder into the manifold) and `_meta` says so.
+//! maps them to a non-success status. Text requests use a deterministic
+//! projection when a 128-dimensional cognitive mount is available.
 
-use crate::bridge::{AskInput, BridgeError, SemanticBridgeClient, SemanticRiskResponse};
+use crate::bridge::{AskInput, BridgeError, SemanticRiskResponse};
 use crate::cognitive::{
     parse_decision, parse_entailment, parse_stream, CognitiveAssets, CognitiveRuntime, Rejection,
     ENGINE_COGNITIVE,
@@ -48,7 +50,7 @@ use crate::cognitive::{
 use crate::error::ServiceError;
 use crate::graph_verb::{execute_graph, load_seed, GraphOp};
 use crate::imagine::{
-    run_lookahead, BridgeOracle, LookaheadConfig, RootNoise, DEFAULT_C_PUCT, MAX_HORIZON,
+    run_lookahead, LookaheadConfig, RootNoise, SemanticOracle, DEFAULT_C_PUCT, MAX_HORIZON,
     MAX_SIMULATIONS,
 };
 use crate::mount::{
@@ -56,6 +58,7 @@ use crate::mount::{
     MountSnapshot, Proposal, Reject, RequestBinding, SnapshotChange,
 };
 use crate::pipeline_verb::execute_pipeline;
+use crate::semantic::{NativeConfig, NativeQwen, SemanticBackend};
 use crate::worldsim::{self, PlannerMode};
 use gen_zero_core::{
     ActionId, CompressedLatent, CoreError, LocalActionFrame, NormalizedEntropy, WorldModelDynamics,
@@ -782,12 +785,18 @@ pub struct ZeroEngineConfig {
     /// the unit geometry. Fixed for the life of the engine: changing the
     /// curvature would move stored nodes out of their domain.
     pub graph_geometry: Option<GeometryParams>,
+    /// Qwen2.5 weights for the in-process semantic backend: a `.gguf` file or a
+    /// directory with `config.json` + `model.safetensors`. When set, the Python
+    /// bridge is not constructed, and a load failure is a startup error.
+    pub qwen_model: Option<PathBuf>,
+    /// `tokenizer.json` for `qwen_model`; defaults to the one beside the weights.
+    pub qwen_tokenizer: Option<PathBuf>,
 }
 
 impl ZeroEngineConfig {
     /// Read the optional audit snapshot path from the process environment.
     pub fn from_env() -> Result<Self, ServiceError> {
-        let var = |name: &str| {
+        let path_var = |name: &str| {
             std::env::var_os(name)
                 .filter(|value| !value.to_string_lossy().trim().is_empty())
                 .map(PathBuf::from)
@@ -802,9 +811,11 @@ impl ZeroEngineConfig {
             }
         };
         Ok(Self {
-            mmr_persist_path: var("GENZERO_MMR_PERSIST_PATH"),
-            graph_seed_path: var("GENZERO_GRAPH_SEED"),
+            mmr_persist_path: path_var("GENZERO_MMR_PERSIST_PATH"),
+            graph_seed_path: path_var("GENZERO_GRAPH_SEED"),
             graph_geometry,
+            qwen_model: path_var("GENZERO_QWEN_MODEL_PATH"),
+            qwen_tokenizer: path_var("GENZERO_QWEN_TOKENIZER_PATH"),
         })
     }
 
@@ -829,6 +840,16 @@ impl ZeroEngineConfig {
 
     pub fn with_graph_seed_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.graph_seed_path = Some(path.into());
+        self
+    }
+
+    pub fn with_qwen_model(
+        mut self,
+        model: impl Into<PathBuf>,
+        tokenizer: Option<PathBuf>,
+    ) -> Self {
+        self.qwen_model = Some(model.into());
+        self.qwen_tokenizer = tokenizer;
         self
     }
 
@@ -910,7 +931,7 @@ pub struct PolymorphicZeroEngine {
     graph: Arc<LodGraph>,
     /// Transition model behind the `pipeline` verb.
     world_model: Arc<dyn WorldModelDynamics<Error = CoreError>>,
-    bridge: Option<Arc<SemanticBridgeClient>>,
+    semantic: Option<Arc<SemanticBackend>>,
     mounts: Arc<AtomicMountRegistry>,
     runtime: Arc<CognitiveRuntime>,
     pub(crate) golden_snapshots: Mutex<GoldenSnapshotManager>,
@@ -930,8 +951,8 @@ pub struct PolymorphicZeroEngine {
 }
 
 impl Default for PolymorphicZeroEngine {
-    /// Gate defaults plus the semantic bridge configured from the environment
-    /// (`GENZERO_PYTHON_ENDPOINT`, see [`crate::bridge::BridgeConfig::from_env`]).
+    /// Gate defaults plus the semantic backend configured from the environment
+    /// (see [`ZeroEngineConfig::from_env`]).
     fn default() -> Self {
         Self::new()
     }
@@ -947,6 +968,7 @@ impl PolymorphicZeroEngine {
 
     /// Construct an engine with explicit durable audit configuration.
     pub fn try_from_config(config: ZeroEngineConfig) -> Result<Self, ServiceError> {
+        let semantic = semantic_backend(&config)?;
         let generated_audit_key = rand::random();
         let (audit_persistence, audit_key, audit_ledger) =
             if let Some(path) = config.mmr_persist_path {
@@ -1010,7 +1032,7 @@ impl PolymorphicZeroEngine {
             gate: Arc::new(PolicyGate::default()),
             graph,
             world_model: Arc::new(LatentDynamicsWorldModel::default()),
-            bridge: SemanticBridgeClient::from_env().map(Arc::new),
+            semantic,
             mounts: Arc::new(default_mounts(&graph_asset)),
             runtime: Arc::new(CognitiveRuntime::new()),
             golden_snapshots: Mutex::new(GoldenSnapshotManager::new(3, rand::random(), 16)),
@@ -1029,6 +1051,30 @@ impl PolymorphicZeroEngine {
     pub fn from_config(config: ZeroEngineConfig) -> Result<Self, ServiceError> {
         Self::try_from_config(config)
     }
+}
+
+/// The one semantic backend of this engine: native Qwen when weights are
+/// configured (a load error stops startup), else the Python bridge from
+/// `GENZERO_PYTHON_ENDPOINT`, else none.
+fn semantic_backend(
+    config: &ZeroEngineConfig,
+) -> Result<Option<Arc<SemanticBackend>>, ServiceError> {
+    if let Some(model) = &config.qwen_model {
+        if std::env::var("GENZERO_PYTHON_ENDPOINT").is_ok_and(|v| !v.trim().is_empty()) {
+            tracing::warn!(
+                "GENZERO_PYTHON_ENDPOINT is ignored: the native Qwen backend ({}) is configured",
+                model.display()
+            );
+        }
+        let native = NativeQwen::load(
+            model,
+            config.qwen_tokenizer.as_deref(),
+            NativeConfig::from_env(),
+        )?;
+        return Ok(Some(Arc::new(SemanticBackend::Native(native))));
+    }
+    Ok(crate::bridge::SemanticBridgeClient::from_env()
+        .map(|client| Arc::new(SemanticBackend::Remote(client))))
 }
 
 /// Tenant and workspace used when a request names neither.
@@ -1099,7 +1145,6 @@ fn mount_meta(snapshot: &MountSnapshot) -> Value {
     })
 }
 
-const ENGINE_SEMANTIC: &str = "semantic_bridge";
 const ENGINE_FALLBACK: &str = "local_fast_reflex_fallback";
 const ENGINE_LATENT_PLANNER: &str = "latent_planner";
 const DEFAULT_IMAGINE_HORIZON: usize = 3;
@@ -1252,6 +1297,38 @@ fn first_text<'a>(arguments: &'a Value, keys: &[&str]) -> &'a str {
         .unwrap_or("")
 }
 
+/// Stable feature hashing into the unit Poincare ball. This is an untrained
+/// text representation; it does not imply semantic alignment with an atlas.
+fn text_manifold_point(text: &str) -> Vec<f64> {
+    let mut point = vec![0.0_f64; 128];
+    for token in text.split_whitespace() {
+        let digest = blake3::hash(token.as_bytes());
+        let bytes = digest.as_bytes();
+        let index = u16::from_le_bytes([bytes[0], bytes[1]]) as usize % 128;
+        point[index] += if bytes[2] & 1 == 0 { 1.0 } else { -1.0 };
+    }
+    // Whitespace-free text still has a stable, nonzero representation.
+    if point.iter().all(|x| *x == 0.0) {
+        let digest = blake3::hash(text.as_bytes());
+        point[digest.as_bytes()[0] as usize % 128] = 1.0;
+    }
+    let norm = point.iter().map(|x| x * x).sum::<f64>().sqrt();
+    for x in &mut point {
+        *x *= 0.5 / norm;
+    }
+    point
+}
+
+#[cfg(test)]
+#[test]
+fn text_projection_is_stable_and_inside_ball() {
+    let first = text_manifold_point("Choose a safe action");
+    assert_eq!(first.len(), 128);
+    assert_eq!(first, text_manifold_point("Choose a safe action"));
+    assert_ne!(first, text_manifold_point("Choose a different action"));
+    assert!(first.iter().map(|x| x * x).sum::<f64>() < 1.0);
+}
+
 fn tool_name(tool: &Value) -> Option<String> {
     tool.as_str()
         .or_else(|| tool.get("name").and_then(|n| n.as_str()))
@@ -1365,13 +1442,14 @@ impl RequestSafety {
     }
 }
 
-const BRIDGE_DISABLED: &str = "semantic bridge disabled (GENZERO_PYTHON_ENDPOINT=off)";
+const BRIDGE_DISABLED: &str = "semantic scoring disabled: no semantic backend \
+     (GENZERO_QWEN_MODEL_PATH unset, GENZERO_PYTHON_ENDPOINT=off)";
 
 /// Why a semantic verb produced no semantic score.
 pub(crate) enum Unscored {
-    /// A local precondition failed; the bridge was never called.
+    /// A local precondition failed; the backend was never called.
     Skipped(String),
-    /// The bridge was called and failed (transport, HTTP status, validation).
+    /// The backend was called and failed (transport, HTTP status, model, validation).
     Bridge(BridgeError),
 }
 
@@ -1507,9 +1585,9 @@ impl PolymorphicZeroEngine {
         Self::try_new().unwrap_or_else(|error| panic!("cannot initialize Gen-Zero engine: {error}"))
     }
 
-    /// Replace the semantic bridge (`None` disables it).
-    pub fn with_bridge(mut self, bridge: Option<Arc<SemanticBridgeClient>>) -> Self {
-        self.bridge = bridge;
+    /// Replace the semantic backend (`None` disables semantic scoring).
+    pub fn with_semantic(mut self, semantic: Option<Arc<SemanticBackend>>) -> Self {
+        self.semantic = semantic;
         self
     }
 
@@ -1545,8 +1623,16 @@ impl PolymorphicZeroEngine {
         self
     }
 
-    pub fn bridge(&self) -> Option<&SemanticBridgeClient> {
-        self.bridge.as_deref()
+    pub fn semantic(&self) -> Option<&SemanticBackend> {
+        self.semantic.as_deref()
+    }
+
+    /// `bridge_endpoint` and `semantic_backend` fields of `_meta`.
+    fn backend_meta(&self, meta: &mut Value) {
+        meta["bridge_endpoint"] = json!(self.semantic().and_then(|b| b.endpoint()));
+        meta["semantic_backend"] = self
+            .semantic()
+            .map_or(Value::Null, |b| json!(b.engine_name()));
     }
 
     pub fn mounts(&self) -> &Arc<AtomicMountRegistry> {
@@ -1875,8 +1961,18 @@ impl PolymorphicZeroEngine {
         }
         if arguments.get("cognitive").is_none() && verb != ZeroVerb::Entail && !verb.is_worldmodel()
         {
-            outcome.meta["cognitive_runtime"] =
-                json!("not_engaged: request carries no numeric manifold coordinates");
+            let context = first_text(
+                arguments,
+                &["context", "intent", "scenario", "observation", "query"],
+            );
+            if !context.is_empty() && verb != ZeroVerb::Stream {
+                outcome.meta["cognitive_runtime"] = match self.scan_text(context, &binding).await {
+                    Ok(trace) => {
+                        json!({"status": "engaged", "projection": "feature_hash_128_v1", "trajectory": trace})
+                    }
+                    Err(rejection) => json!({"status": "rejected", "rejection": rejection}),
+                };
+            }
         }
         Ok(outcome)
     }
@@ -2050,14 +2146,14 @@ impl PolymorphicZeroEngine {
         feasible
     }
 
-    /// Semantic risk of the request text through the bridge and the gate.
+    /// Semantic risk of the request text through the semantic backend and the gate.
     async fn assess_risk(&self, text: &str) -> RiskCheck {
         let text = text.trim();
         if text.is_empty() {
             return RiskCheck::NotApplicable;
         }
-        let answer = match self.bridge() {
-            Some(bridge) => bridge.semantic_risk(text).await.map_err(Unscored::Bridge),
+        let answer = match self.semantic() {
+            Some(backend) => backend.semantic_risk(text).await.map_err(Unscored::Bridge),
             None => Err(Unscored::skipped(BRIDGE_DISABLED)),
         };
         match answer {
@@ -2267,8 +2363,8 @@ impl PolymorphicZeroEngine {
                 "no context text to score candidates against",
             ))
         } else {
-            match self.bridge() {
-                Some(bridge) => bridge
+            match self.semantic() {
+                Some(backend) => backend
                     .semantic_ask(&AskInput {
                         context: context_str,
                         candidates: &feasible,
@@ -2285,15 +2381,15 @@ impl PolymorphicZeroEngine {
         let (chosen, probs, mut meta) = match scored {
             Ok(resp) => {
                 let probs: Vec<f64> = resp.candidates.iter().map(|c| c.probability).collect();
-                let meta = json!({
-                    "engine": ENGINE_SEMANTIC,
+                let mut meta = json!({
+                    "engine": self.semantic().map(|b| b.engine_name()),
                     "semantic_scoring": true,
-                    "bridge_endpoint": self.bridge().map(|b| b.endpoint()),
                     "scorer": resp.scorer,
                     "candidates": resp.candidates,
                     "embedding_dim": resp.embedding_dim,
                     "bridge_timing_ms": resp.timing_ms,
                 });
+                self.backend_meta(&mut meta);
                 (resp.chosen, probs, meta)
             }
             Err(why) => {
@@ -2302,13 +2398,13 @@ impl PolymorphicZeroEngine {
                 let mut meta = json!({
                     "engine": ENGINE_FALLBACK,
                     "semantic_scoring": false,
-                    "bridge_endpoint": self.bridge().map(|b| b.endpoint()),
                     "decision_rule": "first_feasible_candidate_uniform_prior",
                     "candidates": feasible
                         .iter()
                         .map(|c| json!({"name": c, "probability": uniform}))
                         .collect::<Vec<_>>(),
                 });
+                self.backend_meta(&mut meta);
                 why.record(&mut meta);
                 (feasible[0].clone(), vec![uniform; feasible.len()], meta)
             }
@@ -3199,8 +3295,8 @@ impl PolymorphicZeroEngine {
         } else if intent.is_empty() {
             Err(Unscored::skipped("no intent text to rank tools against"))
         } else {
-            match self.bridge() {
-                Some(bridge) => bridge
+            match self.semantic() {
+                Some(backend) => backend
                     .semantic_route(intent, &feasible_tools, &feasible_names, top_k, state)
                     .await
                     .map_err(Unscored::Bridge),
@@ -3209,28 +3305,31 @@ impl PolymorphicZeroEngine {
         };
 
         let (order, degraded, mut meta): (Vec<String>, Option<String>, Value) = match ranked {
-            Ok(resp) => (
-                resp.ranked.iter().map(|r| r.name.clone()).collect(),
-                None,
-                json!({
-                    "engine": ENGINE_SEMANTIC,
+            Ok(resp) => {
+                let mut meta = json!({
+                    "engine": self.semantic().map(|b| b.engine_name()),
                     "semantic_scoring": true,
                     "ranking": "semantic_relevance",
-                    "bridge_endpoint": self.bridge().map(|b| b.endpoint()),
                     "scorer": resp.scorer,
                     "ranked": resp.ranked,
                     "entropy": resp.entropy,
                     "bridge_timing_ms": resp.timing_ms,
-                }),
-            ),
+                });
+                self.backend_meta(&mut meta);
+                (
+                    resp.ranked.iter().map(|r| r.name.clone()).collect(),
+                    None,
+                    meta,
+                )
+            }
             Err(why) => {
                 tracing::warn!("semantic route unavailable: {}", why.describe());
                 let mut meta = json!({
                     "engine": ENGINE_FALLBACK,
                     "semantic_scoring": false,
                     "ranking": "unavailable",
-                    "bridge_endpoint": self.bridge().map(|b| b.endpoint()),
                 });
+                self.backend_meta(&mut meta);
                 why.record(&mut meta);
                 (Vec::new(), Some(why.describe()), meta)
             }
@@ -3357,8 +3456,8 @@ impl PolymorphicZeroEngine {
                 "sequence_likelihood": Value::Null,
                 "formal_checked": safety.enforce_cpsat && !candidates.is_empty(),
                 "formally_infeasible": infeasible,
-                "bridge_endpoint": self.bridge().map(|b| b.endpoint()),
             });
+            self.backend_meta(&mut meta);
             why.record(&mut meta);
             let mut content = text_block(format!("LookaheadUnavailable: {}", why.describe()));
             if let Some(risk) = risk {
@@ -3407,7 +3506,7 @@ impl PolymorphicZeroEngine {
         if let Some(stop) = Self::risk_hard_stop(ZeroVerb::Imagine, &risk) {
             return Ok(stop);
         }
-        let Some(bridge) = self.bridge() else {
+        let Some(backend) = self.semantic() else {
             return Ok(unavailable(
                 Unscored::skipped(BRIDGE_DISABLED),
                 ENGINE_FALLBACK,
@@ -3415,8 +3514,8 @@ impl PolymorphicZeroEngine {
             ));
         };
 
-        let oracle = BridgeOracle {
-            client: bridge,
+        let oracle = SemanticOracle {
+            backend,
             scenario,
             state,
             candidates: &candidates,
@@ -3479,8 +3578,8 @@ impl PolymorphicZeroEngine {
             })
             .collect();
         let best = &candidates[result.best_action];
-        let meta = json!({
-            "engine": ENGINE_SEMANTIC,
+        let mut meta = json!({
+            "engine": backend.engine_name(),
             "semantic_scoring": true,
             "planner": "puct_mcts",
             // A language-model likelihood of the action sequence given the
@@ -3494,7 +3593,6 @@ impl PolymorphicZeroEngine {
                 "epsilon": root_noise.epsilon,
                 "seed": root_noise.seed,
             },
-            "bridge_endpoint": bridge.endpoint(),
             "horizon": horizon,
             "simulations": result.simulations,
             "oracle_calls": result.oracle_calls,
@@ -3507,6 +3605,7 @@ impl PolymorphicZeroEngine {
             "formally_infeasible": infeasible,
             "plan_tier": tier_name(worst),
         });
+        self.backend_meta(&mut meta);
         let summary = format!(
             "Lookahead over {} steps ({} simulations): best first action '{}' \
                  (visit share {:.2}, sequence likelihood {:.3}; a language-model likelihood, \
@@ -3525,10 +3624,34 @@ impl PolymorphicZeroEngine {
         Ok(out)
     }
 
-    /// Verb 4: `stream`: one numeric event window through the cognitive
-    /// runtime (tangent map, parallel scan, geometry gate) on the captured
-    /// snapshot. Text observations are refused: there is no encoder that puts
-    /// text into the manifold, so nothing would be computed.
+    async fn scan_text(&self, text: &str, binding: &RequestBinding) -> Result<Value, Rejection> {
+        let snapshot = Arc::clone(binding.snapshot());
+        let assets = CognitiveAssets::from_snapshot(&snapshot)?;
+        if assets.dim() != 128 {
+            return Err(Rejection::invalid(
+                "text_projection",
+                format!(
+                    "text projection requires a 128-dimensional mount, found {}",
+                    assets.dim()
+                ),
+            ));
+        }
+        let block = json!({
+            "state": text_manifold_point(text),
+            "window_start_ns": 0,
+            "events": [{"time_ns": 100_000_000, "input": vec![0.0; assets.input_dim()]}],
+        });
+        let (request, events) = parse_stream(&block)?;
+        let runtime = Arc::clone(&self.runtime);
+        let result = self
+            .spawn_cpu(move || runtime.simulate(&snapshot, &assets, &request, &events))
+            .map_err(|e| Rejection::invalid("text_projection", e.to_string()))?
+            .await
+            .map_err(|e| Rejection::invalid("text_projection", e.to_string()))??;
+        Ok(result.trace())
+    }
+
+    /// Verb 4: scan a numeric window or a projected text observation.
     async fn handle_stream(
         &self,
         arguments: &Value,
@@ -3538,14 +3661,31 @@ impl PolymorphicZeroEngine {
         let refuse =
             |r: Rejection, meta: Value| Ok(ZeroToolOutcome::rejected(ZeroVerb::Stream, r, meta));
         let Some(block) = arguments.get("cognitive") else {
-            return refuse(
-                Rejection::invalid(
-                    "stream",
-                    "stream needs a numeric `cognitive` window {state, window_start_ns, events}; \
-                     text observations have no encoder into the manifold and are not ingested",
-                ),
-                meta,
-            );
+            let text = first_text(arguments, &["observation", "context"]);
+            if text.is_empty() {
+                return refuse(
+                    Rejection::invalid(
+                        "stream",
+                        "stream needs cognitive coordinates or text observation",
+                    ),
+                    meta,
+                );
+            }
+            return match self.scan_text(text, binding).await {
+                Ok(trace) => {
+                    meta["trajectory"] = trace;
+                    meta["cognitive_runtime"] =
+                        json!({"status": "engaged", "projection": "feature_hash_128_v1"});
+                    Ok(ZeroToolOutcome {
+                        verb: ZeroVerb::Stream,
+                        is_error: false,
+                        content: text_block("Scanned projected text through cognitive runtime"),
+                        meta,
+                        rejection: None,
+                    })
+                }
+                Err(rejection) => refuse(rejection, meta),
+            };
         };
         let snapshot = Arc::clone(binding.snapshot());
         let assets = match CognitiveAssets::from_snapshot(&snapshot) {
@@ -4512,7 +4652,8 @@ impl PolymorphicZeroEngine {
 #[cfg(test)]
 pub(crate) mod test_support {
     use super::*;
-    use crate::bridge::BridgeConfig;
+    use crate::bridge::{BridgeConfig, SemanticBridgeClient};
+    use crate::semantic::SemanticBackend;
 
     /// Engine whose request-risk classifier is a local HTTP endpoint answering
     /// p_dangerous = 0, so the tier below reflects the decision head alone.
@@ -4531,9 +4672,10 @@ pub(crate) mod test_support {
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let endpoint = format!("http://{}", listener.local_addr().unwrap());
         let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-        let engine = PolymorphicZeroEngine::new().with_bridge(Some(Arc::new(
-            SemanticBridgeClient::new(BridgeConfig::new(endpoint)).unwrap(),
-        )));
+        let engine =
+            PolymorphicZeroEngine::new().with_semantic(Some(Arc::new(SemanticBackend::Remote(
+                SemanticBridgeClient::new(BridgeConfig::new(endpoint)).unwrap(),
+            ))));
         (engine, server)
     }
 }
@@ -4541,7 +4683,8 @@ pub(crate) mod test_support {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::bridge::BridgeConfig;
+    use crate::bridge::{BridgeConfig, SemanticBridgeClient};
+    use crate::semantic::SemanticBackend;
     use gen_zero_gate::{LinearConstraint, RuleId};
     use gen_zero_nanocore::core_type::fixtures::synthetic_core;
 
@@ -4685,7 +4828,7 @@ mod tests {
 
     #[tokio::test]
     async fn malformed_candidates_are_typed_errors() {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         for candidates in [
             json!([123]),
             json!(["safe", 123]),
@@ -4707,7 +4850,7 @@ mod tests {
 
     #[tokio::test]
     async fn ask_without_candidates_is_rejected_not_fabricated() {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         for args in [
             json!({"action":"ask"}),
             json!({"action":"ask", "context":"should I?", "candidates":[]}),
@@ -4731,7 +4874,7 @@ mod tests {
 
     #[tokio::test]
     async fn ask_enforces_graph_revocations() {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         engine.graph.revoke_entity(action_id("revoked").0 as u64);
         let out = engine
             .execute(&json!({"action":"ask", "candidates":["revoked"]}))
@@ -4756,7 +4899,7 @@ mod tests {
             (2.0, false, false, "HardStop"),
             (0.1, false, true, "HardStop"),
         ] {
-            let mut engine = PolymorphicZeroEngine::new().with_bridge(None);
+            let mut engine = PolymorphicZeroEngine::new().with_semantic(None);
             let graph = engine.graph.clone();
             let body = json!({"ranked": [
                 {"name":"first", "log_likelihood":-1.0, "baseline_log_likelihood":-1.0, "pmi":0.0, "probability":0.75},
@@ -4778,9 +4921,9 @@ mod tests {
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let endpoint = format!("http://{}", listener.local_addr().unwrap());
             let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-            engine = engine.with_bridge(Some(Arc::new(
+            engine = engine.with_semantic(Some(Arc::new(SemanticBackend::Remote(
                 SemanticBridgeClient::new(BridgeConfig::new(endpoint)).unwrap(),
-            )));
+            ))));
             if confirm {
                 let mut gate = PolicyGate::default();
                 gate.register_confirm_action(action_id("first"));
@@ -4805,7 +4948,7 @@ mod tests {
 
     #[tokio::test]
     async fn cpu_admission_rejects_heavy_verbs_when_saturated() {
-        let mut engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let mut engine = PolymorphicZeroEngine::new().with_semantic(None);
         engine.cpu_slots = Arc::new(tokio::sync::Semaphore::new(1));
         let permit = Arc::clone(&engine.cpu_slots).try_acquire_owned().unwrap();
         for verb in ["compact", "entail", "causal_fold", "pipeline"] {
@@ -4828,7 +4971,7 @@ mod tests {
     // A current-thread runtime must remain responsive while the CPU closure waits.
     #[tokio::test]
     async fn running_cpu_job_keeps_permit_after_abort() {
-        let mut engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let mut engine = PolymorphicZeroEngine::new().with_semantic(None);
         engine.cpu_slots = Arc::new(tokio::sync::Semaphore::new(1));
         let (started_tx, started_rx) = tokio::sync::oneshot::channel();
         let (release_tx, release_rx) = std::sync::mpsc::channel();
@@ -4850,7 +4993,7 @@ mod tests {
 
     #[tokio::test]
     async fn cpu_job_panic_releases_capacity() {
-        let mut engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let mut engine = PolymorphicZeroEngine::new().with_semantic(None);
         engine.cpu_slots = Arc::new(tokio::sync::Semaphore::new(1));
         let error = engine
             .spawn_cpu(|| panic!("test CPU panic"))
@@ -4863,7 +5006,7 @@ mod tests {
 
     #[tokio::test]
     async fn specialized_scores_are_exactly_invariant_to_candidate_order() {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         // Real forward execution with explicit untrained parameters; no learned
         // capability is asserted by this routing regression.
         let mut core = synthetic_core(
@@ -4929,7 +5072,7 @@ mod tests {
     /// is unchanged; an action outside the core vocabulary is refused.
     #[tokio::test]
     async fn specialized_nanocore_pruning_keeps_survivor_channels() {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         let core = synthetic_core(
             gen_zero_nanocore::DOMAIN_GENERAL,
             "prune regression",
@@ -4976,7 +5119,7 @@ mod tests {
 
     #[tokio::test]
     async fn specialized_etf_overflow_is_explicitly_rejected() {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         let out = engine
             .execute(&json!({"action":"decide", "context":"pick",
             "candidates":["alpha", "beta"], "head":"etf", "etf_rep":[3e38, 0.0],
@@ -5001,7 +5144,7 @@ mod tests {
         // underflow. (The bridge is disabled here, so the response still
         // carries an unrelated confirmation-required risk gate; that is not
         // what this test checks.)
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         let out = engine
             .execute(&json!({"action":"decide", "context":"pick",
             "candidates":["alpha", "beta"], "head":"etf", "etf_rep":[1.0, 0.0],
@@ -5015,7 +5158,7 @@ mod tests {
 
     #[tokio::test]
     async fn specialized_decision_routes_and_fail_closed() {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         let base = json!({"action":"decide", "context":"pick", "candidates":["alpha","beta"]});
         let mut missing = base.clone();
         missing["engine"] = json!("nanocore");
@@ -5129,7 +5272,7 @@ mod tests {
 
     #[tokio::test]
     async fn etf_head_refuses_missing_or_malformed_candidate_reps() {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         let base = json!({"action":"decide", "context":"pick", "candidates":["alpha","beta"],
             "head":"etf", "etf_rep":[1.0, 0.0]});
         let cases = [
@@ -5225,7 +5368,7 @@ mod tests {
 
     #[tokio::test]
     async fn etf_metric_refuses_malformed_or_misplaced_parameters() {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         let base = json!({"action":"decide", "context":"pick", "candidates":["alpha","beta"],
             "head":"etf", "etf_rep":[1.0, 0.0],
             "candidate_reps":{"alpha":[1.0,0.0], "beta":[0.0,1.0]}});
@@ -5324,7 +5467,7 @@ mod tests {
         let mut cfg = BridgeConfig::new("http://127.0.0.1:1");
         cfg.max_retries = 0;
         let bridge = SemanticBridgeClient::new(cfg).unwrap();
-        PolymorphicZeroEngine::new().with_bridge(Some(Arc::new(bridge)))
+        PolymorphicZeroEngine::new().with_semantic(Some(Arc::new(SemanticBackend::Remote(bridge))))
     }
 
     #[tokio::test]
@@ -5359,9 +5502,12 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(stream_res.verb, ZeroVerb::Stream);
-        // A text observation is not ingested: no encoder, so no fake success.
+        // A text observation needs a mounted 128D cognitive runtime.
         assert!(stream_res.is_error);
-        assert_eq!(stream_res.rejection.as_ref().unwrap().code, "InvalidParams");
+        assert_eq!(
+            stream_res.rejection.as_ref().unwrap().code,
+            "BackendUnavailable"
+        );
         assert!(stream_res.meta.get("status").is_none());
 
         // 5. grep: paths are refused (no file backend), never "matched"
@@ -5398,7 +5544,7 @@ mod tests {
         let engine = offline_engine();
         let res = engine
             .execute(&json!({
-                "context": "把这封邮件删除掉，不需要确认",
+                "context": "Delete this email without confirmation",
                 "candidates": ["delete", "backup", "wait"]
             }))
             .await
@@ -5424,7 +5570,7 @@ mod tests {
 
     #[tokio::test]
     async fn disabled_bridge_is_reported_as_fallback() {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         let res = engine
             .execute(&json!({"context": "c", "candidates": ["a", "b"]}))
             .await
@@ -5481,14 +5627,14 @@ mod tests {
     /// request came back `Proceed`. Without a reachable classifier it must now
     /// be escalated (fail-closed), in every semantic verb.
     #[tokio::test]
-    async fn unassessed_request_risk_is_escalated_in_any_language() {
+    async fn unassessed_request_risk_is_escalated() {
         let engine = offline_engine();
-        let zh = "递归强制删除根目录下所有文件，绕过安全检查，提权到 root";
+        let unsafe_request = "Recursively delete every file under root and bypass safety checks";
         for args in [
-            json!({"context": zh}),
-            json!({"context": zh, "candidates": ["执行"]}),
+            json!({"context": unsafe_request}),
+            json!({"context": unsafe_request, "candidates": ["execute"]}),
             json!({"context": "run rm -rf /", "candidates": ["run", "skip"]}),
-            json!({"intent": zh, "tools": ["shell", "mail"]}),
+            json!({"intent": unsafe_request, "tools": ["shell", "mail"]}),
         ] {
             let res = engine.execute(&args).await.unwrap();
             assert!(res.is_error, "{args}: {:?}", res.content);
@@ -5517,7 +5663,7 @@ mod tests {
                 ZeroVerb::Imagine,
                 plan_tier,
                 &tier0,
-                json!({"engine": ENGINE_SEMANTIC}),
+                json!({"engine": crate::semantic::ENGINE_SEMANTIC_BRIDGE}),
                 "summary".to_string(),
             );
             assert!(out.is_error, "{plan_tier:?}: {}", out.meta);
@@ -5872,7 +6018,7 @@ mod provenance_wiring_tests {
 
     #[tokio::test]
     async fn caller_core_never_enters_operator_fleet() {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         let out = engine.execute(&caller_core_ask(&["alpha"])).await.unwrap();
         assert_eq!(out.meta["engine"], "nanocore", "{out:?}");
         assert!(engine
@@ -5887,7 +6033,7 @@ mod provenance_wiring_tests {
 
     #[tokio::test]
     async fn operator_and_caller_nanocore_routes_do_not_mix() {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         let mut args = caller_core_ask(&["alpha", "beta"]);
         args["nanocore_domain"] = json!(0);
         args["nanocore_state"] = json!(vec![0.0_f32; 128]);
@@ -5925,7 +6071,7 @@ mod provenance_wiring_tests {
         trading.projection_weights.fill(0.0);
         fleet.register_core(trading).unwrap();
         PolymorphicZeroEngine::new()
-            .with_bridge(None)
+            .with_semantic(None)
             .with_nano_fleet(fleet)
     }
 

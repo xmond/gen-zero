@@ -15,7 +15,8 @@ use crate::closed_loop::{
 };
 use crate::error::ServiceError;
 use crate::mount::{MountKey, MountRegistry};
-use crate::zero::{PolymorphicZeroEngine, ZeroToolOutcome};
+use crate::semantic::SemanticBackend;
+use crate::zero::{PolymorphicZeroEngine, ZeroEngineConfig, ZeroToolOutcome};
 use arc_swap::ArcSwap;
 use axum::{
     extract::{Extension, Json, Path, Query, Request},
@@ -366,18 +367,31 @@ pub struct McpServer {
 
 impl Default for McpServer {
     fn default() -> Self {
-        Self {
-            engine: Arc::new(PolymorphicZeroEngine::new()),
-            auth_token: None,
-            bridge_required: bridge_required_from_env(),
-            closed_loop: None,
-        }
+        Self::from_engine(Arc::new(PolymorphicZeroEngine::new()))
     }
 }
 
 impl McpServer {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Server over an engine built from `config`; construction errors (a
+    /// native Qwen model that fails to load, an audit snapshot that cannot be
+    /// opened) are returned instead of panicking.
+    pub fn try_from_config(config: ZeroEngineConfig) -> Result<Self, ServiceError> {
+        Ok(Self::from_engine(Arc::new(
+            PolymorphicZeroEngine::try_from_config(config)?,
+        )))
+    }
+
+    fn from_engine(engine: Arc<PolymorphicZeroEngine>) -> Self {
+        Self {
+            engine,
+            auth_token: None,
+            bridge_required: bridge_required_from_env(),
+            closed_loop: None,
+        }
     }
 
     pub fn with_bridge_required(mut self, required: bool) -> Self {
@@ -821,23 +835,36 @@ impl McpServer {
         }
     }
 
-    /// Probe the semantic bridge once at startup and say loudly what was
-    /// found. A port held by the wrong service (HTTP 404) is an error, not a
-    /// quiet fallback. With `GENZERO_BRIDGE_REQUIRED=1` anything but a ready
-    /// scorer stops the server.
-    pub async fn check_bridge(&self, serving_port: Option<u16>) -> Result<(), ServiceError> {
-        let Some(bridge) = self.engine.bridge() else {
-            tracing::warn!(
-                "semantic bridge disabled (GENZERO_PYTHON_ENDPOINT=off); ask/route/imagine \
-                 return labeled fallbacks and every request with text is escalated"
-            );
-            return if self.bridge_required {
-                Err(ServiceError::Core(
-                    "GENZERO_BRIDGE_REQUIRED=1 but the semantic bridge is disabled".into(),
-                ))
-            } else {
-                Ok(())
-            };
+    /// Check the semantic backend once at startup and say loudly what was
+    /// found. The native backend is ready once loaded. For the Python bridge,
+    /// a port held by the wrong service (HTTP 404) is an error, not a quiet
+    /// fallback. With `GENZERO_BRIDGE_REQUIRED=1` anything but a ready scorer
+    /// stops the server.
+    pub async fn check_semantic(&self, serving_port: Option<u16>) -> Result<(), ServiceError> {
+        let bridge = match self.engine.semantic() {
+            Some(SemanticBackend::Native(native)) => {
+                let info = native.info();
+                tracing::info!(
+                    model = %info.source.display(),
+                    sha256 = %info.weights_sha256,
+                    "semantic backend: native Qwen in process (no Python runtime)"
+                );
+                return Ok(());
+            }
+            Some(SemanticBackend::Remote(client)) => client,
+            None => {
+                tracing::warn!(
+                    "no semantic backend (GENZERO_QWEN_MODEL_PATH unset, GENZERO_PYTHON_ENDPOINT=off); \
+                     ask/route/imagine return labeled fallbacks and every request with text is escalated"
+                );
+                return if self.bridge_required {
+                    Err(ServiceError::Core(
+                        "GENZERO_BRIDGE_REQUIRED=1 but no semantic backend is configured".into(),
+                    ))
+                } else {
+                    Ok(())
+                };
+            }
         };
         if let Some(port) = serving_port.filter(|&p| bridge.targets_local_port(p)) {
             tracing::error!(
@@ -876,7 +903,7 @@ impl McpServer {
 
     /// Run zero-allocation Stdio loop using simd-json.
     pub async fn run_stdio(&self) -> Result<(), ServiceError> {
-        self.check_bridge(None).await?;
+        self.check_semantic(None).await?;
         let stdin = tokio::io::stdin();
         let mut stdout = tokio::io::stdout();
         let mut reader = tokio::io::BufReader::new(stdin);
@@ -964,7 +991,7 @@ impl McpServer {
     /// syncer and patch poller background tasks for the lifetime of the
     /// server, and aborts them once the listener stops draining.
     pub async fn run_sse(&self, addr: SocketAddr) -> Result<(), ServiceError> {
-        self.check_bridge(Some(addr.port())).await?;
+        self.check_semantic(Some(addr.port())).await?;
         let sessions = SseSessionManager::default();
         let feedback_buffer = Arc::new(FeedbackBuffer::new());
         let closed_loop_tasks = self.closed_loop.clone().map(|config| {
@@ -1228,13 +1255,14 @@ async fn health_handler() -> Json<Value> {
 
 /// Readiness requires a reachable scorer and valid assets in the default mount.
 async fn readiness_handler(Extension(engine): Extension<Arc<PolymorphicZeroEngine>>) -> Response {
-    let bridge = match engine.bridge() {
+    let bridge = match engine.semantic() {
         None => json!({"status": "disabled"}),
-        Some(bridge) => {
+        Some(SemanticBackend::Native(native)) => native.health(),
+        Some(SemanticBackend::Remote(bridge)) => {
             let fresh = bridge
                 .last_health()
                 .filter(|r| now_ms().saturating_sub(r.probed_at_ms) < HEALTH_PROBE_TTL_MS);
-            match fresh {
+            let mut report = match fresh {
                 Some(report) => serde_json::to_value(report).unwrap_or(Value::Null),
                 None => match tokio::time::timeout(Duration::from_secs(3), bridge.probe()).await {
                     Ok(report) => serde_json::to_value(report).unwrap_or(Value::Null),
@@ -1242,7 +1270,9 @@ async fn readiness_handler(Extension(engine): Extension<Arc<PolymorphicZeroEngin
                         json!({"status": "unreachable", "detail": "readiness probe timed out"})
                     }
                 },
-            }
+            };
+            report["backend"] = json!("python_http");
+            report
         }
     };
     // Decode off the async executor: loading/validating a large asset must not
@@ -2148,7 +2178,10 @@ mod tests {
         let task = tokio::spawn(async move { axum::serve(listener, dependency).await.unwrap() });
         let bridge =
             SemanticBridgeClient::new(BridgeConfig::new(format!("http://{addr}"))).unwrap();
-        let engine = Arc::new(PolymorphicZeroEngine::new().with_bridge(Some(Arc::new(bridge))));
+        let engine = Arc::new(
+            PolymorphicZeroEngine::new()
+                .with_semantic(Some(Arc::new(SemanticBackend::Remote(bridge)))),
+        );
         let app = McpServer::build_router(engine.clone(), Some("secret".into()));
         let request = |path| Request::builder().uri(path).body(Body::empty()).unwrap();
         assert_eq!(
@@ -2160,7 +2193,11 @@ mod tests {
             StatusCode::OK
         );
         assert!(
-            engine.bridge().unwrap().last_health().is_none(),
+            match engine.semantic().unwrap() {
+                SemanticBackend::Remote(client) => client.last_health(),
+                SemanticBackend::Native(_) => unreachable!("remote backend under test"),
+            }
+            .is_none(),
             "liveness must not probe dependencies"
         );
         assert_eq!(
@@ -2188,7 +2225,7 @@ mod tests {
         }
         task.abort();
         let disabled = McpServer::build_router(
-            Arc::new(PolymorphicZeroEngine::new().with_bridge(None)),
+            Arc::new(PolymorphicZeroEngine::new().with_semantic(None)),
             None,
         );
         assert_eq!(
@@ -2210,7 +2247,7 @@ mod tests {
     async fn metrics_capture_calls_failures_gates_and_latency() {
         use axum::body::Body;
         use tower::ServiceExt;
-        let engine = Arc::new(PolymorphicZeroEngine::new().with_bridge(None));
+        let engine = Arc::new(PolymorphicZeroEngine::new().with_semantic(None));
         engine
             .execute(&json!({"action": "grep", "lines": ["needle"], "query": "needle"}))
             .await
@@ -2430,7 +2467,10 @@ mod tests {
 
         let bridge =
             SemanticBridgeClient::new(BridgeConfig::new(format!("http://{addr}"))).unwrap();
-        let engine = Arc::new(PolymorphicZeroEngine::new().with_bridge(Some(Arc::new(bridge))));
+        let engine = Arc::new(
+            PolymorphicZeroEngine::new()
+                .with_semantic(Some(Arc::new(SemanticBackend::Remote(bridge)))),
+        );
         let server = McpServer {
             engine: engine.clone(),
             auth_token: None,
@@ -2438,7 +2478,7 @@ mod tests {
             closed_loop: None,
         };
         server
-            .check_bridge(Some(DEFAULT_MCP_SSE_PORT))
+            .check_semantic(Some(DEFAULT_MCP_SSE_PORT))
             .await
             .unwrap();
 
@@ -2473,7 +2513,10 @@ mod tests {
         let mut cfg = BridgeConfig::new("http://127.0.0.1:1");
         cfg.max_retries = 0;
         let bridge = SemanticBridgeClient::new(cfg).unwrap();
-        let engine = Arc::new(PolymorphicZeroEngine::new().with_bridge(Some(Arc::new(bridge))));
+        let engine = Arc::new(
+            PolymorphicZeroEngine::new()
+                .with_semantic(Some(Arc::new(SemanticBackend::Remote(bridge)))),
+        );
         let lenient = McpServer {
             engine,
             auth_token: None,
@@ -2481,18 +2524,18 @@ mod tests {
             closed_loop: None,
         };
         assert!(
-            lenient.check_bridge(None).await.is_ok(),
+            lenient.check_semantic(None).await.is_ok(),
             "default: warn, keep serving"
         );
         let strict = lenient.with_bridge_required(true);
-        assert!(strict.check_bridge(None).await.is_err());
+        assert!(strict.check_semantic(None).await.is_err());
         let disabled = McpServer {
-            engine: Arc::new(PolymorphicZeroEngine::new().with_bridge(None)),
+            engine: Arc::new(PolymorphicZeroEngine::new().with_semantic(None)),
             auth_token: None,
             bridge_required: true,
             closed_loop: None,
         };
-        assert!(disabled.check_bridge(None).await.is_err());
+        assert!(disabled.check_semantic(None).await.is_err());
     }
 
     #[test]
@@ -2814,7 +2857,7 @@ mod transport_regression_tests {
     #[tokio::test]
     async fn malformed_message_query_returns_jsonrpc_error() {
         let app = McpServer::build_router(
-            Arc::new(PolymorphicZeroEngine::new().with_bridge(None)),
+            Arc::new(PolymorphicZeroEngine::new().with_semantic(None)),
             None,
         );
         let response = app
@@ -2837,7 +2880,7 @@ mod transport_regression_tests {
     #[tokio::test]
     async fn rest_routing_and_missing_proof_errors_are_json() {
         let app = McpServer::build_router(
-            Arc::new(PolymorphicZeroEngine::new().with_bridge(None)),
+            Arc::new(PolymorphicZeroEngine::new().with_semantic(None)),
             None,
         );
         for (path, status) in [

@@ -2,7 +2,7 @@ mod reflex_cmd;
 use anyhow::Context;
 use clap::{Parser, Subcommand};
 use gen_zero_service::zero::{DEFAULT_TENANT, DEFAULT_WORKSPACE};
-use gen_zero_service::{McpServer, MountKey, MountRegistry};
+use gen_zero_service::{McpServer, MountKey, MountRegistry, ZeroEngineConfig};
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 
@@ -11,6 +11,23 @@ use std::path::PathBuf;
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum QwenAction {
+    /// Softmax over each candidate's log-likelihood after the prompt.
+    Score {
+        #[arg(long)]
+        prompt: String,
+        /// One candidate per flag; at least two.
+        #[arg(long = "candidate", required = true)]
+        candidates: Vec<String>,
+    },
+    /// Probability that carrying out the text is dangerous (any language).
+    Risk {
+        #[arg(long)]
+        text: String,
+    },
 }
 
 #[derive(Subcommand, Debug)]
@@ -80,6 +97,19 @@ pub enum Commands {
         /// Directory downloaded tuning patches are written to.
         #[arg(long, env = "GENZERO_MODELS_DIR", default_value = "./models")]
         models_dir: PathBuf,
+        /// Qwen2.5 weights for the in-process semantic backend: a `.gguf` file or
+        /// a directory with config.json + model.safetensors. When set, ask/route/
+        /// imagine and the risk check run in this process (no Python service), and
+        /// a model that fails to load stops startup.
+        #[arg(
+            long = "qwen-model-path",
+            alias = "qwen-model",
+            env = "GENZERO_QWEN_MODEL_PATH"
+        )]
+        qwen_model: Option<PathBuf>,
+        /// tokenizer.json for --qwen-model-path (default: beside the weights).
+        #[arg(long, env = "GENZERO_QWEN_TOKENIZER_PATH")]
+        qwen_tokenizer: Option<PathBuf>,
     },
     /// Alias for MCP server command
     Mcp {
@@ -95,6 +125,35 @@ pub enum Commands {
         token: Option<String>,
         #[arg(long, env = "GENZERO_MOUNT_ASSETS")]
         mount_assets: Option<String>,
+        /// Qwen2.5 weights for the in-process semantic backend: a `.gguf` file or
+        /// a directory with config.json + model.safetensors. When set, ask/route/
+        /// imagine and the risk check run in this process (no Python service), and
+        /// a model that fails to load stops startup.
+        #[arg(
+            long = "qwen-model-path",
+            alias = "qwen-model",
+            env = "GENZERO_QWEN_MODEL_PATH"
+        )]
+        qwen_model: Option<PathBuf>,
+        /// tokenizer.json for --qwen-model-path (default: beside the weights).
+        #[arg(long, env = "GENZERO_QWEN_TOKENIZER_PATH")]
+        qwen_tokenizer: Option<PathBuf>,
+    },
+    /// Run the native Qwen2.5 scorer directly (no server, no Python): score
+    /// candidates after a prompt, or assess the safety risk of a text.
+    Qwen {
+        /// Weights: a `.gguf` file or a directory with config.json + model.safetensors.
+        #[arg(
+            long = "qwen-model-path",
+            alias = "qwen-model",
+            env = "GENZERO_QWEN_MODEL_PATH"
+        )]
+        model: PathBuf,
+        /// tokenizer.json (default: beside the weights).
+        #[arg(long, env = "GENZERO_QWEN_TOKENIZER_PATH")]
+        tokenizer: Option<PathBuf>,
+        #[command(subcommand)]
+        action: QwenAction,
     },
     /// Generate a cryptographically secure Gen-Zero connection token
     Keygen {
@@ -407,6 +466,18 @@ pub enum Commands {
 /// Publish an assets file as the next generation of the default mount. Any
 /// failure stops the process: serving without the requested geometry would
 /// be a silent downgrade.
+/// Engine configuration from the environment, with `--qwen-model` applied.
+fn engine_config(
+    qwen_model: Option<PathBuf>,
+    qwen_tokenizer: Option<PathBuf>,
+) -> anyhow::Result<ZeroEngineConfig> {
+    let config = ZeroEngineConfig::from_env()?;
+    Ok(match qwen_model {
+        Some(model) => config.with_qwen_model(model, qwen_tokenizer),
+        None => config,
+    })
+}
+
 fn mount_assets_file(server: &McpServer, path: &str) -> anyhow::Result<()> {
     let text = std::fs::read_to_string(path).with_context(|| format!("read {path}"))?;
     let assets: serde_json::Value =
@@ -557,6 +628,8 @@ async fn main() -> anyhow::Result<()> {
             sync_interval_secs,
             poll_interval_secs,
             models_dir,
+            qwen_model,
+            qwen_tokenizer,
         } => {
             let closed_loop =
                 tuning_endpoint.map(|tuning_endpoint| gen_zero_service::ClosedLoopConfig {
@@ -567,7 +640,7 @@ async fn main() -> anyhow::Result<()> {
                     poll_interval_secs,
                     models_dir,
                 });
-            let server = McpServer::new()
+            let server = McpServer::try_from_config(engine_config(qwen_model, qwen_tokenizer)?)?
                 .with_auth_token(token.clone())
                 .with_closed_loop_config(closed_loop);
             if let Some(path) = &mount_assets {
@@ -597,8 +670,11 @@ async fn main() -> anyhow::Result<()> {
             port,
             token,
             mount_assets,
+            qwen_model,
+            qwen_tokenizer,
         } => {
-            let server = McpServer::new().with_auth_token(token.clone());
+            let server = McpServer::try_from_config(engine_config(qwen_model, qwen_tokenizer)?)?
+                .with_auth_token(token.clone());
             if let Some(path) = &mount_assets {
                 mount_assets_file(&server, path)?;
             }
@@ -619,6 +695,45 @@ async fn main() -> anyhow::Result<()> {
                 }
                 server.run_sse(addr).await?;
             }
+        }
+        Commands::Qwen {
+            model,
+            tokenizer,
+            action,
+        } => {
+            let started = std::time::Instant::now();
+            let scorer = gen_zero_model::QwenSemanticScorer::load(&model, tokenizer.as_deref())
+                .with_context(|| format!("load native Qwen scorer from {}", model.display()))?;
+            let load_ms = started.elapsed().as_secs_f64() * 1e3;
+            let started = std::time::Instant::now();
+            let result = match action {
+                QwenAction::Score { prompt, candidates } => {
+                    let probs = scorer.score_candidates(&prompt, &candidates)?;
+                    serde_json::json!({
+                        "prompt": prompt,
+                        "rule": "softmax of conditional log-likelihood",
+                        "candidates": candidates
+                            .iter()
+                            .zip(&probs)
+                            .map(|(c, p)| serde_json::json!({"name": c, "probability": p}))
+                            .collect::<Vec<_>>(),
+                    })
+                }
+                QwenAction::Risk { text } => serde_json::json!({
+                    "text": text,
+                    "p_dangerous": scorer.assess_risk(&text)?,
+                    "thresholds": {
+                        "escalate": gen_zero_model::RISK_ESCALATE_THRESHOLD,
+                        "hard_stop": gen_zero_model::RISK_HARD_STOP_THRESHOLD,
+                    },
+                    "classifier": scorer.classifier_id(),
+                }),
+            };
+            let mut out = result;
+            out["model"] = serde_json::to_value(scorer.info())?;
+            out["load_ms"] = serde_json::json!(load_ms);
+            out["elapsed_ms"] = serde_json::json!(started.elapsed().as_secs_f64() * 1e3);
+            println!("{}", serde_json::to_string_pretty(&out)?);
         }
         Commands::Keygen { prefix } => {
             let mut bytes = [0u8; 32];

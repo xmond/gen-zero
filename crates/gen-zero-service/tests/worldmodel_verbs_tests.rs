@@ -16,7 +16,7 @@ use axum::http::{Request, StatusCode};
 use axum::routing::post;
 use axum::{Json, Router};
 use gen_zero_service::{
-    BridgeConfig, McpServer, PolymorphicZeroEngine, SemanticBridgeClient, ZeroVerb,
+    BridgeConfig, McpServer, PolymorphicZeroEngine, SemanticBackend, SemanticBridgeClient, ZeroVerb,
 };
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -30,7 +30,7 @@ fn latent(fill: f64) -> Value {
 
 /// Bridge off: the request text of `audit` and `decide` stays unassessed.
 fn engine_without_bridge() -> Arc<PolymorphicZeroEngine> {
-    Arc::new(PolymorphicZeroEngine::new().with_bridge(None))
+    Arc::new(PolymorphicZeroEngine::new().with_semantic(None))
 }
 
 /// Canned scorer: every text is low risk, the first candidate wins with 0.9
@@ -91,7 +91,9 @@ async fn stub_scorer() -> String {
 
 async fn engine_with_stub() -> Arc<PolymorphicZeroEngine> {
     let client = SemanticBridgeClient::new(BridgeConfig::new(stub_scorer().await)).unwrap();
-    Arc::new(PolymorphicZeroEngine::new().with_bridge(Some(Arc::new(client))))
+    Arc::new(
+        PolymorphicZeroEngine::new().with_semantic(Some(Arc::new(SemanticBackend::Remote(client)))),
+    )
 }
 
 async fn post_json(

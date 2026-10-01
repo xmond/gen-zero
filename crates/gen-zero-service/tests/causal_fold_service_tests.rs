@@ -13,7 +13,7 @@ use tower::util::ServiceExt;
 
 /// Bridge off: nothing here may depend on the Python scorer.
 fn engine() -> Arc<PolymorphicZeroEngine> {
-    Arc::new(PolymorphicZeroEngine::new().with_bridge(None))
+    Arc::new(PolymorphicZeroEngine::new().with_semantic(None))
 }
 
 async fn post(engine: &Arc<PolymorphicZeroEngine>, path: &str, body: Value) -> (StatusCode, Value) {

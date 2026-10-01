@@ -70,7 +70,7 @@ impl CapturedAuth {
 
 #[tokio::test]
 async fn feedback_endpoint_ingests_records_into_the_buffer() {
-    let engine = Arc::new(PolymorphicZeroEngine::new().with_bridge(None));
+    let engine = Arc::new(PolymorphicZeroEngine::new().with_semantic(None));
     let app = McpServer::build_router(engine, None);
 
     let records = json!([
@@ -99,7 +99,7 @@ async fn feedback_endpoint_ingests_records_into_the_buffer() {
 
 #[tokio::test]
 async fn feedback_endpoint_rejects_a_non_array_body() {
-    let engine = Arc::new(PolymorphicZeroEngine::new().with_bridge(None));
+    let engine = Arc::new(PolymorphicZeroEngine::new().with_semantic(None));
     let app = McpServer::build_router(engine, None);
 
     let resp = app

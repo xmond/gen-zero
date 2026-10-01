@@ -93,7 +93,7 @@ mod tests {
     use super::*;
 
     fn configured() -> (PolymorphicZeroEngine, MountKey, Value) {
-        let engine = PolymorphicZeroEngine::new().with_bridge(None);
+        let engine = PolymorphicZeroEngine::new().with_semantic(None);
         let key = MountKey::new("default", "default");
         let assets: Value = serde_json::from_str(include_str!(
             "../tests/fixtures/cognitive_assets_linear2d.json"
@@ -159,7 +159,7 @@ mod tests {
     fn snapshots_are_bounded_and_unconfigured_mounts_are_refused() {
         let (engine, key, _) = configured();
         assert!(PolymorphicZeroEngine::new()
-            .with_bridge(None)
+            .with_semantic(None)
             .capture_mount_snapshot(1, &key)
             .is_err());
         for id in 0..17 {

@@ -74,7 +74,7 @@ pub const ENGINE_COGNITIVE: &str = "cognitive_runtime";
 /// Largest state width (`dim`) and input width (`generator.b` columns) of
 /// the gated cognitive SSM. The entailment geometry is not bound by it: its
 /// width is the sealed topology preset (64, 128 or 256).
-pub const MAX_DIM: usize = 32;
+pub const MAX_DIM: usize = 128;
 pub const MAX_WINDOW: usize = 4096;
 /// Window limit of the fiber path. Each step there exponentiates a dense
 /// 256 x 256 generator, so it gets a smaller budget than `MAX_WINDOW`.
@@ -450,6 +450,10 @@ impl CognitiveAssets {
 
     pub fn dim(&self) -> usize {
         self.wire.dim
+    }
+
+    pub fn input_dim(&self) -> usize {
+        self.b.cols()
     }
 
     pub fn summary(&self) -> Value {

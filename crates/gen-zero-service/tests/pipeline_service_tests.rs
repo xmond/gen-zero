@@ -12,7 +12,7 @@ use std::sync::Arc;
 use tower::util::ServiceExt;
 
 fn engine() -> Arc<PolymorphicZeroEngine> {
-    Arc::new(PolymorphicZeroEngine::new().with_bridge(None))
+    Arc::new(PolymorphicZeroEngine::new().with_semantic(None))
 }
 
 #[tokio::test]
@@ -32,7 +32,7 @@ async fn live_graph_revocation_blocks_http_pipeline_action() {
         .unwrap();
     let engine = Arc::new(
         PolymorphicZeroEngine::new()
-            .with_bridge(None)
+            .with_semantic(None)
             .with_lod_graph(graph),
     );
     let (status, body) = post(
@@ -59,7 +59,7 @@ fn engine_prohibiting(ids: &[u32]) -> Arc<PolymorphicZeroEngine> {
     }
     Arc::new(
         PolymorphicZeroEngine::new()
-            .with_bridge(None)
+            .with_semantic(None)
             .with_gate(gate),
     )
 }
@@ -557,7 +557,7 @@ async fn http_decide_preserves_active_context_and_rejects_malformed_context() {
     ));
     let engine = Arc::new(
         PolymorphicZeroEngine::new()
-            .with_bridge(None)
+            .with_semantic(None)
             .with_gate(gate),
     );
     let (status, body) = post(

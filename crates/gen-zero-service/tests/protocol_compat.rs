@@ -6,14 +6,15 @@ use axum::{
 };
 use futures_util::StreamExt;
 use gen_zero_service::{
-    server::McpServer, zero::PolymorphicZeroEngine, BridgeConfig, SemanticBridgeClient,
+    server::McpServer, zero::PolymorphicZeroEngine, BridgeConfig, SemanticBackend,
+    SemanticBridgeClient,
 };
 use serde_json::{json, Value};
 use std::{sync::Arc, time::Duration};
 use tower::ServiceExt;
 
 fn app() -> (Router, Arc<PolymorphicZeroEngine>) {
-    let engine = Arc::new(PolymorphicZeroEngine::new().with_bridge(None));
+    let engine = Arc::new(PolymorphicZeroEngine::new().with_semantic(None));
     (McpServer::build_router(engine.clone(), None), engine)
 }
 
@@ -42,7 +43,9 @@ async fn stub_low_risk_bridge() -> String {
 async fn app_with_low_risk_bridge() -> (Router, Arc<PolymorphicZeroEngine>) {
     let client = SemanticBridgeClient::new(BridgeConfig::new(stub_low_risk_bridge().await))
         .expect("stub bridge client");
-    let engine = Arc::new(PolymorphicZeroEngine::new().with_bridge(Some(Arc::new(client))));
+    let engine = Arc::new(
+        PolymorphicZeroEngine::new().with_semantic(Some(Arc::new(SemanticBackend::Remote(client)))),
+    );
     (McpServer::build_router(engine.clone(), None), engine)
 }
 

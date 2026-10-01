@@ -638,7 +638,7 @@ mod engine {
     use serde_json::{json, Value};
 
     fn engine() -> PolymorphicZeroEngine {
-        PolymorphicZeroEngine::new().with_bridge(None)
+        PolymorphicZeroEngine::new().with_semantic(None)
     }
 
     fn compact() -> Value {

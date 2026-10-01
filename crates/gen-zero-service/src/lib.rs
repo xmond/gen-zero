@@ -2,9 +2,10 @@
 //!
 //! Dual-Transport MCP Server (Stdio & SSE / HTTP REST Gateway),
 //! Single Polymorphic `zero` Tool Router with 11 Cognitive Verbs,
-//! High-Performance simd-json Protocol Loop, and the semantic bridge to the
-//! Python scorer used by the `ask`, `route` and `imagine` verbs, and the
-//! Spec 25 cognitive runtime (mount snapshot, tangent SSM, geometry gate).
+//! High-Performance simd-json Protocol Loop, the semantic backend of the
+//! `ask`, `route` and `imagine` verbs (native Qwen in process, or the HTTP
+//! bridge to the Python scorer), and the Spec 25 cognitive runtime (mount
+//! snapshot, tangent SSM, geometry gate).
 
 #![allow(clippy::result_large_err)]
 
@@ -18,6 +19,7 @@ pub mod mount;
 pub mod pipeline_verb;
 pub mod reflex_adapter;
 pub mod reflex_registry;
+pub mod semantic;
 pub mod server;
 pub mod snapshot;
 pub mod tangent_ssm;
@@ -36,8 +38,11 @@ pub use mount::{
 };
 pub use reflex_adapter::{AdaptationReport, ReflexOnlineAdapter};
 pub use reflex_registry::{ReflexError, ReflexRegistry};
+pub use semantic::{NativeConfig, NativeQwen, SemanticBackend};
 pub use server::McpServer;
-pub use zero::{PolymorphicZeroEngine, ZeroContentBlock, ZeroToolOutcome, ZeroVerb};
+pub use zero::{
+    PolymorphicZeroEngine, ZeroContentBlock, ZeroEngineConfig, ZeroToolOutcome, ZeroVerb,
+};
 
 #[cfg(test)]
 mod tests {
