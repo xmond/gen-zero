@@ -1,7 +1,7 @@
 {
   "task": "b0925m-t3-boolq-exp",
   "status": "completed",
-  "command": "/home/luy/.hermes-venv/bin/python benchmarks/suites/probe_boolq_elevation.py",
+  "command": "python3 benchmarks/suites/probe_boolq_elevation.py",
   "versions": {
     "python": "3.11.16",
     "numpy": "2.4.6",

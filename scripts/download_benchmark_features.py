@@ -81,8 +81,8 @@ FEATURE_SHA256: Dict[str, Dict[str, str]] = {
     "vitaminc": {"qwen": "93cc2f1482ac513e7a12f87309554fe80fea6f31126d2738224e5dc8be19bba9", "llama": "7687fc0dfdd2358a0693f36a87f078cdf406b78ef57dabe36d91680d9a3fe6f0"},
 }
 
-AUTO_QDIR = Path("/ebs/data/extracted_features/qwen72b/features")
-AUTO_LDIR = Path("/ebs/data/extracted_features/llama70b")
+AUTO_QDIR = Path(os.environ.get("MASTER_QWEN_DIR", "./data/extracted_features/qwen72b/features"))
+AUTO_LDIR = Path(os.environ.get("MASTER_LLAMA_DIR", "./data/extracted_features/llama70b"))
 
 NO_MIRROR_MESSAGE = (
     "no public mirror; contact maintainers "

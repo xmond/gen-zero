@@ -68,7 +68,7 @@ reproduced. Both were removed on 2026-09-29. The guide below replaces it with
 a path that only needs already-extracted, locally verifiable Qwen2.5-72B and
 LLaMA-3.1-70B features.
 
-## 13-Task SOTA Macro 81.52% Dual-70B Manifold Reproduction Guide
+## 13-Task Dual-70B Manifold Reproduction Guide (Macro 81.52%)
 
 > **Read this box before the numbers below.** "SOTA" here is this project's internal
 > track name for the highest-scoring selection rule in its own search, not a claim of

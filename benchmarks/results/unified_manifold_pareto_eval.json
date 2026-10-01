@@ -3,7 +3,7 @@
  "generated_utc": "2026-09-26T01:35:41.917811+00:00",
  "command": "benchmarks/suites/evaluate_manifold_pareto_ensemble.py --qwen-dir /ebs/data/extracted_features/qwen72b/features --llama-dir /ebs/data/extracted_features/llama70b --tasks pubmedqa aegis_safety --out benchmarks/results/unified_manifold_pareto_eval --workers 2",
  "host": {
-  "name": "luy-open-box",
+  "name": "bench-node-01",
   "cores": 24,
   "loadavg": [
    85.68,

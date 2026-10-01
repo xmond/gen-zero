@@ -84,7 +84,7 @@
  {
   "name": "hooks-tiny",
   "command": [
-   "/home/luy/.hermes-venv/bin/python",
+   "python3",
    "scripts/test_qwen4exp_extraction_hooks_tiny.py"
   ],
   "exit_code": 0,

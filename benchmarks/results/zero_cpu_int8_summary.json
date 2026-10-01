@@ -337,7 +337,7 @@
   },
   "wall_seconds": 1697.7052621957846,
   "environment": {
-    "hostname": "luy-open-box",
+    "hostname": "bench-node-01",
     "cpu": "x86_64",
     "logical_cores": 24,
     "torch": "2.14.0+cpu",

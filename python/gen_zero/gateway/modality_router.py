@@ -124,7 +124,7 @@ class AdaptiveModalityRouter:
         return False
 
     def classify_modality(self, raw_input: Any) -> ModalityType:
-        """Determines input modality in < 1 microsecond."""
+        """Determines input modality using fast heuristic type inspection."""
         # 1. Direct Image
         if self._is_image_object(raw_input):
             return ModalityType.VISION_IMAGE

@@ -1,6 +1,6 @@
 # Manifold-Pareto dual 70B/72B ensemble: geometric fusion + CALA gate + conformal control
 
-Generated 2026-09-26T01:35:41.917811+00:00 on `luy-open-box` (cores 24, loadavg at start [85.68, 73.25, 38.67]).
+Generated 2026-09-26T01:35:41.917811+00:00 on `bench-node-01` (cores 24, loadavg at start [85.68, 73.25, 38.67]).
 
 Command: `benchmarks/suites/evaluate_manifold_pareto_ensemble.py --qwen-dir /ebs/data/extracted_features/qwen72b/features --llama-dir /ebs/data/extracted_features/llama70b --tasks pubmedqa aegis_safety --out benchmarks/results/unified_manifold_pareto_eval --workers 2`
 

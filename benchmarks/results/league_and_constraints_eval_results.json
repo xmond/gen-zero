@@ -1,22 +1,22 @@
 {
   "schema_version": 1,
   "generated_at_utc": "2026-09-26T14:27:15.546317+00:00",
-  "workspace": "/ebs/pj/gen-zero-worktree/eval-b3-constraints",
+  "workspace": "gen-zero-worktree/eval-b3-constraints",
   "git_head": "478699c079bf4a053b953bb83b7e7f310eae4922",
   "overall_status": "NOT_ACCEPTED",
   "status_categories": {
-    "已实现": [
+    "implemented": [
       "Executed all three requested benchmark commands; preserved raw exit codes and logs",
       "Added and executed supplemental real compiler / existing arena measurement harness",
       "Captured 1000 solve trials, 20 compilation samples, 3 league seeds, 3240 training matches",
       "Ran 31 existing focused tests"
     ],
-    "未验证": [
+    "unverified": [
       "Universal 100% rejection across all constraints and inputs; observed sample success is not proof",
       "Real browser dataset task success, interaction steps and backtracking",
       "Learned agent decision stability; strategy total variation is only a simulation statistic"
     ],
-    "未完成": [
+    "incomplete": [
       "League benchmark acceptance failed",
       "CP-SAT latency goals and fallback-free acceptance failed",
       "Real Web Agent benchmark is absent from the requested entrypoint; no replacement dataset or browser environment was specified"
@@ -167,7 +167,7 @@
   "environment": {
     "python": "3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]",
     "executable": "/tmp/b3-eval-venv/bin/python",
-    "dependency_path": "/home/luy/.hermes-venv/lib/python3.11/site-packages via explicit .pth",
+    "dependency_path": "$HOME/.hermes-venv/lib/python3.11/site-packages via explicit .pth",
     "packages": {
       "numpy": "2.4.6",
       "ortools": "9.15.6755",
@@ -182,9 +182,9 @@
     ],
     "install_exit_code": 0,
     "log": "benchmarks/results/b3_evidence/ortools_install.log",
-    "repair": "Initial isolated environment did not inherit torch from active venv. Added /home/luy/.hermes-venv/lib/python3.11/site-packages via b3_base_dependencies.pth. Both failed attempts remain recorded. No global package changes.",
+    "repair": "Initial isolated environment did not inherit torch from active venv. Added $HOME/.hermes-venv/lib/python3.11/site-packages via b3_base_dependencies.pth. Both failed attempts remain recorded. No global package changes.",
     "initial_environment": {
-      "python": "/home/luy/.hermes-venv/bin/python",
+      "python": "$HOME/.hermes-venv/bin/python",
       "ortools": null
     },
     "timing_caveat": "Shared machine; supplementary runs set OPENBLAS_NUM_THREADS=1 and OMP_NUM_THREADS=1. Original default environment is not directly comparable."

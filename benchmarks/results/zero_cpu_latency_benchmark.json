@@ -1,7 +1,7 @@
 {
   "description": "Real single-core CPU forward latency, BF16, random token inputs. No synthetic timings: every ms figure is a wall-clock time.perf_counter() measurement around a real ZeroModel forward pass.",
   "environment": {
-    "hostname": "luy-open-box",
+    "hostname": "bench-node-01",
     "cpu": "x86_64",
     "logical_cores": 24,
     "torch": "2.14.0+cpu",

@@ -1,10 +1,10 @@
 # B1001J T2 RAG hardening evidence
 
-Workspace: `/ebs/pj/gen-zero-worktree/b1001j-t2-rag`
+Workspace: `worktree-rag-hardening`
 Branch: `feat/b1001j-t2-rag`
 Base: `71167b7db1fb1758254ac7aadf4caf7cfd303598`
 
-## 已实现
+## Implemented
 
 - `crates/gen-zero-lod/src/graph.rs:1303,1591,2973`: shared production cap
   `MAX_GRAPH_NODES = 1 << 20`, checked at every insertion and before reflection
@@ -77,7 +77,7 @@ Luna handled bounded documentation/comment edits in projection.rs, the LOD
 README and server.rs. Main agent inspected the diff, rejected test removal,
 implemented graph/service changes, and ran integrated verification.
 
-## 未验证
+## Unverified
 
 - Seven existing ignored tests need Qwen model weights (one) or a live Python
   semantic scorer (six). They were not enabled or claimed as passed.
@@ -89,7 +89,7 @@ implemented graph/service changes, and ran integrated verification.
 - The node cap is not a total-memory bound for payloads, edges or other state.
   Reflection still copies/evolves the graph for accepted observations.
 
-## 未完成
+## Incomplete
 
 No requested implementation remains pending. The changes and this evidence
 are submitted together as a local commit on the requested branch. External

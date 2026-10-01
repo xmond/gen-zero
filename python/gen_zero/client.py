@@ -1186,7 +1186,7 @@ class GenZero:
         constraints: Optional[Sequence[Mapping[str, Any]]] = None,
         legal_actions_fn: Optional[Callable[[Any], Sequence[str]]] = None,
     ) -> Dict[str, Any]:
-        """Unified MoE Decision Entrypoint routing across 10 planning paradigms.
+        """Unified MoE Decision Entrypoint routing across 9 planning paradigms.
         
         Supports Dynamic-K compute allocation & Safe Opponent Exploitation:
         - Automatically judges task complexity C(s) in [0, 1]
@@ -1973,7 +1973,7 @@ class GenZero:
         - Dynamically scales population and horizon based on state volatility and entropy.
         
         Returns:
-            Dict with 'action', 'best_action', 'best_trajectory', 'expected_return',
+            Dict with 'mode', 'action', 'best_action', 'best_trajectory', 'expected_return',
             'horizon', 'num_samples', 'iterations', 'latency_ms', and 'status'.
             When status != 'OK', action and best_trajectory are None.
         """

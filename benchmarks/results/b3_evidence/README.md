@@ -10,7 +10,7 @@ Formal summary: `../league_and_constraints_eval_results.json`. Overall verdict: 
 
 ## Supplementary run
 
-Dependency install: `uv venv --system-site-packages /tmp/b3-eval-venv`, `uv pip install --python /tmp/b3-eval-venv/bin/python ortools`. Install exit code 0, version recorded in environment.json. The first run failed for missing torch; the failure log was kept. It was retried after explicitly loading the original environment's `/home/luy/.hermes-venv/lib/python3.11/site-packages` via a `b3_base_dependencies.pth` file in the isolated venv.
+Dependency install: `uv venv --system-site-packages /tmp/b3-eval-venv`, `uv pip install --python /tmp/b3-eval-venv/bin/python ortools`. Install exit code 0, version recorded in environment.json. The first run failed for missing torch; the failure log was kept. It was retried after explicitly loading the original environment's `~/.hermes-venv/lib/python3.11/site-packages` via a `b3_base_dependencies.pth` file in the isolated venv.
 
 ```bash
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=python /tmp/b3-eval-venv/bin/python benchmarks/b3_measure.py

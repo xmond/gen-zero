@@ -1,7 +1,7 @@
 """Unit and Integration Tests for Issue #26: Dual-Gate Guardrails & Precedence Routing Algebra.
 
 Tests:
-1. Prompt Injection Immunity: Zero-decoding non-autoregressive detection of jailbreaks (DAN, Ignore instructions).
+1. Prompt Injection Defense: Zero-decoding non-autoregressive detection of jailbreaks (DAN, Ignore instructions).
 2. Four-Tier Precedence Hierarchy: [SUPPORT, BLOCK, REVIEW, PASS], self-harm crisis priority over jailbreak.
 3. Severity Dynamic Escalation: Review actions escalated to Block when Severity >= tau_sev_block.
 4. Cascaded NanoCore Fast-Path: Sub-2.5ms fast-pass on benign requests (max_p < 0.20 and Severity < 0.50).

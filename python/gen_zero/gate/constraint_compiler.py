@@ -23,7 +23,7 @@ RFC-069 & Issue #76 Implementation:
 5. Unsafe State Attribution: If all candidates are barred or fallback action itself is forbidden,
    solver strictly sets is_safe=False and marks solver_status="UNSAFE_NO_FEASIBLE_ACTIONS".
 6. Neuro-Symbolic Hard Safety Enforcement: Neural proposals are formally vetted by
-   a 0-1 CP-SAT integer linear programming solver, ensuring 100% hard blocking of safety violations.
+   a 0-1 CP-SAT integer linear programming solver, providing formal fail-closed blocking of safety violations.
 7. Dynamic Runtime Updating: Safety rules can be compiled, modified, or appended in sub-2ms
    without retraining or fine-tuning neural weights.
 """

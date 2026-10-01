@@ -6,7 +6,7 @@
     "scheme": "int8-weight-only-per-row-symmetric, bf16-embedding, fp32-compute",
     "family": "zero-qwen2.5-0.5b-trunk",
     "quantized_linears": "168",
-    "source_snapshot": "/home/luy/.cache/huggingface/hub/models--Qwen--Qwen2.5-0.5B/snapshots/060db6499f32faf8b98477b0a26969ef7d8b9987"
+    "source_snapshot": "~/.cache/huggingface/hub/models--Qwen--Qwen2.5-0.5B/snapshots/060db6499f32faf8b98477b0a26969ef7d8b9987"
   },
   "cpu_encoder_id": "zero-qwen2.5-0.5b-trunk:int8:last-token",
   "precision": "int8",

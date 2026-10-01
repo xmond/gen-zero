@@ -1,7 +1,7 @@
 # Gen-Zero × Dense Large-Model Fleet Engineering Implementation Master Plan (Implementation Master Plan)
 
 - **Created**: 2026-09-27
-- **Host of origin**: `luy-open-box` (Linux / `/ebs/pj/gen-zero`)
+- **Host of origin**: `bench-node-01` (Linux / `/ebs/pj/gen-zero`)
 - **Cross-host sync**: synced to `~/inbox/gen-zero/docs/260927-openbox-gen-zero-dense-fleet-implementation-plan.md`
 - **Code baseline**: `/ebs/pj/gen-zero` (HEAD `acb2c0ccf3f30a708cd9a4f638248973c4709188`)
 - **Prerequisite research**:

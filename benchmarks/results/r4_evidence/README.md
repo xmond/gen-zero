@@ -9,7 +9,7 @@ The temporary venv was created with `uv venv --system-site-packages
 /tmp/r4-planners-venv`, followed by `uv pip install --python
 /tmp/r4-planners-venv/bin/python ortools`. To reuse the installed project dependencies,
 its `r4_shared_dependencies.pth` points to
-`/home/luy/.hermes-venv/lib/python3.11/site-packages`. The repository's default
+`~/.hermes-venv/lib/python3.11/site-packages`. The repository's default
 `python` initially lacked OR-Tools; it has not been modified.
 
 Reproduction from the repository root:

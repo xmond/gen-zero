@@ -4,7 +4,7 @@ ________ ERROR collecting benchmarks/tests/test_gen_zero_tb_adapter.py _________
 ImportError while importing test module '/ebs/pj/gen-zero/benchmarks/tests/test_gen_zero_tb_adapter.py'.
 Hint: make sure your test modules/packages have valid Python names.
 Traceback:
-/home/luy/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/importlib/__init__.py:126: in import_module
+$HOME/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/importlib/__init__.py:126: in import_module
     return _bootstrap._gcd_import(name[level:], package, level)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 benchmarks/tests/test_gen_zero_tb_adapter.py:4: in <module>

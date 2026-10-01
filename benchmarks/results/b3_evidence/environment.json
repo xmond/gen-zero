@@ -1,7 +1,7 @@
 {
   "python": "3.11.16 (main, Sep  1 2026, 14:18:37) [Clang 22.1.3 ]",
   "executable": "/tmp/b3-eval-venv/bin/python",
-  "dependency_path": "/home/luy/.hermes-venv/lib/python3.11/site-packages via explicit .pth",
+  "dependency_path": "$HOME/.hermes-venv/lib/python3.11/site-packages via explicit .pth",
   "packages": {
     "numpy": "2.4.6",
     "ortools": "9.15.6755",

@@ -7,7 +7,7 @@ Zero-Copy Kernel-Bypass Streaming Hot-Swapping Architecture for Massive Micro-Co
 3. Stage-1 Overlapped Async Prefetching: Initiates non-blocking DMA streaming during coarse filtering.
 4. Graceful Transport Fallback: RDMA/RoCEv2 -> NVMe-TCP -> POSIX Shared Memory (SHM).
 5. Bit-Exact Integrity: SHA-256 verification and zero float32 distortion (RMSE = 0.0).
-6. Sub-millisecond Cold Swap: Achieves P99 reload latency <= 0.8ms (over 10x faster than legacy VFS).
+6. User-Space Cold Swap: Designed for low-latency memory reload (target P99 <= 0.8ms).
 """
 
 from dataclasses import dataclass, field

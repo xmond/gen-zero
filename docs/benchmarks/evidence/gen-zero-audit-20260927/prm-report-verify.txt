@@ -4,10 +4,10 @@ Traceback (most recent call last):
   File "/ebs/pj/gen-zero/benchmarks/tests/verify_deepswe_prm_report.py", line 56, in main
     assert hashlib.sha256(Path(path).read_bytes()).hexdigest() == provenance[key]
                           ^^^^^^^^^^^^^^^^^^^^^^^
-  File "/home/luy/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/pathlib.py", line 1050, in read_bytes
+  File "$HOME/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/pathlib.py", line 1050, in read_bytes
     with self.open(mode='rb') as f:
          ^^^^^^^^^^^^^^^^^^^^
-  File "/home/luy/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/pathlib.py", line 1044, in open
+  File "$HOME/.local/share/uv/python/cpython-3.11.16-linux-x86_64-gnu/lib/python3.11/pathlib.py", line 1044, in open
     return io.open(self, mode, buffering, encoding, errors, newline)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 FileNotFoundError: [Errno 2] No such file or directory: 'benchmarks/artifacts/deepswe_prm/enhanced_rank_head.pt'

@@ -30,7 +30,7 @@
 ## 2. Full Python Directory Regression Record
 
 ### 1. Runtime and dependencies
-- **Python version**: CPython 3.11.16 (`/home/luy/.hermes-venv/bin/python3`)
+- **Python version**: CPython 3.11.16 (`python3.11`)
 - **Pytest version**: pytest 9.1.1
 - **Core dependencies**:
   - `torch`: 2.5.1

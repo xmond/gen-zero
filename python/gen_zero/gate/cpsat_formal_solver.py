@@ -5,7 +5,7 @@ Implements Milestone 5 of Issue #23:
 - Maximizes utility: max_a S_composite(a) s.t. a in C_safe.
 - 2ms Hard Timeout Circuit Breaker: Enforces strict <= 2.0ms solve budget.
   If solver times out or exceeds budget, falls back deterministically to the best safe heuristic action.
-- 100% hard constraint safety interception.
+- Formal hard constraint safety interception.
 """
 
 from typing import List, Dict, Any, Optional, Set, Tuple
