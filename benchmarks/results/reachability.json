@@ -23165,6 +23165,10 @@
       "to": "crates/gen-zero-gate/src/sheaf_gate.rs"
     },
     {
+      "from": "crates/gen-zero-lod/src/graph.rs",
+      "to": "crates/gen-zero-lod/src/graph/persistence.rs"
+    },
+    {
       "from": "crates/gen-zero-lod/src/lib.rs",
       "to": "crates/gen-zero-lod/src/error.rs"
     },
@@ -23428,6 +23432,7 @@
     "crates/gen-zero-gate/src/sheaf_gate.rs",
     "crates/gen-zero-lod/src/error.rs",
     "crates/gen-zero-lod/src/graph.rs",
+    "crates/gen-zero-lod/src/graph/persistence.rs",
     "crates/gen-zero-lod/src/lib.rs",
     "crates/gen-zero-lod/src/manifold.rs",
     "crates/gen-zero-lod/src/node.rs",
@@ -23600,8 +23605,15 @@
       "public_symbols": 1
     },
     {
-      "file": "crates/gen-zero-lod/src/graph.rs",
+      "file": "crates/gen-zero-lod/src/graph/persistence.rs",
       "declared_modules": [],
+      "public_symbols": 8
+    },
+    {
+      "file": "crates/gen-zero-lod/src/graph.rs",
+      "declared_modules": [
+        "persistence"
+      ],
       "public_symbols": 60
     },
     {

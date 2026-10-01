@@ -875,7 +875,6 @@ async fn policy_audit_reflection_is_idempotent_and_evolution_conflict_is_explici
     assert!(graph.is_revoked(0));
     assert_eq!(graph.node_count(), 1);
 }
-
 fn graph_node(entity: u64, label: &str, status: &str, confidence: f64) -> Value {
     json!({
         "entity_id": entity, "label": label, "band": 0, "status": status,
@@ -982,4 +981,43 @@ async fn admission_refuses_a_divergent_cycle_and_reflection_on_cycles_returns_20
         body.to_string().contains("NoFeasibleAction") || body.to_string().contains("no feasible"),
         "{body}"
     );
+}
+
+#[tokio::test]
+async fn http_auto_reflect_revocation_survives_durable_engine_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = gen_zero_service::zero::ZeroEngineConfig {
+        graph_persist_dir: Some(dir.path().to_path_buf()),
+        ..Default::default()
+    };
+    let engine = Arc::new(
+        PolymorphicZeroEngine::try_from_config(config.clone())
+            .unwrap()
+            .with_semantic(None),
+    );
+    let (status, body) = post(
+        &engine,
+        "/v1/pipeline/simulate",
+        json!({"state":trap_state(),"actions":[0],"auto_reflect":true}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        meta_pipeline(&body)["graph_reflection"]["observations"][0]["revoked_entities"],
+        json!([0])
+    );
+    drop(engine);
+    let engine = Arc::new(
+        PolymorphicZeroEngine::try_from_config(config)
+            .unwrap()
+            .with_semantic(None),
+    );
+    let (status, body) = post(
+        &engine,
+        "/v1/pipeline/decide",
+        json!({"state":zeros(),"candidates":[0],"mode":"reflex","entropy":0.0}),
+    )
+    .await;
+    assert_ne!(status, StatusCode::OK, "{body}");
+    assert!(body.to_string().contains("NoFeasibleAction"), "{body}");
 }

@@ -39,6 +39,8 @@
 //! atomically. Nothing here touches a search tree: the planner's MCTS is sequential
 //! and has no virtual loss (see `gen-zero-planner/src/config.rs`).
 
+mod persistence;
+
 use crate::error::LodError;
 use crate::manifold::{Epochs, GeometryParams, MixedCurvatureCoord, ProductManifold, Version};
 use crate::node::{
@@ -90,13 +92,38 @@ pub struct BufferedEdge {
 /// `row_offsets.len() == num_nodes + 1`, `row_offsets` is non-decreasing and
 /// ends at `col_indices.len()`, the three edge arrays share one length, every
 /// target is a node, and every weight is finite and nonnegative.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize)]
 pub struct CsrGraph {
     num_nodes: usize,
     row_offsets: Vec<usize>,
     col_indices: Vec<u32>,
     edge_weights: Vec<f32>,
     edge_types: Vec<EdgeType>,
+}
+
+// Deserialization is a constructor too: never expose an invalid CSR value to
+// callers, even when they deserialize outside the snapshot loader.
+impl<'de> Deserialize<'de> for CsrGraph {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        struct Fields {
+            num_nodes: usize,
+            row_offsets: Vec<usize>,
+            col_indices: Vec<u32>,
+            edge_weights: Vec<f32>,
+            edge_types: Vec<EdgeType>,
+        }
+        let fields = Fields::deserialize(deserializer)?;
+        let graph = Self {
+            num_nodes: fields.num_nodes,
+            row_offsets: fields.row_offsets,
+            col_indices: fields.col_indices,
+            edge_weights: fields.edge_weights,
+            edge_types: fields.edge_types,
+        };
+        graph.validate().map_err(serde::de::Error::custom)?;
+        Ok(graph)
+    }
 }
 
 impl Default for CsrGraph {
@@ -198,7 +225,7 @@ impl CsrGraph {
     pub fn validate(&self) -> Result<(), LodError> {
         let fail = |detail: String| Err(LodError::CsrInvariant(detail));
         let edges = self.col_indices.len();
-        if self.row_offsets.len() != self.num_nodes + 1 {
+        if self.num_nodes.checked_add(1) != Some(self.row_offsets.len()) {
             return fail(format!(
                 "{} row offsets for {} nodes",
                 self.row_offsets.len(),
@@ -313,7 +340,7 @@ fn check_edge(num_nodes: usize, source: u32, target: u32, weight: f32) -> Result
 /// Lock order: `txn_lock` -> `flush_lock` -> `state`. The CSR snapshot is stored
 /// only while `state` is write-locked; methods that must see it consistent with
 /// the nodes load it while holding `state`.
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 struct GraphState {
     nodes: Vec<LodNode>,
     entity_index: HashMap<u64, u32>,
@@ -1410,6 +1437,7 @@ pub struct LodGraph {
     flush_lock: Mutex<()>,
     /// Serializes [`LodGraph::transact`] writers.
     txn_lock: Mutex<()>,
+    persistence: Option<persistence::Persistence>,
 }
 
 impl Default for LodGraph {
@@ -1465,6 +1493,7 @@ impl LodGraph {
             checkpoint_seq: AtomicU64::new(0),
             flush_lock: Mutex::new(()),
             txn_lock: Mutex::new(()),
+            persistence: None,
         })
     }
 
@@ -2779,8 +2808,12 @@ impl LodGraph {
         f: impl FnOnce(&LodGraph) -> Result<T, LodError>,
     ) -> Result<T, LodError> {
         let _txn = self.txn_lock.lock();
+        self.check_persistence()?;
         let checkpoint = self.create_checkpoint();
-        match f(self) {
+        match f(self).and_then(|value| {
+            self.persist_commit()?;
+            Ok(value)
+        }) {
             Ok(value) => Ok(value),
             Err(error) => match self.rollback_checkpoint(&checkpoint) {
                 Ok(()) => Err(error),
@@ -2873,6 +2906,8 @@ impl LodGraph {
         payload: &str,
         timestamp_ns: u64,
     ) -> Result<ReflectionReport, LodError> {
+        let _txn = self.txn_lock.lock();
+        self.check_persistence()?;
         let mut live = self.state.write();
         let mut staged = live.clone();
         let result = (|| {
@@ -2972,11 +3007,15 @@ impl LodGraph {
         match result {
             Ok(report) => {
                 *live = staged;
+                drop(live);
+                self.persist_commit()?;
                 Ok(report)
             }
             Err(error) => {
                 live.revocations.insert(u64::from(action));
                 live.manual_revocations.insert(u64::from(action));
+                drop(live);
+                self.persist_commit()?;
                 Err(error)
             }
         }

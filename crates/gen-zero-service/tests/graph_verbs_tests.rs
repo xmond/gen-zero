@@ -1648,3 +1648,95 @@ async fn prune_takes_gamma_and_reports_it() {
     .await;
     assert_eq!(code(&bad), "InvalidParams");
 }
+
+fn persistent_config(dir: &std::path::Path) -> ZeroEngineConfig {
+    ZeroEngineConfig {
+        graph_persist_dir: Some(dir.to_path_buf()),
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn durable_graph_restart_preserves_prune_and_evolve_gate_effects() {
+    let dir = tempfile::tempdir().unwrap();
+    let config = persistent_config(dir.path());
+    let engine = PolymorphicZeroEngine::try_from_config(config.clone())
+        .unwrap()
+        .with_semantic(None);
+    let out = deposit_world(&engine).await;
+    assert!(!out.is_error, "{out:?}");
+    assert_eq!(out.meta["graph_op"]["graph"]["persisted"], true);
+    assert!(PolymorphicZeroEngine::try_from_config(config.clone()).is_err());
+    let out = run(
+        &engine,
+        json!({"action":"graph_prune","graph":{"entity_id":7}}),
+    )
+    .await;
+    assert!(!out.is_error, "{out:?}");
+    drop(engine);
+    let started = std::time::Instant::now();
+    let engine = PolymorphicZeroEngine::try_from_config(config.clone())
+        .unwrap()
+        .with_semantic(None);
+    eprintln!(
+        "engine restart sample: nodes=3 elapsed_us={}",
+        started.elapsed().as_micros()
+    );
+    let out = run(&engine, decide(&[7])).await;
+    assert!(out.is_error);
+    assert_eq!(code(&out), "NoFeasibleAction");
+    let out = run(
+        &engine,
+        json!({"action":"graph_evolve","graph":{"retract":[{"entity_id":7}],"theta_hi":0.4}}),
+    )
+    .await;
+    assert!(!out.is_error, "{out:?}");
+    drop(engine);
+    let engine = PolymorphicZeroEngine::try_from_config(config)
+        .unwrap()
+        .with_semantic(None);
+    assert!(!run(&engine, decide(&[7])).await.is_error);
+    drop(engine);
+    std::fs::write(dir.path().join("CURRENT.sha256"), b"damaged snapshot").unwrap();
+    assert!(PolymorphicZeroEngine::try_from_config(persistent_config(dir.path())).is_err());
+}
+
+#[tokio::test]
+async fn failed_graph_disk_commit_blocks_subsequent_service_decisions() {
+    let dir = tempfile::tempdir().unwrap();
+    let engine = PolymorphicZeroEngine::try_from_config(persistent_config(dir.path()))
+        .unwrap()
+        .with_semantic(None);
+    assert!(!deposit_world(&engine).await.is_error);
+    std::fs::create_dir(dir.path().join("WRITE.tmp")).unwrap();
+    let failure = engine
+        .execute(&json!({"action":"graph_prune","graph":{"entity_id":7}}))
+        .await;
+    assert!(failure.is_err(), "{failure:?}");
+    assert!(engine.execute(&decide(&[7])).await.is_err());
+}
+
+#[test]
+fn failed_startup_seed_never_commits_an_empty_snapshot() {
+    let dir = tempfile::tempdir().unwrap();
+    let seed = dir.path().join("seed.json");
+    let store = dir.path().join("graph");
+    std::fs::write(&seed, "not json").unwrap();
+    let config = ZeroEngineConfig {
+        graph_seed_path: Some(seed.clone()),
+        ..persistent_config(&store)
+    };
+    assert!(PolymorphicZeroEngine::try_from_config(config.clone()).is_err());
+    assert!(!store.join("CURRENT.sha256").exists());
+    assert!(PolymorphicZeroEngine::try_from_config(config.clone()).is_err());
+    std::fs::write(
+        &seed,
+        json!({"nodes":[node(json!({"entity_id":7}),"seed fact","validated",1)]}).to_string(),
+    )
+    .unwrap();
+    let engine = PolymorphicZeroEngine::try_from_config(config.clone()).unwrap();
+    drop(engine);
+    // Recovery uses the committed graph even if the original seed is gone.
+    std::fs::remove_file(seed).unwrap();
+    assert!(PolymorphicZeroEngine::try_from_config(config).is_ok());
+}

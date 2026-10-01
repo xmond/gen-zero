@@ -796,6 +796,8 @@ pub struct ZeroEngineConfig {
     /// Optional graph seed file (`graph_deposit` JSON shape, `axiomatic` allowed).
     /// Loaded into the live LodGraph at startup; a bad file fails startup.
     pub graph_seed_path: Option<PathBuf>,
+    /// Durable data-disk directory, e.g. /var/lib/gen3/lodgraph in a MicroVM.
+    pub graph_persist_dir: Option<PathBuf>,
     /// Geometry of the live LodGraph: curvature, sphere radius and the three
     /// metric weights its node coordinates and recall distances use. `None` is
     /// the unit geometry. Fixed for the life of the engine: changing the
@@ -829,6 +831,7 @@ impl ZeroEngineConfig {
         Ok(Self {
             mmr_persist_path: path_var("GENZERO_MMR_PERSIST_PATH"),
             graph_seed_path: path_var("GENZERO_GRAPH_SEED"),
+            graph_persist_dir: path_var("GENZERO_GRAPH_PERSIST_DIR"),
             graph_geometry,
             qwen_model: path_var("GENZERO_QWEN_MODEL_PATH"),
             qwen_tokenizer: path_var("GENZERO_QWEN_TOKENIZER_PATH"),
@@ -1018,29 +1021,42 @@ impl PolymorphicZeroEngine {
                 GeometryParams::UNIT
             }
         };
-        let graph = Arc::new(LodGraph::with_geometry(graph_geometry).map_err(|e| {
-            ServiceError::Core(format!(
-                "live graph geometry {graph_geometry:?} refused: {e}"
-            ))
-        })?);
-        let graph_asset = match &config.graph_seed_path {
-            Some(path) => {
-                let report = load_seed(&graph, path).map_err(ServiceError::Core)?;
-                tracing::info!(
-                    "live graph seeded from {}: {} node(s), {} CSR edge(s)",
-                    path.display(),
-                    graph.node_count(),
-                    graph.csr_snapshot().num_edges()
-                );
-                format!("seed/{}", report["digest"].as_str().unwrap_or_default())
-            }
-            None => {
-                tracing::info!(
-                    "live graph starts empty (GENZERO_GRAPH_SEED unset); graph_deposit fills it"
-                );
-                "empty".to_string()
-            }
+        let restore_started = Instant::now();
+        let mut graph_asset = "persistent".to_string();
+        let mut restored = true;
+        let mut initialize = |graph: &LodGraph| {
+            restored = false;
+            graph_asset = match &config.graph_seed_path {
+                Some(path) => {
+                    let report =
+                        load_seed(graph, path).map_err(gen_zero_lod::LodError::Persistence)?;
+                    tracing::info!(path = %path.display(), nodes = graph.node_count(), "live graph seeded");
+                    format!("seed/{}", report["digest"].as_str().unwrap_or_default())
+                }
+                None => "empty".to_string(),
+            };
+            Ok(())
         };
+        let graph = Arc::new(
+            match &config.graph_persist_dir {
+                Some(dir) => LodGraph::open_persistent_with(dir, graph_geometry, &mut initialize),
+                None => LodGraph::with_geometry(graph_geometry).and_then(|graph| {
+                    initialize(&graph)?;
+                    Ok(graph)
+                }),
+            }
+            .map_err(|e| ServiceError::Core(format!("live graph initialization refused: {e}")))?,
+        );
+        if restored && config.graph_seed_path.is_some() {
+            tracing::info!("durable snapshot restored; startup seed is not replayed");
+        }
+        tracing::info!(
+            restored,
+            elapsed_us = restore_started.elapsed().as_micros() as u64,
+            nodes = graph.node_count(),
+            persistent = graph.is_persistent(),
+            "live graph initialized"
+        );
         Ok(Self {
             cpu_slots: Arc::new(tokio::sync::Semaphore::new(
                 std::thread::available_parallelism().map_or(2, |n| n.get().saturating_mul(2)),
@@ -1798,6 +1814,10 @@ impl PolymorphicZeroEngine {
 
     /// Supply the live graph used by the production pipeline's policy gate.
     pub fn with_lod_graph(mut self, graph: Arc<LodGraph>) -> Self {
+        assert!(
+            !self.graph.is_persistent(),
+            "cannot replace a mounted durable graph"
+        );
         self.graph = graph;
         self
     }
@@ -1845,7 +1865,13 @@ impl PolymorphicZeroEngine {
     /// every verb reads only that snapshot.
     pub async fn execute(&self, arguments: &Value) -> Result<ZeroToolOutcome, ServiceError> {
         let started = Instant::now();
+        self.graph
+            .check_persistence()
+            .map_err(|e| ServiceError::Core(e.to_string()))?;
         let result = self.execute_inner(arguments).await;
+        self.graph
+            .check_persistence()
+            .map_err(|e| ServiceError::Core(e.to_string()))?;
         self.metrics
             .record_execution(arguments, &result, started.elapsed().as_secs_f64());
         result

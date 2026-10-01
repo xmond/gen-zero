@@ -14,6 +14,14 @@ text retrieval over payload-carrying nodes.
   manifold recall, and atomic checkpoints (`create_checkpoint` /
   `rollback_checkpoint` / `transact`). No MCTS virtual loss is involved: the
   planner's MCTS is sequential.
+  - Persistence: `save_to_dir` / `load_from_dir` preserve binary state with
+    versioned SHA-256-checked blocks and an atomically replaced manifest.
+    `open_persistent` holds an exclusive directory lock; `transact` and
+    `reflect_failure` durably commit on that mount. Low-level individual mutation
+    methods must be enclosed in `transact` or followed by explicit `save_to_dir`.
+    A durability failure poisons the mount; service hosts must honor
+    `check_persistence` before and after requests, as ZeroEngine does.
+    Checkpoint IDs and discarded ranges remain process-local.
   - Geometry: a graph is built with `GeometryParams` (`LodGraph::with_geometry`;
     `LodGraph::new` is the unit geometry). Curvature and sphere radius fix the
     domain of every node coordinate; `alpha_h`, `alpha_e`, `alpha_s` weigh the
