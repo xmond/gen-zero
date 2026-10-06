@@ -41,11 +41,11 @@ def test_infeasible_bounds_rejected():
 
 
 def test_effect_based_action_gate():
-    engine = CpSatFormalEngine(action_effects={'launch_job': 'EXECUTE', 'read_data': 'READ_ONLY'})
-    state = {'text': 'unauthorized', 'action_effects': {'launch_job': 'EXECUTE', 'read_data': 'READ_ONLY'}}
-    result = engine.verify_and_prune(state, ['launch_job', 'exec_job', 'read_data'])
-    assert result['feasible_actions'] == ['read_data']
-    assert not CpSatFormalEngine().verify_and_prune(state, ['read_data'])['feasible_actions']
+    engine = CpSatFormalEngine(action_effects={'launch_job': 'EXECUTE', 'custom_data': 'READ_ONLY'})
+    state = {'text': 'unauthorized', 'action_effects': {'launch_job': 'EXECUTE', 'custom_data': 'READ_ONLY'}}
+    result = engine.verify_and_prune(state, ['launch_job', 'exec_job', 'custom_data'])
+    assert result['feasible_actions'] == ['custom_data']
+    assert not CpSatFormalEngine().verify_and_prune(state, ['custom_data'])['feasible_actions']
 
 
 def test_intermediate_overflow_and_exact_hard_mask():

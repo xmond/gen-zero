@@ -279,10 +279,10 @@ class TestMCPServer(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(payload["degraded"])
 
     async def test_08b_zero_route_non_ascii_query_is_degraded_not_silent(self):
-        """B06: an all-Chinese task_goal extracts zero ASCII keywords; the lexical baseline
+        """B06: a non-ASCII task_goal extracts zero ASCII keywords; the lexical baseline
         must say so instead of silently returning an input-order 'ranking'."""
         res = await execute_zero_route({
-            "task_goal": "Deploy container cluster and check network configuration",
+            "task_goal": "\u0440\u0430\u0437\u0432\u0435\u0440\u0442\u044b\u0432\u0430\u043d\u0438\u0435 \u043a\u043b\u0430\u0441\u0442\u0435\u0440\u0430 \u043a\u043e\u043d\u0442\u0435\u0439\u043d\u0435\u0440\u043e\u0432",
             "tools": [
                 {"name": "kubectl_apply", "description": "Apply k8s deployment YAML"},
                 {"name": "send_email", "description": "Send email notification"}
