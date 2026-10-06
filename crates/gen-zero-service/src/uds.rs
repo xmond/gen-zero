@@ -63,6 +63,7 @@ impl UdsClient {
 /// Removes the socket file when dropped, so a normal shutdown, an accept
 /// error, or a cancelled serve future leaves no file behind. A killed process
 /// leaves the file; the next [`bind_uds`] removes it.
+#[derive(Debug)]
 pub struct UdsSocketGuard(PathBuf);
 
 impl Drop for UdsSocketGuard {

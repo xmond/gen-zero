@@ -131,7 +131,7 @@ async fn durable_refusal_store_records_stage2_trigger() {
     let db_path = db_dir.path().join("refusals.sqlite");
 
     let config = ZeroEngineConfig::default()
-        .with_qwen_model(PathBuf::from(base_model), None)
+        .with_qwen_model(base_model, None)
         .with_refusal_db_path(db_path);
     let config = ZeroEngineConfig {
         tri_teacher_adapter: Some(demo_adapter),
@@ -169,8 +169,7 @@ async fn durable_refusal_store_records_stage2_trigger() {
     assert_eq!(trace.null_score, 4.5);
     assert!((trace.score_diff - (-0.5)).abs() < 1e-6, "{trace:?}");
     let verifier_output: Value =
-        serde_json::from_str(trace.verifier_output.as_ref().expect("verifier_output set"))
-            .unwrap();
+        serde_json::from_str(trace.verifier_output.as_ref().expect("verifier_output set")).unwrap();
     assert_eq!(verifier_output["stage2_triggered"], true);
     assert!(
         verifier_output["tri_sim"].as_f64().is_some(),

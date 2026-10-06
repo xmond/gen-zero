@@ -1237,7 +1237,10 @@ async fn graph_rag_recalls_a_translation_through_aliases_and_the_control_misses_
     assert_eq!(deposited["alias_link_edges"], 2);
     assert_eq!(deposited["flush"]["merged_edges"], 2);
     let nodes = deposited["nodes"].as_array().unwrap();
-    assert_eq!(nodes[13]["aliases"], json!(["valve closure", "отсечка главного клапана"]));
+    assert_eq!(
+        nodes[13]["aliases"],
+        json!(["valve closure", "отсечка главного клапана"])
+    );
     assert_eq!(nodes[13]["placement"], "chart");
 
     // The English name finds both facts, each by its alias.
@@ -1311,7 +1314,11 @@ async fn deposit_embedded(engine: &PolymorphicZeroEngine, topic: &[f32], link: b
     let mut nodes: Vec<Value> = (0..13)
         .map(|i| embedded(100 + i, "distractor", random_vector(900 + i, VECTOR_DIM)))
         .collect();
-    nodes.push(embedded(1, "утечка охлаждающей жидкости", near(topic, 0.3, 7)));
+    nodes.push(embedded(
+        1,
+        "утечка охлаждающей жидкости",
+        near(topic, 0.3, 7),
+    ));
     nodes.push(text_node(2, HANDWHEEL, "validated"));
     let mut both = text_node(3, PUMP, "validated");
     both["embedding"] = json!(random_vector(55, VECTOR_DIM));

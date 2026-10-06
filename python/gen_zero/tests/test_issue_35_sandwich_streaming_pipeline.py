@@ -14,8 +14,8 @@ from gen_zero.verifier.graph_auditor import (
     GraphNodeSummary,
     PostVerificationAuditor,
 )
-from gen_zero.graph.graph_ast import GraphAST, GraphMutation, GraphOp
-from gen_zero.pipeline.sandwich_streaming import SandwichStreamingPipeline
+from gen_zero.graph import GraphAST, GraphMutation, GraphOp
+from gen_zero.streaming.pipeline import SandwichStreamingPipeline
 from gen_zero.client import GenZeroClient
 
 

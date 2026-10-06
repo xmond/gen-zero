@@ -82,6 +82,10 @@
     },
     {
       "from": "gen_zero.causal",
+      "to": "gen_zero.causal.cad_engine"
+    },
+    {
+      "from": "gen_zero.causal",
       "to": "gen_zero.causal.deq_thinking"
     },
     {
@@ -98,6 +102,10 @@
     },
     {
       "from": "gen_zero.causal",
+      "to": "gen_zero.causal.numa_affinity"
+    },
+    {
+      "from": "gen_zero.causal",
       "to": "gen_zero.causal.router"
     },
     {
@@ -107,6 +115,10 @@
     {
       "from": "gen_zero.causal",
       "to": "gen_zero.causal.symplectic_thinking"
+    },
+    {
+      "from": "gen_zero.causal",
+      "to": "gen_zero.causal.verbalizer_extractor"
     },
     {
       "from": "gen_zero.causal.annealed_langevin_engine",
@@ -135,6 +147,18 @@
     {
       "from": "gen_zero.causal.bifurcated_fractal_engine",
       "to": "gen_zero.causal.parallel_rnn_lora"
+    },
+    {
+      "from": "gen_zero.causal.cad_engine",
+      "to": "gen_zero"
+    },
+    {
+      "from": "gen_zero.causal.cad_engine",
+      "to": "gen_zero.causal"
+    },
+    {
+      "from": "gen_zero.causal.cad_engine",
+      "to": "gen_zero.causal.verbalizer_extractor"
     },
     {
       "from": "gen_zero.causal.causal_mcts_rnn",
@@ -317,6 +341,22 @@
       "to": "gen_zero.causal.universal_manifold_extractor"
     },
     {
+      "from": "gen_zero.causal.gguf_parallel_pool",
+      "to": "gen_zero"
+    },
+    {
+      "from": "gen_zero.causal.gguf_parallel_pool",
+      "to": "gen_zero.causal"
+    },
+    {
+      "from": "gen_zero.causal.gguf_parallel_pool",
+      "to": "gen_zero.causal.cad_engine"
+    },
+    {
+      "from": "gen_zero.causal.gguf_parallel_pool",
+      "to": "gen_zero.causal.numa_affinity"
+    },
+    {
       "from": "gen_zero.causal.knowledge_compiler",
       "to": "gen_zero"
     },
@@ -446,7 +486,15 @@
     },
     {
       "from": "gen_zero.cli",
+      "to": "gen_zero.causal.cad_engine"
+    },
+    {
+      "from": "gen_zero.cli",
       "to": "gen_zero.causal.feature_space"
+    },
+    {
+      "from": "gen_zero.cli",
+      "to": "gen_zero.causal.gguf_parallel_pool"
     },
     {
       "from": "gen_zero.cli",
@@ -969,38 +1017,6 @@
       "to": "gen_zero.harness.semantic_synthesizer"
     },
     {
-      "from": "gen_zero.evaluate_universal_suite",
-      "to": "gen_zero"
-    },
-    {
-      "from": "gen_zero.evaluate_universal_suite",
-      "to": "gen_zero.causal"
-    },
-    {
-      "from": "gen_zero.evaluate_universal_suite",
-      "to": "gen_zero.causal.shuffled_benchmark"
-    },
-    {
-      "from": "gen_zero.evaluate_universal_suite",
-      "to": "gen_zero.gate"
-    },
-    {
-      "from": "gen_zero.evaluate_universal_suite",
-      "to": "gen_zero.gate.locked_evaluator"
-    },
-    {
-      "from": "gen_zero.evaluate_universal_suite",
-      "to": "gen_zero.planner"
-    },
-    {
-      "from": "gen_zero.evaluate_universal_suite",
-      "to": "gen_zero.world_model"
-    },
-    {
-      "from": "gen_zero.evaluate_universal_suite",
-      "to": "gen_zero.world_model.text_world_model"
-    },
-    {
       "from": "gen_zero.firewall",
       "to": "gen_zero"
     },
@@ -1230,6 +1246,18 @@
     },
     {
       "from": "gen_zero.graph",
+      "to": "gen_zero.graph.ast_engine"
+    },
+    {
+      "from": "gen_zero.graph.graph_ast",
+      "to": "gen_zero"
+    },
+    {
+      "from": "gen_zero.graph.graph_ast",
+      "to": "gen_zero.graph"
+    },
+    {
+      "from": "gen_zero.graph.graph_ast",
       "to": "gen_zero.graph.ast_engine"
     },
     {
@@ -2045,6 +2073,18 @@
       "to": "gen_zero.pipeline.structure_recovery"
     },
     {
+      "from": "gen_zero.pipeline.sandwich_streaming",
+      "to": "gen_zero"
+    },
+    {
+      "from": "gen_zero.pipeline.sandwich_streaming",
+      "to": "gen_zero.streaming"
+    },
+    {
+      "from": "gen_zero.pipeline.sandwich_streaming",
+      "to": "gen_zero.streaming.pipeline"
+    },
+    {
       "from": "gen_zero.planner",
       "to": "gen_zero"
     },
@@ -2601,234 +2641,6 @@
       "to": "gen_zero.sandbox.tool_registry"
     },
     {
-      "from": "gen_zero.scripts.benchmark_issue_69_parity",
-      "to": "gen_zero"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_69_parity",
-      "to": "gen_zero.model"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_69_parity",
-      "to": "gen_zero.model.invertible_encoder"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_69_parity",
-      "to": "gen_zero.nanocore"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_69_parity",
-      "to": "gen_zero.nanocore.world_model_orchestrator"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_69_parity",
-      "to": "gen_zero.runtime"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_69_parity",
-      "to": "gen_zero.runtime.base_nano_core"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_69_parity",
-      "to": "gen_zero.runtime.nano_core_browser"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_69_parity",
-      "to": "gen_zero.runtime.nano_core_vision"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_69_parity",
-      "to": "gen_zero.world_model"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_69_parity",
-      "to": "gen_zero.world_model.latent_dynamics"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_71_compactor",
-      "to": "gen_zero"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_71_compactor",
-      "to": "gen_zero.compactor"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_71_compactor",
-      "to": "gen_zero.compactor.verbatim_compactor"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_71_compactor",
-      "to": "gen_zero.mcp"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_71_compactor",
-      "to": "gen_zero.mcp.server"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_72_simplex_etf",
-      "to": "gen_zero"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_72_simplex_etf",
-      "to": "gen_zero.nanocore"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_72_simplex_etf",
-      "to": "gen_zero.nanocore.action_etf_embedding"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_72_simplex_etf",
-      "to": "gen_zero.nanocore.choice_head"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_73_fleet_scheduler",
-      "to": "gen_zero"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_73_fleet_scheduler",
-      "to": "gen_zero.nanocore"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_73_fleet_scheduler",
-      "to": "gen_zero.nanocore.fleet_scheduler"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_73_fleet_scheduler",
-      "to": "gen_zero.runtime"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_73_fleet_scheduler",
-      "to": "gen_zero.runtime.base_nano_core"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_73_fleet_scheduler",
-      "to": "gen_zero.runtime.specialist_nano_core"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_74_tree_compression",
-      "to": "gen_zero"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_74_tree_compression",
-      "to": "gen_zero.world_model"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_74_tree_compression",
-      "to": "gen_zero.world_model.compressed_tree"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_74_tree_compression",
-      "to": "gen_zero.world_model.imagination_planner"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_76_constraint_compiler",
-      "to": "gen_zero"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_76_constraint_compiler",
-      "to": "gen_zero.gate"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_76_constraint_compiler",
-      "to": "gen_zero.gate.constraint_compiler"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_79_capability_router",
-      "to": "gen_zero"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_79_capability_router",
-      "to": "gen_zero.capability"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_79_capability_router",
-      "to": "gen_zero.capability.descriptor"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_79_capability_router",
-      "to": "gen_zero.capability.registry"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_79_capability_router",
-      "to": "gen_zero.harness"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_79_capability_router",
-      "to": "gen_zero.harness.setup"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_79_capability_router",
-      "to": "gen_zero.planner"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_79_capability_router",
-      "to": "gen_zero.planner.diversity_beam"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_79_capability_router",
-      "to": "gen_zero.provenance"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_79_capability_router",
-      "to": "gen_zero.provenance.auditor"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_79_capability_router",
-      "to": "gen_zero.provenance.permission_arbiter"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_86_hamiltonian_world_model",
-      "to": "gen_zero"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_86_hamiltonian_world_model",
-      "to": "gen_zero.world_model"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_86_hamiltonian_world_model",
-      "to": "gen_zero.world_model.hamiltonian_dynamics"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_87_differentiable_safety",
-      "to": "gen_zero"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_87_differentiable_safety",
-      "to": "gen_zero.gate"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_87_differentiable_safety",
-      "to": "gen_zero.gate.differentiable_safety_layer"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_88_spdk_nvme_fleet",
-      "to": "gen_zero"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_88_spdk_nvme_fleet",
-      "to": "gen_zero.nanocore"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_88_spdk_nvme_fleet",
-      "to": "gen_zero.nanocore.fleet_scheduler"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_88_spdk_nvme_fleet",
-      "to": "gen_zero.nanocore.spdk_nvme_fleet"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_88_spdk_nvme_fleet",
-      "to": "gen_zero.runtime"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_88_spdk_nvme_fleet",
-      "to": "gen_zero.runtime.base_nano_core"
-    },
-    {
-      "from": "gen_zero.scripts.benchmark_issue_88_spdk_nvme_fleet",
-      "to": "gen_zero.runtime.specialist_nano_core"
-    },
-    {
       "from": "gen_zero.scripts.calibrate_semantic_risk",
       "to": "gen_zero"
     },
@@ -2839,46 +2651,6 @@
     {
       "from": "gen_zero.scripts.calibrate_semantic_risk",
       "to": "gen_zero.service.semantic_risk"
-    },
-    {
-      "from": "gen_zero.scripts.demo_specific_scenarios",
-      "to": "gen_zero"
-    },
-    {
-      "from": "gen_zero.scripts.demo_specific_scenarios",
-      "to": "gen_zero.client"
-    },
-    {
-      "from": "gen_zero.scripts.demo_specific_scenarios",
-      "to": "gen_zero.model"
-    },
-    {
-      "from": "gen_zero.scripts.demo_specific_scenarios",
-      "to": "gen_zero.model.invertible_encoder"
-    },
-    {
-      "from": "gen_zero.scripts.demo_specific_scenarios",
-      "to": "gen_zero.nanocore"
-    },
-    {
-      "from": "gen_zero.scripts.demo_specific_scenarios",
-      "to": "gen_zero.nanocore.world_model_orchestrator"
-    },
-    {
-      "from": "gen_zero.scripts.demo_specific_scenarios",
-      "to": "gen_zero.runtime"
-    },
-    {
-      "from": "gen_zero.scripts.demo_specific_scenarios",
-      "to": "gen_zero.runtime.base_nano_core"
-    },
-    {
-      "from": "gen_zero.scripts.demo_specific_scenarios",
-      "to": "gen_zero.runtime.nano_core_browser"
-    },
-    {
-      "from": "gen_zero.scripts.demo_specific_scenarios",
-      "to": "gen_zero.runtime.nano_core_vision"
     },
     {
       "from": "gen_zero.scripts.dump_semantic_pmi_reference",
@@ -2935,10 +2707,6 @@
     {
       "from": "gen_zero.scripts.run_6_orthogonal_planners_benchmark",
       "to": "gen_zero.planner.engines"
-    },
-    {
-      "from": "gen_zero.scripts.run_complex_scenario",
-      "to": "gen_zero"
     },
     {
       "from": "gen_zero.service",
@@ -3182,6 +2950,7 @@
     "gen_zero.capability.registry",
     "gen_zero.causal",
     "gen_zero.causal.bifurcated_fractal_engine",
+    "gen_zero.causal.cad_engine",
     "gen_zero.causal.continuous_causal_reasoning_expert",
     "gen_zero.causal.counterfactual_constraint_verifier",
     "gen_zero.causal.counterfactual_engine",
@@ -3191,13 +2960,16 @@
     "gen_zero.causal.feature_space",
     "gen_zero.causal.forced_affine_scan",
     "gen_zero.causal.fractal_multiscale_engine",
+    "gen_zero.causal.gguf_parallel_pool",
     "gen_zero.causal.latent_bridge",
     "gen_zero.causal.manifold_anchor_distiller",
     "gen_zero.causal.nanocore_bridge",
+    "gen_zero.causal.numa_affinity",
     "gen_zero.causal.parallel_rnn_lora",
     "gen_zero.causal.router",
     "gen_zero.causal.shuffled_benchmark",
     "gen_zero.causal.symplectic_thinking",
+    "gen_zero.causal.verbalizer_extractor",
     "gen_zero.causal.zero_runtime",
     "gen_zero.causal.zero_task_head",
     "gen_zero.causal.zero_trunk",
@@ -3411,10 +3183,10 @@
     "gen_zero.evaluate.log_filter_benchmark",
     "gen_zero.evaluate.snapshot_benchmark",
     "gen_zero.evaluate.web_agent_benchmark",
-    "gen_zero.evaluate_universal_suite",
     "gen_zero.gate.grounding_gate",
     "gen_zero.gate.market_risk_gate",
     "gen_zero.gate.universal_cognitive_pipeline",
+    "gen_zero.graph.graph_ast",
     "gen_zero.kernels",
     "gen_zero.kernels.triton_compact_tree",
     "gen_zero.model.candidate_fusion",
@@ -3427,30 +3199,17 @@
     "gen_zero.nanocore.cpu_lookup_engine",
     "gen_zero.nanocore.german_decompounder",
     "gen_zero.nanocore.zca_whitening",
+    "gen_zero.pipeline.sandwich_streaming",
     "gen_zero.provenance",
     "gen_zero.provenance.auditor",
     "gen_zero.provenance.permission_arbiter",
     "gen_zero.run_league_benchmark",
     "gen_zero.runtime.subsecond_pipeline",
-    "gen_zero.scripts.benchmark_issue_69_parity",
-    "gen_zero.scripts.benchmark_issue_71_compactor",
-    "gen_zero.scripts.benchmark_issue_72_simplex_etf",
-    "gen_zero.scripts.benchmark_issue_73_fleet_scheduler",
-    "gen_zero.scripts.benchmark_issue_74_tree_compression",
-    "gen_zero.scripts.benchmark_issue_76_constraint_compiler",
-    "gen_zero.scripts.benchmark_issue_79_capability_router",
-    "gen_zero.scripts.benchmark_issue_86_hamiltonian_world_model",
-    "gen_zero.scripts.benchmark_issue_87_differentiable_safety",
-    "gen_zero.scripts.benchmark_issue_88_spdk_nvme_fleet",
     "gen_zero.scripts.calibrate_semantic_risk",
-    "gen_zero.scripts.demo_specific_scenarios",
-    "gen_zero.scripts.download_qwen",
     "gen_zero.scripts.dump_semantic_pmi_reference",
     "gen_zero.scripts.run_12_planners_benchmark",
     "gen_zero.scripts.run_6_orthogonal_planners_benchmark",
-    "gen_zero.scripts.run_complex_scenario",
-    "gen_zero.scripts.run_full_forward",
-    "gen_zero.scripts.verify_qwen_a100"
+    "gen_zero.scripts.setup_qwen15b_models"
   ],
   "python_symbols": [
     {
@@ -4039,6 +3798,162 @@
       "symbol": "gen_zero.causal.bifurcated_fractal_engine.think",
       "file": "python/gen_zero/causal/bifurcated_fractal_engine.py",
       "line": 443,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.file_sha256",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 52,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine._check_pair",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 60,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.difference",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 70,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine._softmax",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 78,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.extract_causal_features",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 84,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine._checked_float",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 107,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine._scores_to_probs",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 116,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.CADResult",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 126,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine._result",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 147,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.CalibrationHead",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 157,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.PromptTemplate",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 200,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.CADEngine",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 219,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.to_dict",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 138,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.__init__",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 160,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.from_json",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 176,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.probabilities",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 187,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.render",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 207,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.render_prior",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 212,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.__init__",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 222,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.from_gguf",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 236,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.from_hf",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 246,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.raw_logits",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 257,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.predict",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 263,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.infer_uncalibrated",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 271,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.uncalibrated_from_logits",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 276,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.cad_engine.classify",
+      "file": "python/gen_zero/causal/cad_engine.py",
+      "line": 283,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -5652,151 +5567,133 @@
     {
       "symbol": "gen_zero.causal.deq_thinking.DEQSolverState",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 44,
+      "line": 42,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.AndersonAccelerator",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 60,
+      "line": 58,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking._np_solve_fixed_point",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 151,
+      "line": 149,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.to_dict",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 51,
+      "line": 49,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.__init__",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 76,
+      "line": 74,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking._reset",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 83,
+      "line": 81,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.step",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 87,
+      "line": 85,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.DEQThinkingBlock",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 205,
+      "line": 203,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking._anderson_solve",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 244,
+      "line": 242,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.DEQThinkingFunction",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 318,
+      "line": 315,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.DEQThinkingModule",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 393,
+      "line": 338,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.DEQThinkingBlock",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 441,
+      "line": 381,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.DEQThinkingFunction",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 444,
+      "line": 384,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.DEQThinkingModule",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 447,
+      "line": 387,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.__init__",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 216,
+      "line": 214,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.forward",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 233,
+      "line": 231,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.init_z0",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 237,
+      "line": 235,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.forward",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 341,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.causal.deq_thinking.backward",
-      "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 360,
+      "line": 325,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.__init__",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 405,
+      "line": 350,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.last_state",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 422,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.causal.deq_thinking.last_backward_state",
-      "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 427,
+      "line": 367,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.forward",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 431,
+      "line": 371,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.deq_thinking.apply_f",
       "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 268,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.causal.deq_thinking.vjp_z",
-      "file": "python/gen_zero/causal/deq_thinking.py",
-      "line": 372,
+      "line": 265,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -5910,7 +5807,7 @@
     {
       "symbol": "gen_zero.causal.dynamics_calibrator.CausalDynamicsCalibrator",
       "file": "python/gen_zero/causal/dynamics_calibrator.py",
-      "line": 157,
+      "line": 161,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -5988,19 +5885,13 @@
     {
       "symbol": "gen_zero.causal.dynamics_calibrator.__init__",
       "file": "python/gen_zero/causal/dynamics_calibrator.py",
-      "line": 158,
+      "line": 168,
       "status": "unresolved_symbol_dispatch"
     },
     {
-      "symbol": "gen_zero.causal.dynamics_calibrator.fit",
+      "symbol": "gen_zero.causal.dynamics_calibrator.set_static_parameters",
       "file": "python/gen_zero/causal/dynamics_calibrator.py",
-      "line": 162,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.causal.dynamics_calibrator.fit_candidate_geometry",
-      "file": "python/gen_zero/causal/dynamics_calibrator.py",
-      "line": 233,
+      "line": 172,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -6475,6 +6366,120 @@
       "symbol": "gen_zero.causal.gepa_evolution_loop.run_evolution_cycle",
       "file": "python/gen_zero/causal/gepa_evolution_loop.py",
       "line": 167,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.EngineSpec",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 41,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.build_gguf_engine",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 51,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.resolve_factory",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 58,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool._run_item",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 65,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool._worker_main",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 74,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.GGUFParallelPool",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 102,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.__init__",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 112,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool._start_worker",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 151,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool._await_ready",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 157,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.worker_pids",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 173,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool._batch",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 176,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.raw_logits_batch",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 204,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.predict_batch",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 208,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.classify_batch",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 212,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.pinning_report",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 216,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.close",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 240,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.terminate",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 247,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.__enter__",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 257,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.gguf_parallel_pool.__exit__",
+      "file": "python/gen_zero/causal/gguf_parallel_pool.py",
+      "line": 260,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -7339,6 +7344,72 @@
       "symbol": "gen_zero.causal.nanocore_bridge.generate_mcp_ask_payload",
       "file": "python/gen_zero/causal/nanocore_bridge.py",
       "line": 91,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.numa_affinity.parse_cpulist",
+      "file": "python/gen_zero/causal/numa_affinity.py",
+      "line": 21,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.numa_affinity.NumaTopology",
+      "file": "python/gen_zero/causal/numa_affinity.py",
+      "line": 33,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.numa_affinity.read_topology",
+      "file": "python/gen_zero/causal/numa_affinity.py",
+      "line": 52,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.numa_affinity.WorkerPlacement",
+      "file": "python/gen_zero/causal/numa_affinity.py",
+      "line": 80,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.numa_affinity.plan_placements",
+      "file": "python/gen_zero/causal/numa_affinity.py",
+      "line": 86,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.numa_affinity.start_pinned",
+      "file": "python/gen_zero/causal/numa_affinity.py",
+      "line": 114,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.numa_affinity.thread_affinities",
+      "file": "python/gen_zero/causal/numa_affinity.py",
+      "line": 142,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.numa_affinity.numa_pages",
+      "file": "python/gen_zero/causal/numa_affinity.py",
+      "line": 154,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.numa_affinity.logical_cpus",
+      "file": "python/gen_zero/causal/numa_affinity.py",
+      "line": 38,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.numa_affinity.node_cpus",
+      "file": "python/gen_zero/causal/numa_affinity.py",
+      "line": 41,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.numa_affinity.node_of",
+      "file": "python/gen_zero/causal/numa_affinity.py",
+      "line": 44,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -8332,6 +8403,126 @@
       "status": "unresolved_symbol_dispatch"
     },
     {
+      "symbol": "gen_zero.causal.verbalizer_extractor.VerbalizerExtractor",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 40,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.VerbalizerSpec",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 48,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.candidate_groups",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 55,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.group_bounds",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 79,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.reduce_groups",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 83,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.view_logits",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 91,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.gather_scores",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 100,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.common_prefix_len",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 105,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.LlamaCppVerbalizerExtractor",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 113,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.HFVerbalizerExtractor",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 203,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.score",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 44,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.spellings",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 51,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.__init__",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 120,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor._check_llama_internals",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 156,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor._encode",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 165,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor._lock_prefix",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 168,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.score",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 177,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.verify_prefix_reuse",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 193,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.__init__",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 206,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.causal.verbalizer_extractor.score",
+      "file": "python/gen_zero/causal/verbalizer_extractor.py",
+      "line": 222,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
       "symbol": "gen_zero.causal.wasserstein_moe_router._finite_vector",
       "file": "python/gen_zero/causal/wasserstein_moe_router.py",
       "line": 46,
@@ -8646,37 +8837,31 @@
     {
       "symbol": "gen_zero.causal.zero_task_head.ZeroTaskHead",
       "file": "python/gen_zero/causal/zero_task_head.py",
-      "line": 31,
+      "line": 29,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.zero_task_head.dim",
       "file": "python/gen_zero/causal/zero_task_head.py",
-      "line": 36,
+      "line": 34,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.zero_task_head.score",
       "file": "python/gen_zero/causal/zero_task_head.py",
-      "line": 39,
+      "line": 37,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.zero_task_head.save",
       "file": "python/gen_zero/causal/zero_task_head.py",
-      "line": 55,
+      "line": 53,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.causal.zero_task_head.load",
       "file": "python/gen_zero/causal/zero_task_head.py",
-      "line": 60,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.causal.zero_task_head.fit",
-      "file": "python/gen_zero/causal/zero_task_head.py",
-      "line": 79,
+      "line": 58,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -9028,27 +9213,39 @@
       "status": "unresolved_symbol_dispatch"
     },
     {
-      "symbol": "gen_zero.cli.cmd_status",
+      "symbol": "gen_zero.cli._load_cad_items",
       "file": "python/gen_zero/cli.py",
       "line": 712,
       "status": "unresolved_symbol_dispatch"
     },
     {
+      "symbol": "gen_zero.cli.cmd_cad",
+      "file": "python/gen_zero/cli.py",
+      "line": 729,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.cli.cmd_status",
+      "file": "python/gen_zero/cli.py",
+      "line": 771,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
       "symbol": "gen_zero.cli.cmd_harness",
       "file": "python/gen_zero/cli.py",
-      "line": 742,
+      "line": 801,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.build_cli_parser",
       "file": "python/gen_zero/cli.py",
-      "line": 770,
+      "line": 829,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.cli.main",
       "file": "python/gen_zero/cli.py",
-      "line": 947,
+      "line": 1022,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -9760,6 +9957,12 @@
       "status": "unresolved_symbol_dispatch"
     },
     {
+      "symbol": "gen_zero.config._absolute",
+      "file": "python/gen_zero/config.py",
+      "line": 73,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
       "symbol": "gen_zero.daemon.atomic_container.ServingSnapshot",
       "file": "python/gen_zero/daemon/atomic_container.py",
       "line": 16,
@@ -10134,43 +10337,43 @@
     {
       "symbol": "gen_zero.evaluate.log_filter_benchmark.LogBenchmarkItem",
       "file": "python/gen_zero/evaluate/log_filter_benchmark.py",
-      "line": 23,
+      "line": 21,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.evaluate.log_filter_benchmark.create_multilingual_log_corpus",
       "file": "python/gen_zero/evaluate/log_filter_benchmark.py",
-      "line": 35,
+      "line": 33,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.evaluate.log_filter_benchmark.TwoStageFilterMetrics",
       "file": "python/gen_zero/evaluate/log_filter_benchmark.py",
-      "line": 107,
+      "line": 105,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.evaluate.log_filter_benchmark.TwoStageLogFilterEvaluator",
       "file": "python/gen_zero/evaluate/log_filter_benchmark.py",
-      "line": 159,
+      "line": 157,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.evaluate.log_filter_benchmark.to_dict",
       "file": "python/gen_zero/evaluate/log_filter_benchmark.py",
-      "line": 133,
+      "line": 131,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.evaluate.log_filter_benchmark.__init__",
       "file": "python/gen_zero/evaluate/log_filter_benchmark.py",
-      "line": 162,
+      "line": 160,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.evaluate.log_filter_benchmark.evaluate",
       "file": "python/gen_zero/evaluate/log_filter_benchmark.py",
-      "line": 166,
+      "line": 164,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -10303,78 +10506,6 @@
       "symbol": "gen_zero.evaluate.web_agent_benchmark.evaluate",
       "file": "python/gen_zero/evaluate/web_agent_benchmark.py",
       "line": 152,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.evaluate_universal_suite.evaluate_games_v2_split",
-      "file": "python/gen_zero/evaluate_universal_suite.py",
-      "line": 66,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.evaluate_universal_suite.evaluate_workflows_v2_split",
-      "file": "python/gen_zero/evaluate_universal_suite.py",
-      "line": 218,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.evaluate_universal_suite.evaluate_scaled_maze_sample",
-      "file": "python/gen_zero/evaluate_universal_suite.py",
-      "line": 300,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.evaluate_universal_suite.evaluate_workflows_shuffled_control",
-      "file": "python/gen_zero/evaluate_universal_suite.py",
-      "line": 349,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.evaluate_universal_suite.main",
-      "file": "python/gen_zero/evaluate_universal_suite.py",
-      "line": 407,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.evaluate_universal_suite.scorer_fn",
-      "file": "python/gen_zero/evaluate_universal_suite.py",
-      "line": 381,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.evaluate_universal_suite.transition_fn",
-      "file": "python/gen_zero/evaluate_universal_suite.py",
-      "line": 105,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.evaluate_universal_suite.get_legal_actions_fn",
-      "file": "python/gen_zero/evaluate_universal_suite.py",
-      "line": 115,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.evaluate_universal_suite.eval_fn",
-      "file": "python/gen_zero/evaluate_universal_suite.py",
-      "line": 118,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.evaluate_universal_suite.is_goal_fn",
-      "file": "python/gen_zero/evaluate_universal_suite.py",
-      "line": 162,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.evaluate_universal_suite.get_neighbors_fn",
-      "file": "python/gen_zero/evaluate_universal_suite.py",
-      "line": 165,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.evaluate_universal_suite.heuristic_fn",
-      "file": "python/gen_zero/evaluate_universal_suite.py",
-      "line": 175,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -11004,115 +11135,97 @@
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.SafetyProjectionResult",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 79,
+      "line": 60,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.InfeasibleConstraintError",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 110,
+      "line": 87,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.project_simplex_with_bounds",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 114,
+      "line": 91,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.DifferentiableSafetyLayer",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 152,
+      "line": 129,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.to_dict",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 94,
+      "line": 73,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.__init__",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 164,
+      "line": 137,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.update_constraints",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 200,
+      "line": 173,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer._validate_constraints",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 205,
+      "line": 178,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.forward",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 226,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.gate.differentiable_safety_layer.barrier_loss_gradient",
-      "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 407,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.gate.differentiable_safety_layer.backward",
-      "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 418,
+      "line": 199,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.PyTorchDifferentiableSafetyFunction",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 447,
+      "line": 382,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.PyTorchDifferentiableSafetyModule",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 516,
+      "line": 403,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.PyTorchDifferentiableSafetyFunction",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 526,
+      "line": 413,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.PyTorchDifferentiableSafetyModule",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 529,
+      "line": 416,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.forward",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 451,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.gate.differentiable_safety_layer.backward",
-      "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 479,
+      "line": 386,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.__init__",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 519,
+      "line": 406,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gate.differentiable_safety_layer.forward",
       "file": "python/gen_zero/gate/differentiable_safety_layer.py",
-      "line": 523,
+      "line": 410,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -12090,31 +12203,31 @@
     {
       "symbol": "gen_zero.gateway.llamacpp_adapter.fold_thought_tags",
       "file": "python/gen_zero/gateway/llamacpp_adapter.py",
-      "line": 90,
+      "line": 91,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gateway.llamacpp_adapter.score",
       "file": "python/gen_zero/gateway/llamacpp_adapter.py",
-      "line": 115,
+      "line": 116,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gateway.llamacpp_adapter._call_llama_server",
       "file": "python/gen_zero/gateway/llamacpp_adapter.py",
-      "line": 183,
+      "line": 184,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gateway.llamacpp_adapter._extract_candidate_probabilities",
       "file": "python/gen_zero/gateway/llamacpp_adapter.py",
-      "line": 214,
+      "line": 215,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.gateway.llamacpp_adapter.check_health",
       "file": "python/gen_zero/gateway/llamacpp_adapter.py",
-      "line": 266,
+      "line": 267,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -15738,31 +15851,31 @@
     {
       "symbol": "gen_zero.model.zero_model.SwiGLUExpert",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 238,
+      "line": 241,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.DynamicalSparseOperatorPool",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 250,
+      "line": 253,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.DynamicalSparseZeroBlock",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 294,
+      "line": 297,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.ZeroModel",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 303,
+      "line": 306,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.load_zero_tokenizer",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 381,
+      "line": 384,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -15870,109 +15983,109 @@
     {
       "symbol": "gen_zero.model.zero_model._build_mlp",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 213,
+      "line": 216,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model._mlp",
-      "file": "python/gen_zero/model/zero_model.py",
-      "line": 219,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.model.zero_model.forward",
       "file": "python/gen_zero/model/zero_model.py",
       "line": 222,
       "status": "unresolved_symbol_dispatch"
     },
     {
-      "symbol": "gen_zero.model.zero_model.__init__",
-      "file": "python/gen_zero/model/zero_model.py",
-      "line": 240,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
       "symbol": "gen_zero.model.zero_model.forward",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 246,
+      "line": 225,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.__init__",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 260,
+      "line": 243,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.forward",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 271,
+      "line": 249,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.zero_model.__init__",
+      "file": "python/gen_zero/model/zero_model.py",
+      "line": 263,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.model.zero_model.forward",
+      "file": "python/gen_zero/model/zero_model.py",
+      "line": 274,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.routed_experts",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 286,
+      "line": 289,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model._build_mlp",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 296,
+      "line": 299,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model._mlp",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 299,
+      "line": 302,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.__init__",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 304,
+      "line": 307,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model._initialize",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 327,
+      "line": 330,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.storage_bytes",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 333,
+      "line": 336,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.hidden_states",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 337,
+      "line": 340,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.forward",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 366,
+      "line": 369,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.token_logits",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 371,
+      "line": 374,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.split",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 226,
+      "line": 229,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.model.zero_model.rotate",
       "file": "python/gen_zero/model/zero_model.py",
-      "line": 228,
+      "line": 231,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -19956,7 +20069,7 @@
     {
       "symbol": "gen_zero.runtime.supervisor_assessment.SemanticAssessmentAdapter",
       "file": "python/gen_zero/runtime/supervisor_assessment.py",
-      "line": 96,
+      "line": 101,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -19968,49 +20081,55 @@
     {
       "symbol": "gen_zero.runtime.supervisor_assessment.has_critical_contract_drift",
       "file": "python/gen_zero/runtime/supervisor_assessment.py",
-      "line": 57,
+      "line": 62,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.supervisor_assessment.is_drifting",
       "file": "python/gen_zero/runtime/supervisor_assessment.py",
-      "line": 61,
+      "line": 66,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.supervisor_assessment.is_stuck",
       "file": "python/gen_zero/runtime/supervisor_assessment.py",
-      "line": 65,
+      "line": 70,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.supervisor_assessment.is_stuck_or_off_track",
       "file": "python/gen_zero/runtime/supervisor_assessment.py",
-      "line": 69,
+      "line": 74,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.supervisor_assessment.is_completion_ready",
       "file": "python/gen_zero/runtime/supervisor_assessment.py",
-      "line": 73,
+      "line": 78,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.supervisor_assessment.to_dict",
       "file": "python/gen_zero/runtime/supervisor_assessment.py",
-      "line": 80,
+      "line": 85,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.supervisor_assessment.__init__",
       "file": "python/gen_zero/runtime/supervisor_assessment.py",
-      "line": 99,
+      "line": 104,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.runtime.supervisor_assessment.evaluate",
       "file": "python/gen_zero/runtime/supervisor_assessment.py",
-      "line": 102,
+      "line": 107,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.runtime.supervisor_assessment.clamp",
+      "file": "python/gen_zero/runtime/supervisor_assessment.py",
+      "line": 45,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -20386,204 +20505,6 @@
       "status": "unresolved_symbol_dispatch"
     },
     {
-      "symbol": "gen_zero.scripts.benchmark_issue_69_parity.run_benchmark",
-      "file": "python/gen_zero/scripts/benchmark_issue_69_parity.py",
-      "line": 25,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_71_compactor.generate_build_logs",
-      "file": "python/gen_zero/scripts/benchmark_issue_71_compactor.py",
-      "line": 24,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_71_compactor.generate_test_runner_logs",
-      "file": "python/gen_zero/scripts/benchmark_issue_71_compactor.py",
-      "line": 48,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_71_compactor.generate_agent_session",
-      "file": "python/gen_zero/scripts/benchmark_issue_71_compactor.py",
-      "line": 58,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_71_compactor.generate_json_ast_dump",
-      "file": "python/gen_zero/scripts/benchmark_issue_71_compactor.py",
-      "line": 80,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_71_compactor.run_scenario_benchmark",
-      "file": "python/gen_zero/scripts/benchmark_issue_71_compactor.py",
-      "line": 94,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_71_compactor.main",
-      "file": "python/gen_zero/scripts/benchmark_issue_71_compactor.py",
-      "line": 185,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_72_simplex_etf.simulate_semantic_vectors",
-      "file": "python/gen_zero/scripts/benchmark_issue_72_simplex_etf.py",
-      "line": 33,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_72_simplex_etf.run_benchmark_scenario",
-      "file": "python/gen_zero/scripts/benchmark_issue_72_simplex_etf.py",
-      "line": 67,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_72_simplex_etf.main",
-      "file": "python/gen_zero/scripts/benchmark_issue_72_simplex_etf.py",
-      "line": 185,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_73_fleet_scheduler.run_fleet_benchmark",
-      "file": "python/gen_zero/scripts/benchmark_issue_73_fleet_scheduler.py",
-      "line": 48,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_74_tree_compression.DeepLabyrinthDynamics",
-      "file": "python/gen_zero/scripts/benchmark_issue_74_tree_compression.py",
-      "line": 37,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_74_tree_compression.run_benchmark_issue_74",
-      "file": "python/gen_zero/scripts/benchmark_issue_74_tree_compression.py",
-      "line": 86,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_74_tree_compression.__init__",
-      "file": "python/gen_zero/scripts/benchmark_issue_74_tree_compression.py",
-      "line": 40,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_74_tree_compression.step",
-      "file": "python/gen_zero/scripts/benchmark_issue_74_tree_compression.py",
-      "line": 48,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_74_tree_compression.is_terminal",
-      "file": "python/gen_zero/scripts/benchmark_issue_74_tree_compression.py",
-      "line": 77,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_74_tree_compression.UncompressedMCTSNode",
-      "file": "python/gen_zero/scripts/benchmark_issue_74_tree_compression.py",
-      "line": 107,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_74_tree_compression.__init__",
-      "file": "python/gen_zero/scripts/benchmark_issue_74_tree_compression.py",
-      "line": 108,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_76_constraint_compiler.run_benchmark",
-      "file": "python/gen_zero/scripts/benchmark_issue_76_constraint_compiler.py",
-      "line": 33,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_79_capability_router.create_synthetic_catalog",
-      "file": "python/gen_zero/scripts/benchmark_issue_79_capability_router.py",
-      "line": 35,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_79_capability_router.benchmark_stage1_coarse_filter",
-      "file": "python/gen_zero/scripts/benchmark_issue_79_capability_router.py",
-      "line": 60,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_79_capability_router.benchmark_beam_diversity_comparison",
-      "file": "python/gen_zero/scripts/benchmark_issue_79_capability_router.py",
-      "line": 101,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_79_capability_router.benchmark_cryptographic_provenance",
-      "file": "python/gen_zero/scripts/benchmark_issue_79_capability_router.py",
-      "line": 197,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_79_capability_router.benchmark_permission_arbiter_hard_safety",
-      "file": "python/gen_zero/scripts/benchmark_issue_79_capability_router.py",
-      "line": 262,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_79_capability_router.main",
-      "file": "python/gen_zero/scripts/benchmark_issue_79_capability_router.py",
-      "line": 329,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_79_capability_router.biased_policy",
-      "file": "python/gen_zero/scripts/benchmark_issue_79_capability_router.py",
-      "line": 113,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_86_hamiltonian_world_model.StandardMLPDynamicsBaseline",
-      "file": "python/gen_zero/scripts/benchmark_issue_86_hamiltonian_world_model.py",
-      "line": 36,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_86_hamiltonian_world_model.run_benchmark",
-      "file": "python/gen_zero/scripts/benchmark_issue_86_hamiltonian_world_model.py",
-      "line": 77,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_86_hamiltonian_world_model.__init__",
-      "file": "python/gen_zero/scripts/benchmark_issue_86_hamiltonian_world_model.py",
-      "line": 39,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_86_hamiltonian_world_model.step",
-      "file": "python/gen_zero/scripts/benchmark_issue_86_hamiltonian_world_model.py",
-      "line": 46,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_86_hamiltonian_world_model.rollout",
-      "file": "python/gen_zero/scripts/benchmark_issue_86_hamiltonian_world_model.py",
-      "line": 52,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_87_differentiable_safety.run_benchmark",
-      "file": "python/gen_zero/scripts/benchmark_issue_87_differentiable_safety.py",
-      "line": 35,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.benchmark_issue_88_spdk_nvme_fleet.run_benchmark",
-      "file": "python/gen_zero/scripts/benchmark_issue_88_spdk_nvme_fleet.py",
-      "line": 46,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
       "symbol": "gen_zero.scripts.calibrate_semantic_risk.auc",
       "file": "python/gen_zero/scripts/calibrate_semantic_risk.py",
       "line": 22,
@@ -20611,24 +20532,6 @@
       "symbol": "gen_zero.scripts.calibrate_semantic_risk.main",
       "file": "python/gen_zero/scripts/calibrate_semantic_risk.py",
       "line": 59,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.demo_specific_scenarios.run_live_demo",
-      "file": "python/gen_zero/scripts/demo_specific_scenarios.py",
-      "line": 25,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.demo_specific_scenarios.simulate_safety",
-      "file": "python/gen_zero/scripts/demo_specific_scenarios.py",
-      "line": 157,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.scripts.download_qwen.main",
-      "file": "python/gen_zero/scripts/download_qwen.py",
-      "line": 11,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -21145,6 +21048,42 @@
       "symbol": "gen_zero.scripts.run_6_orthogonal_planners_benchmark.dynamics_fn",
       "file": "python/gen_zero/scripts/run_6_orthogonal_planners_benchmark.py",
       "line": 190,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.scripts.setup_qwen15b_models.sha256_of",
+      "file": "python/gen_zero/scripts/setup_qwen15b_models.py",
+      "line": 33,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.scripts.setup_qwen15b_models.verify",
+      "file": "python/gen_zero/scripts/setup_qwen15b_models.py",
+      "line": 41,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.scripts.setup_qwen15b_models._download_urllib",
+      "file": "python/gen_zero/scripts/setup_qwen15b_models.py",
+      "line": 53,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.scripts.setup_qwen15b_models._download_hf",
+      "file": "python/gen_zero/scripts/setup_qwen15b_models.py",
+      "line": 62,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.scripts.setup_qwen15b_models.fetch",
+      "file": "python/gen_zero/scripts/setup_qwen15b_models.py",
+      "line": 68,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.scripts.setup_qwen15b_models.main",
+      "file": "python/gen_zero/scripts/setup_qwen15b_models.py",
+      "line": 99,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -21762,13 +21701,13 @@
     {
       "symbol": "gen_zero.streaming.intent_gate.__init__",
       "file": "python/gen_zero/streaming/intent_gate.py",
-      "line": 142,
+      "line": 137,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.streaming.intent_gate.gate_utterance",
       "file": "python/gen_zero/streaming/intent_gate.py",
-      "line": 145,
+      "line": 140,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -21942,13 +21881,13 @@
     {
       "symbol": "gen_zero.verifier.graph_auditor.RoleAttributor",
       "file": "python/gen_zero/verifier/graph_auditor.py",
-      "line": 133,
+      "line": 126,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.verifier.graph_auditor.PostVerificationAuditor",
       "file": "python/gen_zero/verifier/graph_auditor.py",
-      "line": 159,
+      "line": 152,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -21996,31 +21935,31 @@
     {
       "symbol": "gen_zero.verifier.graph_auditor.deduplicate",
       "file": "python/gen_zero/verifier/graph_auditor.py",
-      "line": 104,
+      "line": 97,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.verifier.graph_auditor.__init__",
       "file": "python/gen_zero/verifier/graph_auditor.py",
-      "line": 146,
+      "line": 139,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.verifier.graph_auditor.attribute_role",
       "file": "python/gen_zero/verifier/graph_auditor.py",
-      "line": 149,
+      "line": 142,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.verifier.graph_auditor.__init__",
       "file": "python/gen_zero/verifier/graph_auditor.py",
-      "line": 162,
+      "line": 155,
       "status": "unresolved_symbol_dispatch"
     },
     {
       "symbol": "gen_zero.verifier.graph_auditor.audit",
       "file": "python/gen_zero/verifier/graph_auditor.py",
-      "line": 167,
+      "line": 160,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -22494,7 +22433,7 @@
     {
       "symbol": "gen_zero.world_model.hamiltonian_dynamics.PyTorchHamiltonianNeuralODE",
       "file": "python/gen_zero/world_model/hamiltonian_dynamics.py",
-      "line": 438,
+      "line": 441,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -22510,9 +22449,15 @@
       "status": "unresolved_symbol_dispatch"
     },
     {
-      "symbol": "gen_zero.world_model.hamiltonian_dynamics.forward_symplectic_step",
+      "symbol": "gen_zero.world_model.hamiltonian_dynamics._grad_potential",
       "file": "python/gen_zero/world_model/hamiltonian_dynamics.py",
       "line": 402,
+      "status": "unresolved_symbol_dispatch"
+    },
+    {
+      "symbol": "gen_zero.world_model.hamiltonian_dynamics.forward_symplectic_step",
+      "file": "python/gen_zero/world_model/hamiltonian_dynamics.py",
+      "line": 411,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -22699,12 +22644,6 @@
       "symbol": "gen_zero.world_model.neural_dynamics.joint_loss",
       "file": "python/gen_zero/world_model/neural_dynamics.py",
       "line": 390,
-      "status": "unresolved_symbol_dispatch"
-    },
-    {
-      "symbol": "gen_zero.world_model.neural_dynamics.train_step",
-      "file": "python/gen_zero/world_model/neural_dynamics.py",
-      "line": 405,
       "status": "unresolved_symbol_dispatch"
     },
     {
@@ -23146,10 +23085,6 @@
     },
     {
       "from": "crates/gen-zero-gate/src/lib.rs",
-      "to": "crates/gen-zero-gate/src/dual_track.rs"
-    },
-    {
-      "from": "crates/gen-zero-gate/src/lib.rs",
       "to": "crates/gen-zero-gate/src/error.rs"
     },
     {
@@ -23165,8 +23100,16 @@
       "to": "crates/gen-zero-gate/src/sheaf_gate.rs"
     },
     {
+      "from": "crates/gen-zero-gate/src/lib.rs",
+      "to": "crates/gen-zero-gate/src/two_stage.rs"
+    },
+    {
       "from": "crates/gen-zero-lod/src/graph.rs",
       "to": "crates/gen-zero-lod/src/graph/persistence.rs"
+    },
+    {
+      "from": "crates/gen-zero-lod/src/lib.rs",
+      "to": "crates/gen-zero-lod/src/builtin_operator.rs"
     },
     {
       "from": "crates/gen-zero-lod/src/lib.rs",
@@ -23187,6 +23130,10 @@
     {
       "from": "crates/gen-zero-lod/src/lib.rs",
       "to": "crates/gen-zero-lod/src/node.rs"
+    },
+    {
+      "from": "crates/gen-zero-lod/src/lib.rs",
+      "to": "crates/gen-zero-lod/src/operator.rs"
     },
     {
       "from": "crates/gen-zero-lod/src/lib.rs",
@@ -23214,10 +23161,6 @@
     },
     {
       "from": "crates/gen-zero-model/src/lib.rs",
-      "to": "crates/gen-zero-model/src/mask.rs"
-    },
-    {
-      "from": "crates/gen-zero-model/src/lib.rs",
       "to": "crates/gen-zero-model/src/patch.rs"
     },
     {
@@ -23235,6 +23178,14 @@
     {
       "from": "crates/gen-zero-model/src/lib.rs",
       "to": "crates/gen-zero-model/src/semantic_qwen.rs"
+    },
+    {
+      "from": "crates/gen-zero-model/src/lib.rs",
+      "to": "crates/gen-zero-model/src/tri_teacher.rs"
+    },
+    {
+      "from": "crates/gen-zero-model/src/lib.rs",
+      "to": "crates/gen-zero-model/src/tri_teacher_gate.rs"
     },
     {
       "from": "crates/gen-zero-nanocore/src/lib.rs",
@@ -23302,6 +23253,10 @@
     },
     {
       "from": "crates/gen-zero-planner/src/triad/mod.rs",
+      "to": "crates/gen-zero-planner/src/triad/robust_gate.rs"
+    },
+    {
+      "from": "crates/gen-zero-planner/src/triad/mod.rs",
       "to": "crates/gen-zero-planner/src/triad/sampler.rs"
     },
     {
@@ -23326,6 +23281,10 @@
     },
     {
       "from": "crates/gen-zero-service/src/lib.rs",
+      "to": "crates/gen-zero-service/src/arbitrator.rs"
+    },
+    {
+      "from": "crates/gen-zero-service/src/lib.rs",
       "to": "crates/gen-zero-service/src/bridge.rs"
     },
     {
@@ -23346,11 +23305,19 @@
     },
     {
       "from": "crates/gen-zero-service/src/lib.rs",
+      "to": "crates/gen-zero-service/src/hot_reload.rs"
+    },
+    {
+      "from": "crates/gen-zero-service/src/lib.rs",
       "to": "crates/gen-zero-service/src/imagine.rs"
     },
     {
       "from": "crates/gen-zero-service/src/lib.rs",
       "to": "crates/gen-zero-service/src/mount.rs"
+    },
+    {
+      "from": "crates/gen-zero-service/src/lib.rs",
+      "to": "crates/gen-zero-service/src/patch_builder.rs"
     },
     {
       "from": "crates/gen-zero-service/src/lib.rs",
@@ -23382,6 +23349,14 @@
     },
     {
       "from": "crates/gen-zero-service/src/lib.rs",
+      "to": "crates/gen-zero-service/src/text_to_graph.rs"
+    },
+    {
+      "from": "crates/gen-zero-service/src/lib.rs",
+      "to": "crates/gen-zero-service/src/uds.rs"
+    },
+    {
+      "from": "crates/gen-zero-service/src/lib.rs",
       "to": "crates/gen-zero-service/src/worldsim.rs"
     },
     {
@@ -23391,6 +23366,10 @@
     {
       "from": "crates/gen-zero-service/src/mount.rs",
       "to": "crates/gen-zero-service/src/mount/tests.rs"
+    },
+    {
+      "from": "crates/gen-zero-storage/src/lib.rs",
+      "to": "crates/gen-zero-storage/src/durable_refusal.rs"
     },
     {
       "from": "crates/gen-zero-storage/src/lib.rs",
@@ -23434,14 +23413,6 @@
     },
     {
       "from": "crates/gen-zero-worldmodel/src/lib.rs",
-      "to": "crates/gen-zero-worldmodel/src/koopman.rs"
-    },
-    {
-      "from": "crates/gen-zero-worldmodel/src/lib.rs",
-      "to": "crates/gen-zero-worldmodel/src/koopman_spectral.rs"
-    },
-    {
-      "from": "crates/gen-zero-worldmodel/src/lib.rs",
       "to": "crates/gen-zero-worldmodel/src/symplectic.rs"
     },
     {
@@ -23460,12 +23431,13 @@
     "crates/gen-zero-core/src/traits.rs",
     "crates/gen-zero-core/src/types.rs",
     "crates/gen-zero-gate/src/constraint.rs",
-    "crates/gen-zero-gate/src/dual_track.rs",
     "crates/gen-zero-gate/src/error.rs",
     "crates/gen-zero-gate/src/lib.rs",
     "crates/gen-zero-gate/src/policy.rs",
     "crates/gen-zero-gate/src/risk.rs",
     "crates/gen-zero-gate/src/sheaf_gate.rs",
+    "crates/gen-zero-gate/src/two_stage.rs",
+    "crates/gen-zero-lod/src/builtin_operator.rs",
     "crates/gen-zero-lod/src/causal_lod.rs",
     "crates/gen-zero-lod/src/error.rs",
     "crates/gen-zero-lod/src/graph.rs",
@@ -23473,6 +23445,7 @@
     "crates/gen-zero-lod/src/lib.rs",
     "crates/gen-zero-lod/src/manifold.rs",
     "crates/gen-zero-lod/src/node.rs",
+    "crates/gen-zero-lod/src/operator.rs",
     "crates/gen-zero-lod/src/ppr.rs",
     "crates/gen-zero-lod/src/projection.rs",
     "crates/gen-zero-lod/src/semiring.rs",
@@ -23480,12 +23453,13 @@
     "crates/gen-zero-model/src/choice_head.rs",
     "crates/gen-zero-model/src/error.rs",
     "crates/gen-zero-model/src/lib.rs",
-    "crates/gen-zero-model/src/mask.rs",
     "crates/gen-zero-model/src/patch.rs",
     "crates/gen-zero-model/src/qwen.rs",
     "crates/gen-zero-model/src/reflex.rs",
     "crates/gen-zero-model/src/sanitize.rs",
     "crates/gen-zero-model/src/semantic_qwen.rs",
+    "crates/gen-zero-model/src/tri_teacher.rs",
+    "crates/gen-zero-model/src/tri_teacher_gate.rs",
     "crates/gen-zero-nanocore/src/core_type.rs",
     "crates/gen-zero-nanocore/src/error.rs",
     "crates/gen-zero-nanocore/src/lib.rs",
@@ -23504,6 +23478,7 @@
     "crates/gen-zero-planner/src/triad/gate.rs",
     "crates/gen-zero-planner/src/triad/mod.rs",
     "crates/gen-zero-planner/src/triad/pruner.rs",
+    "crates/gen-zero-planner/src/triad/robust_gate.rs",
     "crates/gen-zero-planner/src/triad/sampler.rs",
     "crates/gen-zero-planner/src/triad/tournament.rs",
     "crates/gen-zero-provenance/src/arbiter.rs",
@@ -23511,15 +23486,18 @@
     "crates/gen-zero-provenance/src/error.rs",
     "crates/gen-zero-provenance/src/lib.rs",
     "crates/gen-zero-provenance/src/mmr.rs",
+    "crates/gen-zero-service/src/arbitrator.rs",
     "crates/gen-zero-service/src/bridge.rs",
     "crates/gen-zero-service/src/closed_loop.rs",
     "crates/gen-zero-service/src/cognitive.rs",
     "crates/gen-zero-service/src/error.rs",
     "crates/gen-zero-service/src/graph_verb.rs",
+    "crates/gen-zero-service/src/hot_reload.rs",
     "crates/gen-zero-service/src/imagine.rs",
     "crates/gen-zero-service/src/lib.rs",
     "crates/gen-zero-service/src/mount.rs",
     "crates/gen-zero-service/src/mount/tests.rs",
+    "crates/gen-zero-service/src/patch_builder.rs",
     "crates/gen-zero-service/src/pipeline_verb.rs",
     "crates/gen-zero-service/src/reflex_adapter.rs",
     "crates/gen-zero-service/src/reflex_registry.rs",
@@ -23527,8 +23505,11 @@
     "crates/gen-zero-service/src/server.rs",
     "crates/gen-zero-service/src/snapshot.rs",
     "crates/gen-zero-service/src/tangent_ssm.rs",
+    "crates/gen-zero-service/src/text_to_graph.rs",
+    "crates/gen-zero-service/src/uds.rs",
     "crates/gen-zero-service/src/worldsim.rs",
     "crates/gen-zero-service/src/zero.rs",
+    "crates/gen-zero-storage/src/durable_refusal.rs",
     "crates/gen-zero-storage/src/error.rs",
     "crates/gen-zero-storage/src/fenwick.rs",
     "crates/gen-zero-storage/src/lib.rs",
@@ -23540,8 +23521,6 @@
     "crates/gen-zero-worldmodel/src/contact.rs",
     "crates/gen-zero-worldmodel/src/dynamics.rs",
     "crates/gen-zero-worldmodel/src/error.rs",
-    "crates/gen-zero-worldmodel/src/koopman.rs",
-    "crates/gen-zero-worldmodel/src/koopman_spectral.rs",
     "crates/gen-zero-worldmodel/src/lib.rs",
     "crates/gen-zero-worldmodel/src/symplectic.rs",
     "crates/gen-zero-worldmodel/src/symplectic_dynamics.rs"
@@ -23608,11 +23587,6 @@
       "public_symbols": 9
     },
     {
-      "file": "crates/gen-zero-gate/src/dual_track.rs",
-      "declared_modules": [],
-      "public_symbols": 5
-    },
-    {
       "file": "crates/gen-zero-gate/src/error.rs",
       "declared_modules": [],
       "public_symbols": 1
@@ -23621,11 +23595,11 @@
       "file": "crates/gen-zero-gate/src/lib.rs",
       "declared_modules": [
         "constraint",
-        "dual_track",
         "error",
         "policy",
         "risk",
-        "sheaf_gate"
+        "sheaf_gate",
+        "two_stage"
       ],
       "public_symbols": 0
     },
@@ -23643,6 +23617,16 @@
       "file": "crates/gen-zero-gate/src/sheaf_gate.rs",
       "declared_modules": [],
       "public_symbols": 26
+    },
+    {
+      "file": "crates/gen-zero-gate/src/two_stage.rs",
+      "declared_modules": [],
+      "public_symbols": 18
+    },
+    {
+      "file": "crates/gen-zero-lod/src/builtin_operator.rs",
+      "declared_modules": [],
+      "public_symbols": 3
     },
     {
       "file": "crates/gen-zero-lod/src/causal_lod.rs",
@@ -23664,16 +23648,18 @@
       "declared_modules": [
         "persistence"
       ],
-      "public_symbols": 63
+      "public_symbols": 82
     },
     {
       "file": "crates/gen-zero-lod/src/lib.rs",
       "declared_modules": [
+        "builtin_operator",
         "causal_lod",
         "error",
         "graph",
         "manifold",
         "node",
+        "operator",
         "ppr",
         "projection",
         "semiring",
@@ -23684,12 +23670,17 @@
     {
       "file": "crates/gen-zero-lod/src/manifold.rs",
       "declared_modules": [],
-      "public_symbols": 61
+      "public_symbols": 66
     },
     {
       "file": "crates/gen-zero-lod/src/node.rs",
       "declared_modules": [],
-      "public_symbols": 29
+      "public_symbols": 31
+    },
+    {
+      "file": "crates/gen-zero-lod/src/operator.rs",
+      "declared_modules": [],
+      "public_symbols": 17
     },
     {
       "file": "crates/gen-zero-lod/src/ppr.rs",
@@ -23726,19 +23717,15 @@
       "declared_modules": [
         "choice_head",
         "error",
-        "mask",
         "patch",
         "qwen",
         "reflex",
         "sanitize",
-        "semantic_qwen"
+        "semantic_qwen",
+        "tri_teacher",
+        "tri_teacher_gate"
       ],
       "public_symbols": 0
-    },
-    {
-      "file": "crates/gen-zero-model/src/mask.rs",
-      "declared_modules": [],
-      "public_symbols": 11
     },
     {
       "file": "crates/gen-zero-model/src/patch.rs",
@@ -23748,7 +23735,7 @@
     {
       "file": "crates/gen-zero-model/src/qwen.rs",
       "declared_modules": [],
-      "public_symbols": 19
+      "public_symbols": 20
     },
     {
       "file": "crates/gen-zero-model/src/reflex.rs",
@@ -23763,7 +23750,17 @@
     {
       "file": "crates/gen-zero-model/src/semantic_qwen.rs",
       "declared_modules": [],
-      "public_symbols": 24
+      "public_symbols": 32
+    },
+    {
+      "file": "crates/gen-zero-model/src/tri_teacher.rs",
+      "declared_modules": [],
+      "public_symbols": 50
+    },
+    {
+      "file": "crates/gen-zero-model/src/tri_teacher_gate.rs",
+      "declared_modules": [],
+      "public_symbols": 0
     },
     {
       "file": "crates/gen-zero-nanocore/src/core_type.rs",
@@ -23866,6 +23863,7 @@
         "dag",
         "gate",
         "pruner",
+        "robust_gate",
         "sampler",
         "tournament"
       ],
@@ -23877,6 +23875,11 @@
       "public_symbols": 7
     },
     {
+      "file": "crates/gen-zero-planner/src/triad/robust_gate.rs",
+      "declared_modules": [],
+      "public_symbols": 39
+    },
+    {
       "file": "crates/gen-zero-planner/src/triad/sampler.rs",
       "declared_modules": [],
       "public_symbols": 8
@@ -23884,7 +23887,7 @@
     {
       "file": "crates/gen-zero-planner/src/triad/tournament.rs",
       "declared_modules": [],
-      "public_symbols": 19
+      "public_symbols": 24
     },
     {
       "file": "crates/gen-zero-provenance/src/arbiter.rs",
@@ -23917,6 +23920,11 @@
       "public_symbols": 23
     },
     {
+      "file": "crates/gen-zero-service/src/arbitrator.rs",
+      "declared_modules": [],
+      "public_symbols": 5
+    },
+    {
       "file": "crates/gen-zero-service/src/bridge.rs",
       "declared_modules": [],
       "public_symbols": 26
@@ -23939,7 +23947,12 @@
     {
       "file": "crates/gen-zero-service/src/graph_verb.rs",
       "declared_modules": [],
-      "public_symbols": 5
+      "public_symbols": 7
+    },
+    {
+      "file": "crates/gen-zero-service/src/hot_reload.rs",
+      "declared_modules": [],
+      "public_symbols": 22
     },
     {
       "file": "crates/gen-zero-service/src/imagine.rs",
@@ -23949,13 +23962,16 @@
     {
       "file": "crates/gen-zero-service/src/lib.rs",
       "declared_modules": [
+        "arbitrator",
         "bridge",
         "closed_loop",
         "cognitive",
         "error",
         "graph_verb",
+        "hot_reload",
         "imagine",
         "mount",
+        "patch_builder",
         "pipeline_verb",
         "reflex_adapter",
         "reflex_registry",
@@ -23963,6 +23979,8 @@
         "server",
         "snapshot",
         "tangent_ssm",
+        "text_to_graph",
+        "uds",
         "worldsim",
         "zero"
       ],
@@ -23979,6 +23997,11 @@
         "tests"
       ],
       "public_symbols": 45
+    },
+    {
+      "file": "crates/gen-zero-service/src/patch_builder.rs",
+      "declared_modules": [],
+      "public_symbols": 13
     },
     {
       "file": "crates/gen-zero-service/src/pipeline_verb.rs",
@@ -23998,12 +24021,12 @@
     {
       "file": "crates/gen-zero-service/src/semantic.rs",
       "declared_modules": [],
-      "public_symbols": 13
+      "public_symbols": 21
     },
     {
       "file": "crates/gen-zero-service/src/server.rs",
       "declared_modules": [],
-      "public_symbols": 15
+      "public_symbols": 17
     },
     {
       "file": "crates/gen-zero-service/src/snapshot.rs",
@@ -24016,6 +24039,16 @@
       "public_symbols": 55
     },
     {
+      "file": "crates/gen-zero-service/src/text_to_graph.rs",
+      "declared_modules": [],
+      "public_symbols": 7
+    },
+    {
+      "file": "crates/gen-zero-service/src/uds.rs",
+      "declared_modules": [],
+      "public_symbols": 9
+    },
+    {
       "file": "crates/gen-zero-service/src/worldsim.rs",
       "declared_modules": [],
       "public_symbols": 21
@@ -24023,7 +24056,12 @@
     {
       "file": "crates/gen-zero-service/src/zero.rs",
       "declared_modules": [],
-      "public_symbols": 38
+      "public_symbols": 42
+    },
+    {
+      "file": "crates/gen-zero-storage/src/durable_refusal.rs",
+      "declared_modules": [],
+      "public_symbols": 29
     },
     {
       "file": "crates/gen-zero-storage/src/error.rs",
@@ -24038,6 +24076,7 @@
     {
       "file": "crates/gen-zero-storage/src/lib.rs",
       "declared_modules": [
+        "durable_refusal",
         "error",
         "fenwick",
         "reflex_store",
@@ -24087,16 +24126,6 @@
       "public_symbols": 1
     },
     {
-      "file": "crates/gen-zero-worldmodel/src/koopman.rs",
-      "declared_modules": [],
-      "public_symbols": 10
-    },
-    {
-      "file": "crates/gen-zero-worldmodel/src/koopman_spectral.rs",
-      "declared_modules": [],
-      "public_symbols": 13
-    },
-    {
       "file": "crates/gen-zero-worldmodel/src/lib.rs",
       "declared_modules": [
         "compression",
@@ -24104,8 +24133,6 @@
         "contact",
         "dynamics",
         "error",
-        "koopman",
-        "koopman_spectral",
         "symplectic",
         "symplectic_dynamics"
       ],

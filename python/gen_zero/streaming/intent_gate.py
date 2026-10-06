@@ -118,7 +118,7 @@ class StreamIntentGate:
 
     # Action indicator patterns
     _ADD_PATTERNS = [
-        re.compile(r"\b(need\s+to|add|create|next\s+step|first|then|proceed|submit|review|approve|sign|deploy|execute)\b", re.I),
+        re.compile(r"\b(need(\s+to)?|require|add|create|next\s+step|first|then|proceed|submit|review|approve|sign|deploy|execute|assessment)\b", re.I),
     ]
 
     _MODIFY_PATTERNS = [

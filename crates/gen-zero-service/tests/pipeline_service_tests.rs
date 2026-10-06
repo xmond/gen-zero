@@ -1379,4 +1379,3 @@ async fn robust_probe_posterior_and_phase_are_shared_by_http_and_mcp() {
     assert_eq!(call["result"]["isError"], true, "{call}");
     assert!(call.to_string().contains("residual"), "{call}");
 }
-

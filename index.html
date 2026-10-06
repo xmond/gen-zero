@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ZeroHarness / Gen-Zero Architecture Spec &amp; Experimental Prototype (架构规范与实验原型)</title>
-<meta name="description" content="ZeroHarness / Gen-Zero 架构规范与实验原型（Open Core / Experimental Preview）：A100 GPU 离线因果流形萃取、四正交切空间 Wasserstein 连续路由、以单核 CPU 220M 级紧凑常驻为生产目标的设计，以及 GEPA 闭环对抗自进化设计。">
+<title>ZeroHarness / Gen-Zero Architecture Spec &amp; Experimental Prototype</title>
+<meta name="description" content="ZeroHarness / Gen-Zero architecture specification and experimental prototype (Open Core / Experimental Preview): offline causal-manifold extraction on an A100 GPU, continuous Wasserstein routing over four orthogonal tangent subspaces, a design targeting compact single-core CPU residency at the 220M scale, and a closed-loop adversarial self-evolution design based on GEPA.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
@@ -126,7 +126,7 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
   </defs>
 </svg>
 
-<button class="theme-btn" id="themeToggle"><svg class="icon"><use href="#i-refresh"/></svg> 切换明暗主题</button>
+<button class="theme-btn" id="themeToggle"><svg class="icon"><use href="#i-refresh"/></svg> Toggle light/dark theme</button>
 
 <div class="shell">
 
@@ -139,142 +139,142 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
       <span class="badge blue"><svg class="icon"><use href="#i-gauge"/></svg> CONTRACTIVE &rho;(A)=0.9800</span>
       <span class="badge orange"><svg class="icon"><use href="#i-shield"/></svg> GEPA CLOSED-LOOP</span>
     </div>
-    <h1>ZeroHarness / Gen-Zero 架构规范与实验原型</h1>
+    <h1>ZeroHarness / Gen-Zero Architecture Spec &amp; Experimental Prototype</h1>
     <p style="color:var(--muted);font-size:1.1rem;margin-top:0.6rem">
-      面向生产目标「单核 CPU 常驻自主模型 <strong>Zero</strong>」的设计规范：因果流形提取、连续最优传输 (Wasserstein) 路由、微动力学稀疏 MoE 与可逆编码。本页描述目标架构与实验结果，不代表已上线的生产系统。
+      A design specification for the production target "single-core CPU resident autonomous model <strong>Zero</strong>": causal-manifold extraction, continuous optimal-transport (Wasserstein) routing, micro-dynamics sparse MoE, and reversible encoding. This page describes the target architecture and experimental results. It does not describe a production system that is already live.
     </p>
   </header>
 
   <!-- Status Banner: production target vs. current open-core state -->
   <div class="callout warning">
-    <b>当前状态：Open Core / Experimental Preview（开放核心 / 实验预览）。</b>
-    本页中的「0 GPU / 0 API」「单核 CPU 常驻」「1.0 GB 内存」等是<b>生产目标与设计约束</b>，不是已在线上运行的能力；Gen-Zero 目前没有在任何线上生产环境中自主接管决策。
-    开源仓库是开放核心与实验规范：Rust 服务端（MCP / HTTP / 模拟 / 审计账本）的默认动力学是确定性的示意（deterministic &amp; illustrative）实现，不是本页描述的训练神经网络；部分语义路径（如语义风险判定）经 Python bridge 完成；训练好的残差神经动力学目前只在 Python 侧，尚未移植到 Rust（见 <code>README.md</code>、<code>docs/zero/README.md</code>）。
-    文中标注「实测」的数字只在其注明的数据集与硬件上成立，不外推为通用保证。
+    <b>Current status: Open Core / Experimental Preview.</b>
+    Figures on this page such as "0 GPU / 0 API", "single-core CPU residency", and "1.0 GB memory" are <b>production targets and design constraints</b>. They are not capabilities that run online today. Gen-Zero does not currently take over decisions autonomously in any live production environment.
+    The open-source repository is the open core plus the experimental specification. The default dynamics of the Rust server (MCP / HTTP / simulation / audit ledger) is a deterministic and illustrative implementation (deterministic &amp; illustrative), not the trained neural network described on this page. Some semantic paths (such as semantic risk judgment) go through a Python bridge. The trained residual neural dynamics exist only on the Python side and are not yet ported to Rust (see <code>README.md</code> and <code>docs/zero/README.md</code>).
+    Numbers marked "measured" in the text hold only on the dataset and hardware stated next to them. They must not be extrapolated into general guarantees.
   </div>
 
   <!-- Key Metrics Banner -->
   <div class="keys-grid">
     <div class="key-box">
       <b>Zero</b>
-      <span>统一模型命名（生产目标形态）</span>
+      <span>Unified model naming (production-target form)</span>
     </div>
     <div class="key-box">
-      <b>64 维</b>
-      <span>全域因果流形正交压缩基底</span>
+      <b>64-D</b>
+      <span>Orthogonal compression basis of the global causal manifold</span>
     </div>
     <div class="key-box">
       <b>&rho; = 0.9800</b>
-      <span>李雅普诺夫收缩动力学稳定性证明</span>
+      <span>Lyapunov contraction-dynamics stability proof</span>
     </div>
     <div class="key-box">
-      <b>220M 级</b>
-      <span>紧凑因式分解活跃前向参数量</span>
+      <b>220M-class</b>
+      <span>Compact factorized active forward parameter count</span>
     </div>
     <div class="key-box">
       <b>&le; 1.0 GB</b>
-      <span>物理常驻内存硬约束 (BF16)</span>
+      <span>Hard physical resident-memory constraint (BF16)</span>
     </div>
     <div class="key-box">
       <b>0 GPU / 0 API</b>
-      <span>生产目标：单核 CPU 常驻（当前为实验预览）</span>
+      <span>Production target: single-core CPU residency (currently an experimental preview)</span>
     </div>
   </div>
 
   <!-- Navigation Quick Links -->
   <nav class="tabs" style="border:none;margin-bottom:2rem;flex-wrap:wrap;gap:8px">
-    <a href="#sec-architecture" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">1. 架构总览与规格谱系</a>
-    <a href="#sec-manifold" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">2. 全域因果流形萃取</a>
-    <a href="#sec-ot-routing" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">3. Wasserstein 连续路由</a>
-    <a href="#sec-compact-moe" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">4. 紧凑型微动力学 MoE</a>
-    <a href="#sec-gepa" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">5. GEPA 自进化闭环</a>
-    <a href="#sec-lossless" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">6. 无损矢量与 NanoCore</a>
-    <a href="#sec-interactive" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">7. 交互式仿真验证室</a>
-    <a href="#sec-laya-benchmark" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--accent);color:var(--accent);background:var(--surface)">8. 对标 Laya / Jev 评测矩阵</a>
-    <a href="#sec-charter" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">9. 防作弊审计宪章</a>
-    <a href="#sec-evidence" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--good);color:var(--good);background:var(--surface)">10. 泛化实测与四大病根</a>
+    <a href="#sec-architecture" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">1. Architecture Overview &amp; Spec Lineage</a>
+    <a href="#sec-manifold" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">2. Global Causal-Manifold Extraction</a>
+    <a href="#sec-ot-routing" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">3. Wasserstein Continuous Routing</a>
+    <a href="#sec-compact-moe" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">4. Compact Micro-Dynamics MoE</a>
+    <a href="#sec-gepa" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">5. GEPA Self-Evolution Loop</a>
+    <a href="#sec-lossless" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">6. Lossless Vectors &amp; NanoCore</a>
+    <a href="#sec-interactive" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">7. Interactive Simulation Lab</a>
+    <a href="#sec-laya-benchmark" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--accent);color:var(--accent);background:var(--surface)">8. Laya / Jev Benchmark Matrix</a>
+    <a href="#sec-charter" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--line);background:var(--surface)">9. Anti-Cheating Audit Charter</a>
+    <a href="#sec-evidence" class="tab-btn" style="text-decoration:none;display:inline-block;border:1px solid var(--good);color:var(--good);background:var(--surface)">10. Measured Generalization &amp; Four Root Causes</a>
   </nav>
 
   <!-- Section 1: Architecture Overview -->
   <section id="sec-architecture">
-    <h2><svg class="icon"><use href="#i-layers"/></svg> 1. 现有架构总览：统一自主模型 Zero 与弹性谱系</h2>
+    <h2><svg class="icon"><use href="#i-layers"/></svg> 1. Current Architecture Overview: Unified Autonomous Model Zero and Its Elastic Lineage</h2>
     <p>
-      Gen-Zero 架构把分散的实验命名收拢为统一模型 Zero。<strong>生产目标</strong>是只部署单一自主模型 Zero：推理不依赖 GPU 与外部云端 API，以纯 CPU 单核单线程常驻于嵌入式或低功耗服务器并输出确定性决策。这是设计目标，<strong>尚未在线上生产环境实现</strong>；当前开源版本是开放核心与实验原型，Zero-Compact-220M 的单核 CPU 实测延迟为 468.98 ms（见第 8 节），不是毫秒级。
+      The Gen-Zero architecture consolidates scattered experimental names into one unified model, Zero. The <strong>production target</strong> is to deploy only a single autonomous model, Zero. Inference depends on no GPU and no external cloud API. It stays resident on one pure-CPU thread on an embedded or low-power server and emits deterministic decisions. This is a design target that is <strong>not yet realized in any live production environment</strong>. The current open-source release is an open core and experimental prototype. The measured single-core CPU latency of Zero-Compact-220M is 468.98 ms (see Section 8). It is not millisecond-class.
     </p>
 
     <div class="grid-4" style="margin:1.6rem 0">
       <div class="card accent-border">
         <h3 style="margin-top:0">Zero-Compact-220M</h3>
-        <p style="font-size:0.85rem;color:var(--muted)">Tier-1 极速轻量与紧凑端侧</p>
+        <p style="font-size:0.85rem;color:var(--muted)">Tier-1 ultra-light compact edge tier</p>
         <ul style="padding-left:18px;font-size:0.85rem">
-          <li><strong>拓扑范式</strong>：后 8 层 8 专家 Top-1 稀疏 MoE（CPU mmap 零拷贝分页）</li>
-          <li><strong>词表嵌入</strong>：可选 128 维低秩分解（极窄控容）或全宽直通</li>
-          <li><strong>活跃/存储</strong>：活跃 &le; 230M / 总存储 &le; 350M</li>
-          <li><strong>物理常驻</strong>：&le; 1.0 GB（单核 CPU 极限预算，分块流式处理）</li>
-          <li><strong>决策出口</strong>：64 维 / 128 维紧凑超球面流形 $\mathbb{S}^{63}$</li>
+          <li><strong>Topology</strong>: Sparse top-1 MoE with 8 experts in the last 8 layers (CPU mmap zero-copy paging)</li>
+          <li><strong>Vocabulary embedding</strong>: optional 128-D low-rank factorization (very narrow, capacity-bounded) or full-width pass-through</li>
+          <li><strong>Active / storage</strong>: active &le; 230M / total storage &le; 350M</li>
+          <li><strong>Physical residency</strong>: &le; 1.0 GB (single-core CPU hard budget, chunked streaming)</li>
+          <li><strong>Decision output</strong>: 64-D / 128-D compact hypersphere manifold $\mathbb{S}^{63}$</li>
         </ul>
       </div>
 
       <div class="card good-border">
-        <h3 style="margin-top:0">Zero-Lite (工业基准)</h3>
-        <p style="font-size:0.85rem;color:var(--muted)">Tier-2 生产推荐 · 放开 1G 限制</p>
+        <h3 style="margin-top:0">Zero-Lite (Industrial Baseline)</h3>
+        <p style="font-size:0.85rem;color:var(--muted)">Tier-2 recommended for production · 1 GB limit lifted</p>
         <ul style="padding-left:18px;font-size:0.85rem">
-          <li><strong>拓扑范式</strong>：24 层全密集骨干 (Dense, hidden=896/1024)</li>
-          <li><strong>词表嵌入</strong>：原生 151,643 词表 1024-D 全宽无损直通（无秩亏损）</li>
-          <li><strong>物理常驻</strong>：1.5GB ~ 2.5GB 标准预算（免除 INT8 动态反量化）</li>
-          <li><strong>CPU 性能</strong>：融合 INT8 GEMV 单步 <strong>26.5ms~65.9ms</strong>（提速近 8 倍）</li>
-          <li><strong>决策出口</strong>：<strong>256-D / 896-D 全维无损流形</strong>（896-D 为骨干原生隐藏维度、不做降维；256-D 是降维投影，有信息损失。896 维点积实测 52ns）</li>
+          <li><strong>Topology</strong>: 24-layer fully dense backbone (Dense, hidden=896/1024)</li>
+          <li><strong>Vocabulary embedding</strong>: native 151,643-token vocabulary, full-width lossless 1024-D pass-through (no rank deficit)</li>
+          <li><strong>Physical residency</strong>: standard budget of 1.5 GB to 2.5 GB (no dynamic INT8 dequantization)</li>
+          <li><strong>CPU performance</strong>: fused INT8 GEMV at <strong>26.5 ms to 65.9 ms</strong> per step (nearly 8x faster)</li>
+          <li><strong>Decision output</strong>: <strong>256-D / 896-D full-dimension lossless manifold</strong> (896-D is the native hidden dimension of the backbone, with no dimensionality reduction. 256-D is a reduced projection and loses information. A measured 896-D dot product takes 52 ns)</li>
         </ul>
       </div>
 
       <div class="card blue-border">
-        <h3 style="margin-top:0">Zero-Plus (慢思考)</h3>
-        <p style="font-size:0.85rem;color:var(--muted)">Tier-3 认知增强 · System-2 动力学</p>
+        <h3 style="margin-top:0">Zero-Plus (Slow Thinking)</h3>
+        <p style="font-size:0.85rem;color:var(--muted)">Tier-3 enhanced cognition · System-2 dynamics</p>
         <ul style="padding-left:18px;font-size:0.85rem">
-          <li><strong>拓扑范式</strong>：28 层全密集骨干 (Dense, hidden=1536) + 多步连续慢思考</li>
-          <li><strong>动力学机制</strong>：<strong>Coconut 隐式循环 (K=2~8)</strong> + Neural ODE 吸引子连续积分</li>
-          <li><strong>泛化理论</strong>：因果不变性 (IRM/GroupDRO) + 反事实对比 + 神经符号 CP-SAT 熔断</li>
-          <li><strong>硬件目标</strong>：&le; 4.0 GB，纯 CPU 原生运行，支持 OpenMP 2~4 核并行 (&lt;50ms)</li>
-          <li><strong>认知突破</strong>：打破单步快思考天花板，直击 GSM8K、复杂代码与 ARC 科学因果</li>
+          <li><strong>Topology</strong>: 28-layer fully dense backbone (Dense, hidden=1536) + multi-step continuous slow thinking</li>
+          <li><strong>Dynamics mechanism</strong>: <strong>Coconut implicit loop (K=2 to 8)</strong> + continuous Neural ODE attractor integration</li>
+          <li><strong>Generalization theory</strong>: causal invariance (IRM/GroupDRO) + counterfactual contrast + neuro-symbolic CP-SAT circuit breaker</li>
+          <li><strong>Hardware target</strong>: &le; 4.0 GB, native pure-CPU execution, OpenMP parallelism on 2 to 4 cores (&lt;50ms)</li>
+          <li><strong>Cognitive breakthrough</strong>: breaks the ceiling of single-step fast thinking and targets GSM8K, complex code, and ARC scientific causality</li>
         </ul>
       </div>
 
       <div class="card purple-border">
-        <h3 style="margin-top:0">Zero-Max (全能教师)</h3>
-        <p style="font-size:0.85rem;color:var(--muted)">最高认知容量 · GPU 极速推流中枢</p>
+        <h3 style="margin-top:0">Zero-Max (Full-Capability Teacher)</h3>
+        <p style="font-size:0.85rem;color:var(--muted)">Highest cognitive capacity · GPU high-speed streaming hub</p>
         <ul style="padding-left:18px;font-size:0.85rem">
-          <li><strong>拓扑范式</strong>：32 层高容量全密集骨干 (Dense, hidden=2048)</li>
-          <li><strong>硬件加速</strong>：挂载 <strong>AI Server (NVIDIA A100 80GB GPU)</strong> 极速推流</li>
-          <li><strong>推流吞吐</strong>：全量 5,304 条自然语言样本 GPU 批量并行编码与多维拟合</li>
-          <li><strong>谱系职责</strong>：提供 896-D 全维教师表征，向 CPU 端侧蒸馏流形与多专家微核</li>
-          <li><strong>泛化标杆</strong>：无损因果图拓扑与全量反事实空间基准</li>
+          <li><strong>Topology</strong>: 32-layer high-capacity fully dense backbone (Dense, hidden=2048)</li>
+          <li><strong>Hardware acceleration</strong>: mounts <strong>AI Server (NVIDIA A100 80GB GPU)</strong> for high-speed streaming</li>
+          <li><strong>Streaming throughput</strong>: GPU batch-parallel encoding and multi-dimensional fitting of all 5,304 natural-language samples</li>
+          <li><strong>Lineage role</strong>: supplies 896-D full-dimension teacher representations and distills the manifold and multi-expert micro-cores into the CPU edge tier</li>
+          <li><strong>Generalization benchmark</strong>: lossless causal-graph topology and a full counterfactual-space benchmark</li>
         </ul>
       </div>
     </div>
 
-    <!-- 谱系认知覆盖与拓扑解耦提示条 -->
+    <!-- Lineage cognitive coverage and topology decoupling banner -->
     <div style="background:rgba(56, 189, 248, 0.08);border:1px solid rgba(56, 189, 248, 0.25);border-radius:8px;padding:12px 16px;margin:1rem 0;font-size:0.85rem;line-height:1.5">
-      <strong><svg class="icon" style="vertical-align:-2px"><use href="#i-info"/></svg> 架构大解绑与工业分层预算说明（放开 1G 限制 &amp; 多步慢思考）</strong>：<br>
-      1. <strong>打破 1.0 GB 枷锁与分层预算体系</strong>：放弃为死守 1.0GB 硬预算而牺牲模型表达力的妥协设计。确立 <strong>Tier-1 (&le;1.0GB 极限端侧)</strong>、<strong>Tier-2 (&le;2.5GB 工业生产推荐)</strong>、<strong>Tier-3 (&le;4.0GB 复杂因果认知增强)</strong> 三级分层体系；<br>
-      2. <strong>CPU 性能飞跃与内存带宽墙根治</strong>：深入计算机体系结构，剖析旧版每步动态反量化 3.58 亿参数（275ms）的访存瓶颈，引入<strong>原生 FP32 直通</strong>（150ms）与<strong>融合 INT8 GEMV</strong>（单步仅 <strong>26.5ms~65.9ms</strong>），单核/多核 CPU 原生性能暴增 4~8 倍；<br>
-      3. <strong>896-D 原生全维无损流形与 151,643 全宽词表</strong>：AVX-512 实测 896-D 全维点积耗时仅 <strong>52.45 ns</strong>（双线性矩阵仅 0.18ms），计算开销完全可忽略；128 维表示限制了可表达的线性子空间维数；实际重建误差及任务影响需要结合数据谱和消融实验评估，不能由维数比例直接推断；<br>
-      4. <strong>多步连续慢思考（System-2）</strong>：打破单步快思考边界，引入 <strong>Coconut K=2~8 隐式循环叠加态</strong> 与 <strong>Neural ODE 李雅普诺夫稳态收缩</strong>，解耦因果计算图复杂度，直击分布外（OOD）泛化挑战；<br>
-      5. <strong>AI Server (NVIDIA A100 80GB) 极速推流</strong>：离线海量样本特征提取与多维流形拟合转移至 GPU 节点秒级完成，纯 CPU 生产端侧专注极速确定性推理。
+      <strong><svg class="icon" style="vertical-align:-2px"><use href="#i-info"/></svg> Architecture decoupling and industrial tiered budgets (1 GB limit lifted &amp; multi-step slow thinking)</strong>:<br>
+      1. <strong>Breaking the 1.0 GB shackle and the tiered budget system</strong>: we drop the compromise of sacrificing model expressiveness to hold a hard 1.0 GB budget. Three tiers are set: <strong>Tier-1 (&le;1.0GB extreme edge)</strong>, <strong>Tier-2 (&le;2.5GB recommended for industrial production)</strong>, and <strong>Tier-3 (&le;4.0GB enhanced complex causal cognition)</strong>.<br>
+      2. <strong>CPU performance leap and removal of the memory-bandwidth wall</strong>: from a computer-architecture view, we analyze the memory-access bottleneck of the old design, which dynamically dequantized 358M parameters at every step (275 ms). We introduce <strong>native FP32 pass-through</strong> (150 ms) and <strong>fused INT8 GEMV</strong> (only <strong>26.5 ms to 65.9 ms</strong> per step). Native single-core and multi-core CPU performance rises 4x to 8x.<br>
+      3. <strong>Native 896-D full-dimension lossless manifold and the full-width 151,643-token vocabulary</strong>: on AVX-512, a full 896-D dot product measures only <strong>52.45 ns</strong> (a bilinear matrix only 0.18 ms), so the compute cost is negligible. A 128-D representation limits the dimension of the linear subspace that can be expressed. The actual reconstruction error and the task impact must be assessed with the data spectrum and ablation experiments. They cannot be inferred directly from the dimension ratio.<br>
+      4. <strong>Multi-step continuous slow thinking (System-2)</strong>: breaks the single-step fast-thinking boundary. It introduces a <strong>Coconut K=2 to 8 implicit-loop superposition state</strong> and <strong>Neural ODE Lyapunov steady-state contraction</strong>, decouples the complexity of the causal computation graph, and targets the out-of-distribution (OOD) generalization challenge.<br>
+      5. <strong>AI Server (NVIDIA A100 80GB) high-speed streaming</strong>: offline feature extraction over large sample sets and multi-dimensional manifold fitting move to the GPU node and finish in seconds. The pure-CPU production edge tier focuses on fast, deterministic inference.
     </div>
 
-    <!-- 1.2 RFC-069 四层系统分层总架构：无损可逆输入与 NanoCore zstd 紧致持久化 -->
-    <h3 style="margin-top:2.4rem"><svg class="icon"><use href="#i-layers"/></svg> 1.2 RFC-069 四层系统分层总架构：无损可逆输入与 NanoCore zstd 紧致持久化</h3>
+    <!-- 1.2 RFC-069 four-layer system architecture: lossless reversible input and NanoCore zstd compact persistence -->
+    <h3 style="margin-top:2.4rem"><svg class="icon"><use href="#i-layers"/></svg> 1.2 RFC-069 Four-Layer System Architecture: Lossless Reversible Input and NanoCore zstd Compact Persistence</h3>
     <p class="muted" style="color:var(--muted)">
-      本全景架构图清晰对比第 1 层骨干共享表征、第 2 层 NanoCore 专科微核群、第 3 层流式世界模型与第 4 层神经符号硬终审在接入 RFC-069 无损可逆编码与 zstd 紧致持久化后的系统级跃迁与闭环设计：
+      This panoramic architecture diagram compares Layer 1 (shared backbone representation), Layer 2 (NanoCore specialist micro-core fleet), Layer 3 (streaming world model), and Layer 4 (neuro-symbolic hard final review) before and after RFC-069 lossless reversible encoding and zstd compact persistence are attached. It shows the system-level step change and the closed-loop design:
     </p>
 
     <!-- Tab Buttons for Architecture Switch -->
     <div class="arch-tabs">
       <button class="arch-tab-btn active" onclick="switchArchTab('arch-tab-rfc', this)">
-        <svg class="icon"><use href="#i-check"/></svg> 🌟 RFC-069 扩展四层架构总图 (加了无损输入与 zstd 紧致持久化)
+        <svg class="icon"><use href="#i-check"/></svg> 🌟 RFC-069 extended four-layer architecture (with lossless input and zstd compact persistence added)
       </button>
       <button class="arch-tab-btn bad-tab" onclick="switchArchTab('arch-tab-base', this)">
-        <svg class="icon"><use href="#i-warn"/></svg> ⚠️ 原有四层系统架构基准图 (当前现状与瓶颈警告标记)
+        <svg class="icon"><use href="#i-warn"/></svg> ⚠️ Original four-layer system architecture baseline (current state, with bottleneck warning marks)
       </button>
     </div>
 
@@ -296,42 +296,42 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
             </linearGradient>
           </defs>
 
-          <!-- Layer 1: 骨干共享表征层 -->
+          <!-- Layer 1: shared backbone representation layer -->
           <rect x="10" y="10" width="1040" height="165" rx="10" fill="rgba(60,193,174,0.05)" stroke="#3CC1AE" stroke-width="1.5"/>
-          <text x="24" y="32" fill="#3CC1AE" font-family="var(--font-display)" font-size="13.5" font-weight="700">第 1 层 · 骨干共享表征层 Backbone Representation Layer</text>
+          <text x="24" y="32" fill="#3CC1AE" font-family="var(--font-display)" font-size="13.5" font-weight="700">Layer 1 · Shared Backbone Representation Layer</text>
           <rect x="420" y="18" width="150" height="19" rx="4" fill="rgba(52,211,153,0.18)" stroke="#34D399" stroke-width="1.2"/>
-          <text x="495" y="32" fill="#34D399" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">★ RFC-069 无损可逆增强</text>
-          <text x="24" y="48" fill="#93A3A0" font-family="var(--font-body)" font-size="10">双通道解析可逆输入编码 · 动态适配 hidden_size · 纯 Prefill 模式 · 彻底切除 lm_head · 0 自回归解码步</text>
+          <text x="495" y="32" fill="#34D399" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">★ RFC-069 lossless reversible enhancement</text>
+          <text x="24" y="48" fill="#93A3A0" font-family="var(--font-body)" font-size="10">Dual-channel analytic reversible input encoding · dynamic hidden_size adaptation · pure Prefill mode · lm_head fully removed · 0 autoregressive decode steps</text>
 
           <!-- Layer 1 Nodes -->
           <!-- 1.1 Input State S -->
           <g transform="translate(24, 56)">
             <rect width="130" height="102" rx="6" fill="#15201E" stroke="#3A4E4A" stroke-width="1.2"/>
-            <text x="65" y="22" fill="#E4ECEA" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">输入状态与约束 S</text>
-            <text x="65" y="38" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Prompt 观测文本</text>
-            <text x="65" y="52" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">代码行号 / AST 树</text>
-            <text x="65" y="66" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">负向硬安全规则</text>
+            <text x="65" y="22" fill="#E4ECEA" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Input state &amp; constraints S</text>
+            <text x="65" y="38" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Prompt observation text</text>
+            <text x="65" y="52" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Code line numbers / AST</text>
+            <text x="65" y="66" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Negative hard safety rules</text>
             <text x="65" y="82" fill="#34D399" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Raw Structured Input</text>
-            <text x="65" y="96" fill="#E3A447" font-family="var(--font-mono)" font-size="7.5" text-anchor="middle">分流: Tokens &amp; 结构</text>
+            <text x="65" y="96" fill="#E3A447" font-family="var(--font-mono)" font-size="7.5" text-anchor="middle">Split: Tokens &amp; structure</text>
           </g>
           <!-- Arrows from Input -->
           <path d="M 154 80 C 168 80, 172 72, 186 72" fill="none" stroke="#3CC1AE" stroke-width="1.6" marker-end="url(#arr-ext-accent)"/>
           <path d="M 154 110 C 168 110, 172 122, 186 122" fill="none" stroke="#E3A447" stroke-width="1.6" marker-end="url(#arr-ext-prob)"/>
           <!-- Direct Text Token Path to LLM to prevent manifold mismatch -->
           <path d="M 154 62 C 220 38, 480 38, 558 72" fill="none" stroke="#93A3A0" stroke-width="1.4" stroke-dasharray="4 2" marker-end="url(#arr-ext)"/>
-          <text x="320" y="44" fill="#93A3A0" font-family="var(--font-mono)" font-size="8">标准 Token 流 (保预训练流形)</text>
+          <text x="320" y="44" fill="#93A3A0" font-family="var(--font-mono)" font-size="8">Standard token stream (keeps pretrained manifold)</text>
 
           <!-- 1.2a Geometric Channel -->
           <g transform="translate(190, 56)">
             <rect width="158" height="42" rx="6" fill="url(#grad-rfc-box)" stroke="#3CC1AE" stroke-width="1.4"/>
-            <text x="79" y="16" fill="#3CC1AE" font-family="var(--font-display)" font-size="10" font-weight="700" text-anchor="middle">几何通道: Simplex ETF</text>
+            <text x="79" y="16" fill="#3CC1AE" font-family="var(--font-display)" font-size="10" font-weight="700" text-anchor="middle">Geometric channel: Simplex ETF</text>
             <text x="79" y="30" fill="#E4ECEA" font-family="var(--font-mono)" font-size="8" text-anchor="middle">&lt;v_i, v_j&gt; = -1/k · RMSE &le; 10⁻¹⁸</text>
           </g>
           <!-- 1.2b Symbolic Channel -->
           <g transform="translate(190, 104)">
             <rect width="158" height="42" rx="6" fill="url(#grad-rfc-box)" stroke="#E3A447" stroke-width="1.4"/>
-            <text x="79" y="16" fill="#E3A447" font-family="var(--font-display)" font-size="10" font-weight="700" text-anchor="middle">符号通道: Cauchy RS</text>
-            <text x="79" y="30" fill="#E4ECEA" font-family="var(--font-mono)" font-size="8" text-anchor="middle">柯西矩阵 over GF(256) · 逐字逆向</text>
+            <text x="79" y="16" fill="#E3A447" font-family="var(--font-display)" font-size="10" font-weight="700" text-anchor="middle">Symbolic channel: Cauchy RS</text>
+            <text x="79" y="30" fill="#E4ECEA" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Cauchy matrix over GF(256) · char-by-char inverse</text>
           </g>
 
           <!-- Merge to 1.3 Invertible Vector -->
@@ -339,12 +339,12 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
           <path d="M 348 125 C 360 125, 362 110, 374 110" fill="none" stroke="#E3A447" stroke-width="1.6"/>
           <g transform="translate(376, 56)">
             <rect width="160" height="102" rx="8" fill="url(#grad-rfc-box)" stroke="#34D399" stroke-width="2" filter="url(#glow-rfc)"/>
-            <text x="80" y="20" fill="#34D399" font-family="var(--font-display)" font-size="11.5" font-weight="800" text-anchor="middle">无损可逆向量 z</text>
+            <text x="80" y="20" fill="#34D399" font-family="var(--font-display)" font-size="11.5" font-weight="800" text-anchor="middle">Lossless reversible vector z</text>
             <text x="80" y="36" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">z = [z_geo &oplus; z_sym]</text>
-            <text x="80" y="52" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">解析可逆: S = &Phi;⁻¹(z)</text>
-            <text x="80" y="68" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8" text-anchor="middle">验收目标：0.00% 精度衰退</text>
-            <text x="80" y="82" fill="#E3A447" font-family="var(--font-mono)" font-size="7.5" text-anchor="middle">⚡ 0.35ms 直通微核 (Bypass)</text>
-            <text x="80" y="95" fill="#93A3A0" font-family="var(--font-mono)" font-size="7.5" text-anchor="middle">伴随侧流 Sidecar Manifold</text>
+            <text x="80" y="52" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Analytic inverse: S = &Phi;⁻¹(z)</text>
+            <text x="80" y="68" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Acceptance target: 0.00% accuracy loss</text>
+            <text x="80" y="82" fill="#E3A447" font-family="var(--font-mono)" font-size="7.5" text-anchor="middle">⚡ 0.35ms micro-core bypass</text>
+            <text x="80" y="95" fill="#93A3A0" font-family="var(--font-mono)" font-size="7.5" text-anchor="middle">Sidecar Manifold</text>
           </g>
 
           <!-- Sidecar arrow to Layer 2 / CP-SAT directly bypasses LLM -->
@@ -353,12 +353,12 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
           <!-- 1.4 Transformer Decoder with Manifold Decoupling -->
           <g transform="translate(562, 56)">
             <rect width="235" height="102" rx="6" fill="#15201E" stroke="#3CC1AE" stroke-width="1.2"/>
-            <text x="117" y="22" fill="#E4ECEA" font-family="var(--font-display)" font-size="11" font-weight="700" text-anchor="middle">Transformer Decoder &times; 28 (预训练冻结底座)</text>
-            <text x="117" y="38" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">标准 Token 流前向 (GQA + SwiGLU)</text>
-            <text x="117" y="54" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 零流形污染 (Manifold Intact)</text>
-            <text x="117" y="70" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">d=1024 · 纯 Prefill · 0 解码步</text>
-            <text x="117" y="84" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8" text-anchor="middle">可选流形适配器 e = e_tok + W_proj·z</text>
-            <text x="117" y="98" fill="#93A3A0" font-family="var(--font-mono)" font-size="7.5" text-anchor="middle">语义表征与无损向量伴随解耦</text>
+            <text x="117" y="22" fill="#E4ECEA" font-family="var(--font-display)" font-size="11" font-weight="700" text-anchor="middle">Transformer Decoder &times; 28 (frozen pretrained base)</text>
+            <text x="117" y="38" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Standard token-stream forward (GQA + SwiGLU)</text>
+            <text x="117" y="54" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ Zero manifold pollution (Manifold Intact)</text>
+            <text x="117" y="70" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">d=1024 · pure Prefill · 0 decode steps</text>
+            <text x="117" y="84" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Optional manifold adapter e = e_tok + W_proj·z</text>
+            <text x="117" y="98" fill="#93A3A0" font-family="var(--font-mono)" font-size="7.5" text-anchor="middle">Semantic representation decoupled from lossless sidecar</text>
           </g>
           <!-- Adapter connection from z to LLM -->
           <path d="M 536 96 L 560 96" stroke="#3CC1AE" stroke-width="1.4" stroke-dasharray="3 2" marker-end="url(#arr-ext-accent)"/>
@@ -367,12 +367,12 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
           <!-- 1.5 RMSNorm & Companion Composite Manifold -->
           <g transform="translate(825, 56)">
             <rect width="215" height="102" rx="6" fill="#15201E" stroke="#3CC1AE" stroke-width="1.2"/>
-            <text x="107" y="22" fill="#E4ECEA" font-family="var(--font-display)" font-size="11" font-weight="700" text-anchor="middle">伴随复合流形 Composite Manifold</text>
+            <text x="107" y="22" fill="#E4ECEA" font-family="var(--font-display)" font-size="11" font-weight="700" text-anchor="middle">Sidecar Composite Manifold</text>
             <text x="107" y="38" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">h_comp = [h_llm ⊕ z_lossless]</text>
-            <text x="107" y="54" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 兼得预训练语义 + 逐字无损</text>
+            <text x="107" y="54" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ Pretrained semantics + char-level lossless</text>
             <text x="107" y="70" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">last_hidden_state [M, w, d]</text>
-            <text x="107" y="84" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8" text-anchor="middle">下游微核与世界模型全保熵注入</text>
-            <text x="107" y="98" fill="#93A3A0" font-family="var(--font-mono)" font-size="7.5" text-anchor="middle">RMSE ≤ 10⁻¹⁸ · 0 精度衰退</text>
+            <text x="107" y="84" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Entropy-preserving injection to micro-cores &amp; world model</text>
+            <text x="107" y="98" fill="#93A3A0" font-family="var(--font-mono)" font-size="7.5" text-anchor="middle">RMSE ≤ 10⁻¹⁸ · 0 accuracy loss</text>
           </g>
 
           <!-- Connection Arrow from Layer 1 to Layer 2 -->
@@ -380,56 +380,56 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
 
           <!-- Layer 2: NanoCore Specialist Fleet -->
           <rect x="10" y="185" width="1040" height="170" rx="10" fill="rgba(227,164,71,0.05)" stroke="#E3A447" stroke-width="1.5" stroke-dasharray="7 4"/>
-          <text x="24" y="208" fill="#E3A447" font-family="var(--font-display)" font-size="13.5" font-weight="700">第 2 层 · NanoCore 专科微核群与决策矩阵出口 Specialist Fleet &amp; Decision Heads</text>
+          <text x="24" y="208" fill="#E3A447" font-family="var(--font-display)" font-size="13.5" font-weight="700">Layer 2 · NanoCore Specialist Micro-Core Fleet &amp; Decision-Matrix Outputs (Specialist Fleet &amp; Decision Heads)</text>
           <rect x="670" y="194" width="150" height="19" rx="4" fill="rgba(52,211,153,0.18)" stroke="#34D399" stroke-width="1.2"/>
-          <text x="745" y="208" fill="#34D399" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">★ RFC-069 zstd 紧致存储</text>
-          <text x="24" y="224" fill="#93A3A0" font-family="var(--font-body)" font-size="10">亚毫秒级单步高频感知 · 极低开销轻量驻留 · 决策矩阵出口与 zstd 快速反序列化管道</text>
+          <text x="745" y="208" fill="#34D399" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">★ RFC-069 zstd compact storage</text>
+          <text x="24" y="224" fill="#93A3A0" font-family="var(--font-body)" font-size="10">Sub-millisecond single-step high-frequency perception · very low-overhead light residency · decision-matrix outputs and fast zstd deserialization pipeline</text>
 
           <!-- Layer 2 Nodes -->
           <!-- Choice Head -->
           <g transform="translate(24, 236)">
             <rect width="186" height="105" rx="6" fill="#182321" stroke="#3CC1AE" stroke-width="1.3"/>
-            <text x="93" y="24" fill="#3CC1AE" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Choice 互斥优选头</text>
-            <text x="93" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">Linear + 4-Head 集合自注意力</text>
+            <text x="93" y="24" fill="#3CC1AE" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Choice mutually exclusive head</text>
+            <text x="93" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">Linear + 4-head set self-attention</text>
             <text x="93" y="62" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">p = softmax(z + &Delta;z)</text>
-            <text x="93" y="80" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 彻底破除 IIA 限制</text>
-            <text x="93" y="96" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">消除分流效应 Logit 独立缺陷</text>
+            <text x="93" y="80" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ Fully removes the IIA limit</text>
+            <text x="93" y="96" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Removes split-effect Logit independence flaw</text>
           </g>
           <!-- Noul Head -->
           <g transform="translate(218, 236)">
             <rect width="186" height="105" rx="6" fill="#182321" stroke="#E3A447" stroke-width="1.3"/>
-            <text x="93" y="24" fill="#E3A447" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Noul 连续门禁头 (Safety)</text>
-            <text x="93" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">单命题 Sigmoid p_true = &sigma;(z)</text>
-            <text x="93" y="62" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">非对称失败代价门禁</text>
-            <text x="93" y="80" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 亚毫秒硬反射阻断</text>
-            <text x="93" y="96" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">严谨保形物理概率标定</text>
+            <text x="93" y="24" fill="#E3A447" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Noul continuous gate head (Safety)</text>
+            <text x="93" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">Single-proposition Sigmoid p_true = &sigma;(z)</text>
+            <text x="93" y="62" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Asymmetric failure-cost gate</text>
+            <text x="93" y="80" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ Sub-millisecond hard reflex block</text>
+            <text x="93" y="96" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Rigorous conformal probability calibration</text>
           </g>
           <!-- Score Head -->
           <g transform="translate(412, 236)">
             <rect width="186" height="105" rx="6" fill="#182321" stroke="#3CC1AE" stroke-width="1.3"/>
-            <text x="93" y="24" fill="#3CC1AE" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Score 序数评级头 (PRM)</text>
-            <text x="93" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">等级独立隔离打分 (无泄漏)</text>
+            <text x="93" y="24" fill="#3CC1AE" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Score ordinal rating head (PRM)</text>
+            <text x="93" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">Per-grade isolated scoring (no leakage)</text>
             <text x="93" y="62" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">E[score] = &Sigma; k &middot; p_k</text>
-            <text x="93" y="80" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ PRM 过程奖励核</text>
-            <text x="93" y="96" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">连续期望与众数双输出</text>
+            <text x="93" y="80" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ PRM process-reward core</text>
+            <text x="93" y="96" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Dual outputs: continuous expectation and mode</text>
           </g>
           <!-- Task MoE Router -->
           <g transform="translate(606, 236)">
             <rect width="186" height="105" rx="6" fill="#182321" stroke="#E3A447" stroke-width="1.3"/>
-            <text x="93" y="24" fill="#E3A447" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Task MoE 意图路由</text>
-            <text x="93" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">状态复杂度 C(s) &isin; [0, 1]</text>
-            <text x="93" y="62" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">自适应视界 H 与算力分配</text>
-            <text x="93" y="80" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 专家微核动态激活</text>
-            <text x="93" y="96" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Browser / Action / Safety 分流</text>
+            <text x="93" y="24" fill="#E3A447" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Task MoE intent routing</text>
+            <text x="93" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">State complexity C(s) &isin; [0, 1]</text>
+            <text x="93" y="62" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Adaptive horizon H &amp; compute allocation</text>
+            <text x="93" y="80" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ Dynamic expert micro-core activation</text>
+            <text x="93" y="96" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Browser / Action / Safety dispatch</text>
           </g>
           <!-- RFC-069 zstd Engine -->
           <g transform="translate(800, 236)">
             <rect width="236" height="105" rx="8" fill="url(#grad-rfc-box)" stroke="#34D399" stroke-width="2" filter="url(#glow-rfc)"/>
-            <text x="118" y="24" fill="#34D399" font-family="var(--font-display)" font-size="12" font-weight="800" text-anchor="middle">NanoCore zstd 紧致存储</text>
-            <text x="118" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">28.5MB &rarr; 6.8MB (-76.1% 体积)</text>
-            <text x="118" y="62" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ SHA-256 校验 · RMSE &le; 10⁻⁷ (设计目标)</text>
-            <text x="118" y="80" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">冷启动 &le; 2ms (设计目标)</text>
-            <text x="118" y="96" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" font-weight="700" text-anchor="middle">热态复用常驻模型 (设计目标)</text>
+            <text x="118" y="24" fill="#34D399" font-family="var(--font-display)" font-size="12" font-weight="800" text-anchor="middle">NanoCore zstd compact storage</text>
+            <text x="118" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">28.5MB &rarr; 6.8MB (-76.1% size)</text>
+            <text x="118" y="62" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ SHA-256 check · RMSE &le; 10⁻⁷ (design target)</text>
+            <text x="118" y="80" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Cold start &le; 2ms (design target)</text>
+            <text x="118" y="96" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" font-weight="700" text-anchor="middle">Warm reuse of resident model (design target)</text>
           </g>
 
           <!-- Connection Arrow from Layer 2 to Layer 3 -->
@@ -437,42 +437,42 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
 
           <!-- Layer 3: World Model & Planners -->
           <rect x="10" y="370" width="1040" height="180" rx="10" fill="rgba(60,193,174,0.06)" stroke="#3CC1AE" stroke-width="1.5" stroke-dasharray="6 3"/>
-          <text x="24" y="393" fill="#3CC1AE" font-family="var(--font-display)" font-size="13.5" font-weight="700">第 3 层 · 流式隐空间世界模型与多规划算法矩阵 Streaming World Model &amp; Planners</text>
+          <text x="24" y="393" fill="#3CC1AE" font-family="var(--font-display)" font-size="13.5" font-weight="700">Layer 3 · Streaming Latent-Space World Model &amp; Multi-Planner Matrix (Streaming World Model &amp; Planners)</text>
           <rect x="670" y="379" width="140" height="19" rx="4" fill="rgba(52,211,153,0.18)" stroke="#34D399" stroke-width="1.2"/>
-          <text x="740" y="393" fill="#34D399" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">★ RFC-069 保熵突破</text>
-          <text x="24" y="409" fill="#93A3A0" font-family="var(--font-body)" font-size="10">跨时间因果沙盘推演 · 虚构节点统括专科微核群 · so(D) 正交测地线演进 · 20+步零坍缩</text>
+          <text x="740" y="393" fill="#34D399" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">★ RFC-069 entropy-preserving breakthrough</text>
+          <text x="24" y="409" fill="#93A3A0" font-family="var(--font-body)" font-size="10">Cross-time causal sandbox rollout · virtual nodes orchestrate the specialist micro-core fleet · so(D) orthogonal geodesic evolution · 20+ steps with zero collapse</text>
 
           <!-- Layer 3 Nodes -->
           <!-- Attention Sinks -->
           <g transform="translate(24, 420)">
             <rect width="195" height="115" rx="6" fill="#162422" stroke="#3CC1AE" stroke-width="1.3"/>
-            <text x="97" y="24" fill="#3CC1AE" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Attention Sinks 滚动缓存</text>
-            <text x="97" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">恒定 O(W) 显存/内存消耗</text>
-            <text x="97" y="62" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">4 锚点 + 8~32 滑动窗口</text>
-            <text x="97" y="80" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 100,000 帧时序零 OOM</text>
-            <text x="97" y="98" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">无限流式决策因果记忆流</text>
+            <text x="97" y="24" fill="#3CC1AE" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Attention Sinks rolling cache</text>
+            <text x="97" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">Constant O(W) memory use</text>
+            <text x="97" y="62" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">4 anchors + 8 to 32 sliding window</text>
+            <text x="97" y="80" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 100,000 frames, zero OOM</text>
+            <text x="97" y="98" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Unbounded streaming decision causal-memory stream</text>
           </g>
           <path d="M 219 477 L 233 477" stroke="#3CC1AE" stroke-width="1.8" marker-end="url(#arr-ext-accent)"/>
 
           <!-- RFC-069 Invariant Dynamics -->
           <g transform="translate(236, 420)">
             <rect width="250" height="115" rx="8" fill="url(#grad-rfc-box)" stroke="#34D399" stroke-width="2" filter="url(#glow-rfc)"/>
-            <text x="125" y="24" fill="#34D399" font-family="var(--font-display)" font-size="12" font-weight="800" text-anchor="middle">保熵测地线动力学 (so(D))</text>
-            <text x="125" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">z_(t+1) = exp(&Delta;&Omega;_t) &middot; z_t (正交演进)</text>
-            <text x="125" y="62" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ H=4 &rarr; 20+ 步前瞻零坍缩</text>
-            <text x="125" y="80" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">表征模长方差 &le; 1.0% (零漂移)</text>
-            <text x="125" y="98" fill="#E3A447" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Pearl 因果扰动 Causal Shock 自愈</text>
+            <text x="125" y="24" fill="#34D399" font-family="var(--font-display)" font-size="12" font-weight="800" text-anchor="middle">Entropy-preserving geodesic dynamics (so(D))</text>
+            <text x="125" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">z_(t+1) = exp(&Delta;&Omega;_t) &middot; z_t (orthogonal evolution)</text>
+            <text x="125" y="62" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ H=4 &rarr; 20+ step lookahead, zero collapse</text>
+            <text x="125" y="80" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Representation-norm variance &le; 1.0% (zero drift)</text>
+            <text x="125" y="98" fill="#E3A447" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Pearl causal perturbation (Causal Shock) self-healing</text>
           </g>
           <path d="M 486 477 L 500 477" stroke="#34D399" stroke-width="1.8" marker-end="url(#arr-ext-good)"/>
 
           <!-- Multi-Planner Matrix -->
           <g transform="translate(503, 420)">
             <rect width="533" height="115" rx="6" fill="#162422" stroke="#3CC1AE" stroke-width="1.3"/>
-            <text x="266" y="24" fill="#3CC1AE" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">统括沙盘：多算法规划矩阵 (Multi-Planner Matrix)</text>
-            <text x="266" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">纯潜空间 MCTS (&lt;1.5ms) &middot; 不确定性 A* &middot; 连续 MPC-CEM &middot; CFR 博弈 &middot; GFlowNet</text>
-            <text x="266" y="64" fill="#34D399" font-family="var(--font-mono)" font-size="9" font-weight="600" text-anchor="middle">★ 虚构节点微核统括调度：在虚拟推演树每个节点 z_(t+k) 并行调用安全/动作/评级微核</text>
-            <text x="266" y="82" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 死胡同避坑存活率: 从单步 0.0% 跃升至 100.0% (陷阱误入率彻底归零)</text>
-            <text x="266" y="100" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">跨越盲区临界深度 · 消除单步模型“瞬时近视”暴毙缺陷</text>
+            <text x="266" y="24" fill="#3CC1AE" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">Orchestrating sandbox: Multi-Planner Matrix</text>
+            <text x="266" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">Pure latent-space MCTS (&lt;1.5ms) &middot; uncertainty A* &middot; continuous MPC-CEM &middot; CFR game &middot; GFlowNet</text>
+            <text x="266" y="64" fill="#34D399" font-family="var(--font-mono)" font-size="9" font-weight="600" text-anchor="middle">★ Virtual-node micro-core orchestration: safety/action/rating micro-cores run in parallel at every node z_(t+k) of the virtual rollout tree</text>
+            <text x="266" y="82" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ Dead-end avoidance survival rate: from 0.0% (single step) to 100.0% (trap entry rate driven to zero)</text>
+            <text x="266" y="100" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Crosses the critical blind-spot depth · removes the "instant myopia" fatal flaw of single-step models</text>
           </g>
 
           <!-- Connection Arrow from Layer 3 to Layer 4 -->
@@ -480,41 +480,41 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
 
           <!-- Layer 4: MoV & CP-SAT -->
           <rect x="10" y="565" width="1040" height="142" rx="10" fill="rgba(158,127,255,0.05)" stroke="#9E7FFF" stroke-width="1.5" stroke-dasharray="5 3"/>
-          <text x="24" y="588" fill="#9E7FFF" font-family="var(--font-display)" font-size="13.5" font-weight="700">第 4 层 · MoV 向量级加权池化与 CP-SAT 神经符号学终审 MoV &amp; CP-SAT Solver</text>
+          <text x="24" y="588" fill="#9E7FFF" font-family="var(--font-display)" font-size="13.5" font-weight="700">Layer 4 · MoV Vector-Level Weighted Pooling &amp; CP-SAT Neuro-Symbolic Final Review (MoV &amp; CP-SAT Solver)</text>
           <rect x="670" y="574" width="150" height="19" rx="4" fill="rgba(52,211,153,0.18)" stroke="#34D399" stroke-width="1.2"/>
-          <text x="745" y="588" fill="#34D399" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">★ RFC-069 确定性硬终审</text>
-          <text x="24" y="604" fill="#93A3A0" font-family="var(--font-body)" font-size="10">连续流形贝叶斯加权池化 · 解析布尔线性投影解码 · Google OR-Tools 0-1 整数线性规划硬约束过滤</text>
+          <text x="745" y="588" fill="#34D399" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">★ RFC-069 deterministic hard final review</text>
+          <text x="24" y="604" fill="#93A3A0" font-family="var(--font-body)" font-size="10">Continuous-manifold Bayesian weighted pooling · analytic Boolean linear-projection decoding · Google OR-Tools 0-1 integer linear programming hard-constraint filtering</text>
 
           <!-- Layer 4 Nodes -->
           <!-- MoV Pooling -->
           <g transform="translate(24, 614)">
             <rect width="310" height="80" rx="6" fill="#191B26" stroke="#9E7FFF" stroke-width="1.3"/>
-            <text x="155" y="24" fill="#9E7FFF" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">MoV 潜空间贝叶斯加权池化</text>
+            <text x="155" y="24" fill="#9E7FFF" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">MoV latent-space Bayesian weighted pooling</text>
             <text x="155" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">h_mov = &Sigma; w_i &middot; Proj_i(h_nanocore_i)</text>
-            <text x="155" y="62" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 抛弃离散 Token 稀疏门禁 · 保全连续微分几何</text>
+            <text x="155" y="62" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ Drops discrete token sparse gating · preserves continuous differential geometry</text>
           </g>
           <path d="M 334 654 L 348 654" stroke="#9E7FFF" stroke-width="1.8" marker-end="url(#arr-ext)"/>
 
           <!-- RFC-069 Exact Boolean Projection -->
           <g transform="translate(352, 614)">
             <rect width="320" height="80" rx="8" fill="url(#grad-rfc-box)" stroke="#34D399" stroke-width="2" filter="url(#glow-rfc)"/>
-            <text x="160" y="24" fill="#34D399" font-family="var(--font-display)" font-size="12" font-weight="800" text-anchor="middle">解析布尔线性投影 (W_sat &middot; z)</text>
-            <text x="160" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">W_sat &middot; z &isin; {0, 1} 直接提取确定性布尔约束</text>
-            <text x="160" y="62" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 彻底消除经验置信度 &tau;&ge;0.70 截断摩擦与误阻断</text>
+            <text x="160" y="24" fill="#34D399" font-family="var(--font-display)" font-size="12" font-weight="800" text-anchor="middle">Analytic Boolean linear projection (W_sat &middot; z)</text>
+            <text x="160" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">W_sat &middot; z &isin; {0, 1} extracts deterministic Boolean constraints directly</text>
+            <text x="160" y="62" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ Removes empirical-confidence &tau;&ge;0.70 cutoff friction and false blocks</text>
           </g>
           <path d="M 672 654 L 686 654" stroke="#34D399" stroke-width="1.8" marker-end="url(#arr-ext-good)"/>
 
           <!-- CP-SAT Solver -->
           <g transform="translate(690, 614)">
             <rect width="346" height="80" rx="6" fill="#191B26" stroke="#9E7FFF" stroke-width="1.3"/>
-            <text x="173" y="24" fill="#9E7FFF" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Google OR-Tools CP-SAT 求解器</text>
-            <text x="173" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">0-1 整数线性规划 · 已编码硬约束的可行域验证</text>
-            <text x="173" y="62" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">物理碰撞 / 权限红线 / 合规：按已编码约束过滤（非无条件担保）</text>
+            <text x="173" y="24" fill="#9E7FFF" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Google OR-Tools CP-SAT solver</text>
+            <text x="173" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">0-1 integer linear programming · feasible-region check of encoded hard constraints</text>
+            <text x="173" y="62" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Physical collision / permission red lines / compliance: filtered by encoded constraints (not an unconditional guarantee)</text>
           </g>
 
           <!-- Bottom Contract Bar -->
           <rect x="10" y="716" width="1040" height="34" rx="6" fill="#141E1C" stroke="#263532" stroke-width="1"/>
-          <text x="25" y="738" fill="#34D399" font-family="var(--font-mono)" font-size="11" font-weight="600">✔ 目标输出契约（设计规范与架构目标）：0.00% 精度衰退对等概率分布（目标） · H=20+ 步虚拟轨迹（目标） · 形式化硬约束过滤 · MCP stdio/SSE 输出</text>
+          <text x="25" y="738" fill="#34D399" font-family="var(--font-mono)" font-size="11" font-weight="600">✔ Target output contract (design spec and architecture goals): 0.00% accuracy-loss equivalent probability distribution (target) · H=20+ step virtual trajectory (target) · formal hard-constraint filtering · MCP stdio/SSE output</text>
         </svg>
       </div>
     </div>
@@ -532,18 +532,18 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
 
           <!-- Layer 1: Representation Backbone (Baseline) -->
           <rect x="10" y="10" width="1040" height="160" rx="10" fill="rgba(224,122,110,0.05)" stroke="#E07A6E" stroke-width="1.5"/>
-          <text x="24" y="32" fill="#E07A6E" font-family="var(--font-display)" font-size="13.5" font-weight="700">第 1 层 · 骨干共享表征层 (当前基准现状)</text>
+          <text x="24" y="32" fill="#E07A6E" font-family="var(--font-display)" font-size="13.5" font-weight="700">Layer 1 · Shared Backbone Representation Layer (current baseline)</text>
           <rect x="360" y="18" width="170" height="19" rx="4" fill="rgba(224,122,110,0.2)" stroke="#E07A6E" stroke-width="1.2"/>
-          <text x="445" y="32" fill="#E07A6E" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">❌ 单向有损语义投影瓶颈</text>
-          <text x="24" y="48" fill="#93A3A0" font-family="var(--font-body)" font-size="10">标准词表 Embedding 矩阵 · 均值/末端抽取 · 丢失精确代码行号与负向硬规则</text>
+          <text x="445" y="32" fill="#E07A6E" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">❌ One-way lossy semantic projection bottleneck</text>
+          <text x="24" y="48" fill="#93A3A0" font-family="var(--font-body)" font-size="10">Standard vocabulary Embedding matrix · mean/last-token extraction · loses exact code line numbers and negative hard rules</text>
 
           <!-- Layer 1 Baseline Nodes -->
           <g transform="translate(24, 56)">
             <rect width="200" height="98" rx="6" fill="url(#grad-bad-box)" stroke="#E07A6E" stroke-width="1.4"/>
-            <text x="100" y="24" fill="#E07A6E" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">标准 Embedding 空间</text>
+            <text x="100" y="24" fill="#E07A6E" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Standard Embedding space</text>
             <text x="100" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">151936 &times; hidden_dim</text>
-            <text x="100" y="64" fill="#E07A6E" font-family="var(--font-mono)" font-size="9" text-anchor="middle">❌ 单向不可逆有损映射</text>
-            <text x="100" y="80" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">变量名/行号/硬约束被模糊平滑</text>
+            <text x="100" y="64" fill="#E07A6E" font-family="var(--font-mono)" font-size="9" text-anchor="middle">❌ One-way irreversible lossy mapping</text>
+            <text x="100" y="80" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Variable names / line numbers / hard constraints get blurred</text>
           </g>
           <path d="M 224 105 L 260 105" stroke="#E07A6E" stroke-width="1.8" stroke-dasharray="4 2" marker-end="url(#arr-base)"/>
 
@@ -551,8 +551,8 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
             <rect width="280" height="98" rx="6" fill="#181D1C" stroke="#3A4A46" stroke-width="1.2"/>
             <text x="140" y="24" fill="#E4ECEA" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Transformer Decoder &times; 28</text>
             <text x="140" y="44" fill="#93A3A0" font-family="var(--font-mono)" font-size="9" text-anchor="middle">GQA (16 Q / 8 KV) + SwiGLU</text>
-            <text x="140" y="62" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">d=1024 &middot; 纯 Prefill 前向</text>
-            <text x="140" y="80" fill="#E07A6E" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">底层信息熵损失沿层向下传递</text>
+            <text x="140" y="62" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">d=1024 &middot; pure Prefill forward</text>
+            <text x="140" y="80" fill="#E07A6E" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Low-level entropy loss propagates down the layers</text>
           </g>
           <path d="M 545 105 L 575 105" stroke="#E07A6E" stroke-width="1.8" stroke-dasharray="4 2" marker-end="url(#arr-base)"/>
 
@@ -560,266 +560,266 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
             <rect width="180" height="98" rx="6" fill="#181D1C" stroke="#3A4A46" stroke-width="1.2"/>
             <text x="90" y="24" fill="#E4ECEA" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Final RMSNorm</text>
             <text x="90" y="44" fill="#93A3A0" font-family="var(--font-mono)" font-size="9" text-anchor="middle">last_hidden_state [M, w, d]</text>
-            <text x="90" y="64" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">致密全流形张量输出</text>
+            <text x="90" y="64" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Dense full-manifold tensor output</text>
           </g>
           <path d="M 760 105 L 790 105" stroke="#E07A6E" stroke-width="1.8" stroke-dasharray="4 2" marker-end="url(#arr-base)"/>
 
           <g transform="translate(795, 56)">
             <rect width="240" height="98" rx="6" fill="url(#grad-bad-box)" stroke="#E07A6E" stroke-width="1.4"/>
-            <text x="120" y="24" fill="#E07A6E" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">末端 Token 隐向量提取</text>
+            <text x="120" y="24" fill="#E07A6E" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Last-token hidden-vector extraction</text>
             <text x="120" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">leaves = hidden[i, len-1]</text>
-            <text x="120" y="64" fill="#E07A6E" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">❌ 无法逆向解析出原始状态</text>
-            <text x="120" y="80" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">下游决策只能依赖模糊相似度</text>
+            <text x="120" y="64" fill="#E07A6E" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">❌ Original state cannot be recovered</text>
+            <text x="120" y="80" fill="#93A3A0" font-family="var(--font-mono)" font-size="8" text-anchor="middle">Downstream decisions can only rely on fuzzy similarity</text>
           </g>
 
           <path d="M 915 154 V 183" stroke="#E07A6E" stroke-width="2" stroke-dasharray="4 2" marker-end="url(#arr-base)"/>
 
           <!-- Layer 2: NanoCore Fleet (Baseline) -->
           <rect x="10" y="185" width="1040" height="170" rx="10" fill="rgba(227,164,71,0.05)" stroke="#E3A447" stroke-width="1.5" stroke-dasharray="7 4"/>
-          <text x="24" y="208" fill="#E3A447" font-family="var(--font-display)" font-size="13.5" font-weight="700">第 2 层 · NanoCore 专科微核群与决策矩阵出口 (当前基准现状)</text>
+          <text x="24" y="208" fill="#E3A447" font-family="var(--font-display)" font-size="13.5" font-weight="700">Layer 2 · NanoCore Specialist Micro-Core Fleet &amp; Decision-Matrix Outputs (current baseline)</text>
           <rect x="670" y="194" width="160" height="19" rx="4" fill="rgba(224,122,110,0.2)" stroke="#E07A6E" stroke-width="1.2"/>
-          <text x="750" y="208" fill="#E07A6E" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">⚠️ 未压缩检查点体积膨胀</text>
-          <text x="24" y="224" fill="#93A3A0" font-family="var(--font-body)" font-size="10">微核具备毫秒级单步感知，但检查点以未压缩 safetensors/pt 落盘，单核体积 28.5MB，缺乏位精确校验</text>
+          <text x="750" y="208" fill="#E07A6E" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">⚠️ Uncompressed checkpoint size bloat</text>
+          <text x="24" y="224" fill="#93A3A0" font-family="var(--font-body)" font-size="10">Micro-cores sense in milliseconds per step, but checkpoints are written uncompressed as safetensors/pt, 28.5MB per core, with no bit-exact verification</text>
 
           <g transform="translate(24, 236)">
             <rect width="235" height="105" rx="6" fill="#182321" stroke="#3CC1AE" stroke-width="1.3"/>
-            <text x="117" y="24" fill="#3CC1AE" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Choice / Noul / Score 决策头</text>
-            <text x="117" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">集合自注意力 + Sigmoid 门禁</text>
-            <text x="117" y="64" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 单步推理时延 &le; 1.4ms (极速)</text>
-            <text x="117" y="82" fill="#E07A6E" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">❌ 致命近视：无因果推演能力</text>
+            <text x="117" y="24" fill="#3CC1AE" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Choice / Noul / Score decision heads</text>
+            <text x="117" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">Set self-attention + Sigmoid gate</text>
+            <text x="117" y="64" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ Single-step inference latency &le; 1.4ms (fast)</text>
+            <text x="117" y="82" fill="#E07A6E" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">❌ Fatal myopia: no causal rollout ability</text>
           </g>
 
           <g transform="translate(275, 236)">
             <rect width="235" height="105" rx="6" fill="#182321" stroke="#E3A447" stroke-width="1.3"/>
-            <text x="117" y="24" fill="#E3A447" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Task MoE 意图路由</text>
-            <text x="117" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">状态复杂度打分 C(s) &isin; [0, 1]</text>
-            <text x="117" y="64" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">动态派发至专科微核</text>
-            <text x="117" y="82" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">自适应粗粒度前瞻深度</text>
+            <text x="117" y="24" fill="#E3A447" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Task MoE intent routing</text>
+            <text x="117" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">State complexity score C(s) &isin; [0, 1]</text>
+            <text x="117" y="64" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Dynamic dispatch to specialist micro-cores</text>
+            <text x="117" y="82" fill="#3CC1AE" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Adaptive coarse-grained lookahead depth</text>
           </g>
 
           <g transform="translate(525, 236)">
             <rect width="510" height="105" rx="6" fill="url(#grad-bad-box)" stroke="#E07A6E" stroke-width="1.4"/>
-            <text x="255" y="24" fill="#E07A6E" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">未压缩检查点存储 (Safetensors / Dict 序列化)</text>
-            <text x="255" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">单核 28.5 MB · 多核舰队集群膨胀 100~300 MB</text>
-            <text x="255" y="64" fill="#E07A6E" font-family="var(--font-mono)" font-size="9" text-anchor="middle">❌ 缺乏无损紧致序列化与 SHA-256 位精确校验机制</text>
-            <text x="255" y="84" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">在资源极度受限的边缘轻量 Pod 中无法支持频繁热插拔与秒级沙盘重置</text>
+            <text x="255" y="24" fill="#E07A6E" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">Uncompressed checkpoint storage (Safetensors / Dict serialization)</text>
+            <text x="255" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">28.5 MB per core · multi-core fleet bloats to 100 to 300 MB</text>
+            <text x="255" y="64" fill="#E07A6E" font-family="var(--font-mono)" font-size="9" text-anchor="middle">❌ No lossless compact serialization and no SHA-256 bit-exact verification</text>
+            <text x="255" y="84" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Cannot support frequent hot-swap or second-level sandbox reset in resource-starved edge Pods</text>
           </g>
 
           <path d="M 520 341 V 368" stroke="#E07A6E" stroke-width="2" stroke-dasharray="4 2" marker-end="url(#arr-base)"/>
 
           <!-- Layer 3: World Model (Baseline Fatal Collapse) -->
           <rect x="10" y="370" width="1040" height="180" rx="10" fill="rgba(224,122,110,0.06)" stroke="#E07A6E" stroke-width="1.5" stroke-dasharray="6 3"/>
-          <text x="24" y="393" fill="#E07A6E" font-family="var(--font-display)" font-size="13.5" font-weight="700">第 3 层 · 流式隐空间世界模型 (当前基准存在 4~6 步表征坍缩)</text>
+          <text x="24" y="393" fill="#E07A6E" font-family="var(--font-display)" font-size="13.5" font-weight="700">Layer 3 · Streaming Latent-Space World Model (current baseline collapses in 4 to 6 steps)</text>
           <rect x="670" y="379" width="180" height="19" rx="4" fill="rgba(224,122,110,0.2)" stroke="#E07A6E" stroke-width="1.2"/>
-          <text x="760" y="393" fill="#E07A6E" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">❌ 表征坍缩导致长程推演失效</text>
-          <text x="24" y="409" fill="#93A3A0" font-family="var(--font-body)" font-size="10">自由残差流动 z_(t+1) = z_t + &Delta;z 缺乏流形正交约束 · 累积误差在第 5 步后导致所有分支趋同模糊</text>
+          <text x="760" y="393" fill="#E07A6E" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">❌ Representation collapse breaks long-range rollout</text>
+          <text x="24" y="409" fill="#93A3A0" font-family="var(--font-body)" font-size="10">Free residual flow z_(t+1) = z_t + &Delta;z lacks manifold orthogonality constraints · accumulated error makes all branches converge to blur after step 5</text>
 
           <g transform="translate(24, 420)">
             <rect width="280" height="115" rx="6" fill="#162422" stroke="#3CC1AE" stroke-width="1.3"/>
-            <text x="140" y="24" fill="#3CC1AE" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Attention Sinks 滚动缓存</text>
-            <text x="140" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">固定 4 锚点 + 滑动窗口</text>
-            <text x="140" y="64" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 显存常数 O(W) 控制良好</text>
-            <text x="140" y="82" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">为连续流式观测提供内存保障</text>
+            <text x="140" y="24" fill="#3CC1AE" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Attention Sinks rolling cache</text>
+            <text x="140" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">Fixed 4 anchors + sliding window</text>
+            <text x="140" y="64" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ Constant O(W) memory well controlled</text>
+            <text x="140" y="82" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Memory guarantee for continuous streaming observation</text>
           </g>
 
           <g transform="translate(320, 420)">
             <rect width="715" height="115" rx="6" fill="url(#grad-bad-box)" stroke="#E07A6E" stroke-width="1.4"/>
-            <text x="357" y="24" fill="#E07A6E" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">自由潜空间残差动力学与多规划算法矩阵</text>
-            <text x="357" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">z_(t+1) = z_t + &Delta;z(z_t, a_t) · 无保熵正交投影</text>
-            <text x="357" y="64" fill="#E07A6E" font-family="var(--font-mono)" font-size="9" text-anchor="middle">❌ 步长 H &ge; 5 步时表征彻底坍缩 (Representation Collapse)，熵值由 1.00 跌至 0.12</text>
-            <text x="357" y="82" fill="#E07A6E" font-family="var(--font-mono)" font-size="9" text-anchor="middle">❌ 死胡同存活率: 单步模型 0.0%，深层陷阱无法提前被看穿</text>
-            <text x="357" y="100" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">虚构沙盘推演无法延伸至 20 步长程因果视野</text>
+            <text x="357" y="24" fill="#E07A6E" font-family="var(--font-display)" font-size="12" font-weight="700" text-anchor="middle">Free latent-space residual dynamics &amp; multi-planner matrix</text>
+            <text x="357" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9.5" text-anchor="middle">z_(t+1) = z_t + &Delta;z(z_t, a_t) · no entropy-preserving orthogonal projection</text>
+            <text x="357" y="64" fill="#E07A6E" font-family="var(--font-mono)" font-size="9" text-anchor="middle">❌ At horizon H &ge; 5 the representation collapses fully (Representation Collapse), entropy falls from 1.00 to 0.12</text>
+            <text x="357" y="82" fill="#E07A6E" font-family="var(--font-mono)" font-size="9" text-anchor="middle">❌ Dead-end survival rate: 0.0% for the single-step model, deep traps cannot be seen in advance</text>
+            <text x="357" y="100" fill="#93A3A0" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">Virtual sandbox rollout cannot extend to a 20-step long-range causal horizon</text>
           </g>
 
           <path d="M 520 550 V 563" stroke="#E07A6E" stroke-width="2" stroke-dasharray="4 2" marker-end="url(#arr-base)"/>
 
           <!-- Layer 4: MoV & CP-SAT (Baseline Friction) -->
           <rect x="10" y="565" width="1040" height="142" rx="10" fill="rgba(224,122,110,0.05)" stroke="#E07A6E" stroke-width="1.5" stroke-dasharray="5 3"/>
-          <text x="24" y="588" fill="#E07A6E" font-family="var(--font-display)" font-size="13.5" font-weight="700">第 4 层 · MoV 池化与 CP-SAT 终审 (当前基准存在阈值摩擦)</text>
+          <text x="24" y="588" fill="#E07A6E" font-family="var(--font-display)" font-size="13.5" font-weight="700">Layer 4 · MoV Pooling &amp; CP-SAT Final Review (current baseline has threshold friction)</text>
           <rect x="670" y="574" width="170" height="19" rx="4" fill="rgba(224,122,110,0.2)" stroke="#E07A6E" stroke-width="1.2"/>
-          <text x="755" y="588" fill="#E07A6E" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">⚠️ 经验阈值截断摩擦</text>
-          <text x="24" y="604" fill="#93A3A0" font-family="var(--font-body)" font-size="10">神经符号交割依赖人工经验阈值 &tau; &ge; 0.70 硬切割 · 存在边界误阻断与安全漏判隐患</text>
+          <text x="755" y="588" fill="#E07A6E" font-family="var(--font-mono)" font-size="10" font-weight="700" text-anchor="middle">⚠️ Empirical-threshold cutoff friction</text>
+          <text x="24" y="604" fill="#93A3A0" font-family="var(--font-body)" font-size="10">Neuro-symbolic handoff relies on a hand-tuned empirical threshold &tau; &ge; 0.70 hard cut · risk of false blocks at the boundary and missed safety violations</text>
 
           <g transform="translate(24, 614)">
             <rect width="420" height="80" rx="6" fill="#191B26" stroke="#9E7FFF" stroke-width="1.3"/>
-            <text x="210" y="24" fill="#9E7FFF" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">MoV 潜空间贝叶斯加权池化</text>
+            <text x="210" y="24" fill="#9E7FFF" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">MoV latent-space Bayesian weighted pooling</text>
             <text x="210" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">h_mov = &Sigma; w_i &middot; Proj_i(h_nanocore_i)</text>
-            <text x="210" y="62" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ 保全连续流形平滑几何</text>
+            <text x="210" y="62" fill="#34D399" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">✔ Preserves smooth continuous-manifold geometry</text>
           </g>
 
           <g transform="translate(460, 614)">
             <rect width="575" height="80" rx="6" fill="url(#grad-bad-box)" stroke="#E07A6E" stroke-width="1.4"/>
-            <text x="287" y="24" fill="#E07A6E" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">经验阈值硬截断 &rarr; Google OR-Tools CP-SAT 求解器</text>
-            <text x="287" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">将软分布通过 &tau; &ge; 0.70 人工硬切为 0/1 约束</text>
-            <text x="287" y="62" fill="#E07A6E" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">❌ 阈值摩擦 (Threshold Friction)：无法从输入向量直接严格逆向抽取精确布尔不等式</text>
+            <text x="287" y="24" fill="#E07A6E" font-family="var(--font-display)" font-size="11.5" font-weight="700" text-anchor="middle">Empirical-threshold hard cut &rarr; Google OR-Tools CP-SAT solver</text>
+            <text x="287" y="44" fill="#E4ECEA" font-family="var(--font-mono)" font-size="9" text-anchor="middle">Hand-cuts the soft distribution into 0/1 constraints with &tau; &ge; 0.70</text>
+            <text x="287" y="62" fill="#E07A6E" font-family="var(--font-mono)" font-size="8.5" text-anchor="middle">❌ Threshold Friction: exact Boolean inequalities cannot be strictly recovered from the input vector</text>
           </g>
 
           <!-- Bottom Baseline Summary Bar -->
           <rect x="10" y="716" width="1040" height="34" rx="6" fill="#1E1413" stroke="#3A2422" stroke-width="1"/>
-          <text x="25" y="738" fill="#E07A6E" font-family="var(--font-mono)" font-size="11" font-weight="600">⚠️ 现状评估：单步推理虽然极快 (1.4ms)，但受制于输入有损、表征坍缩、检查点冗余与经验阈值摩擦，难以支撑复杂安全场景</text>
+          <text x="25" y="738" fill="#E07A6E" font-family="var(--font-mono)" font-size="11" font-weight="600">⚠️ Assessment of the current state: single-step inference is very fast (1.4ms), but lossy input, representation collapse, checkpoint redundancy, and empirical-threshold friction make it hard to support complex safety scenarios</text>
         </svg>
       </div>
     </div>
 
     <!-- Architectural Evolution Comparison Table -->
-    <h3 style="margin-top:2rem"><svg class="icon"><use href="#i-bars"/></svg> 四层分层架构演进对比与数学突破</h3>
+    <h3 style="margin-top:2rem"><svg class="icon"><use href="#i-bars"/></svg> Evolution of the Four-Layer Architecture: Comparison and Mathematical Breakthroughs</h3>
     <table>
       <thead>
         <tr>
-          <th style="width:18%">系统分层</th>
-          <th style="width:27%">原有架构现状 (Baseline)</th>
-          <th style="width:30%">加了无损与紧致持久化后 (RFC-069)</th>
-          <th style="width:25%">关键突破与数学对等保证</th>
+          <th style="width:18%">System layer</th>
+          <th style="width:27%">Current architecture (Baseline)</th>
+          <th style="width:30%">With lossless and compact persistence added (RFC-069)</th>
+          <th style="width:25%">Key breakthrough &amp; mathematical equivalence guarantee</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td><b>第 1 层<br>骨干共享表征层</b></td>
-          <td>单向不可逆 Token Embedding 均值/末端提取；微观变量名、行号与负向硬规则在低维流形平滑中发生耗散。</td>
-          <td><b>双通道解析可逆编码器</b>：<br>· 几何: Simplex ETF (Helmert 基底)<br>· 符号: Cauchy RS over GF(256)<br>输出统一向量 $z = [z_{geo} \oplus z_{sym}]$</td>
-          <td><b>严格双射 $S = \Phi^{-1}(z)$</b><br>$\text{RMSE} \le 10^{-18}$，单步决策 Accuracy Delta = 0.00%（设计目标，本表未附实测证据）。</td>
+          <td><b>Layer 1<br>Shared backbone representation layer</b></td>
+          <td>One-way irreversible Token Embedding with mean/last-token extraction. Fine-grained variable names, line numbers, and negative hard rules dissipate during low-dimensional manifold smoothing.</td>
+          <td><b>Dual-channel analytic reversible encoder</b>:<br>· Geometric: Simplex ETF (Helmert basis)<br>· Symbolic: Cauchy RS over GF(256)<br>Outputs the unified vector $z = [z_{geo} \oplus z_{sym}]$</td>
+          <td><b>Strict bijection $S = \Phi^{-1}(z)$</b><br>$\text{RMSE} \le 10^{-18}$, single-step decision Accuracy Delta = 0.00% (design target, no measured evidence attached in this table).</td>
         </tr>
         <tr>
-          <td><b>第 2 层<br>NanoCore 专科微核群</b></td>
-          <td>浮点权重以未压缩 safetensors/pt 字典落盘，单核 28.5 MB，多微核集群体积膨胀且缺乏完整性校验。</td>
-          <td><b>zstd 紧致持久化管道</b>：<br>· Level 3/19 紧致压缩（体积直降 76.1%）<br>· 3 级自适应降级加载器 (C-ext &rarr; pipe &rarr; gzip)<br>· SHA-256 位精确指纹校验</td>
-          <td><b>Restoration RMSE $\le 10^{-7}$</b>（设计目标，容差级还原，非逐位一致）<br>冷启动加载 $\le 2\text{ms}$（设计目标）；热态推理复用常驻模型（不增加额外序列化开销，设计目标）。</td>
+          <td><b>Layer 2<br>NanoCore specialist micro-core fleet</b></td>
+          <td>Floating-point weights are written as uncompressed safetensors/pt dictionaries, 28.5 MB per core. A multi-micro-core cluster bloats and has no integrity check.</td>
+          <td><b>zstd compact persistence pipeline</b>:<br>· Level 3/19 compact compression (size down 76.1%)<br>· 3-level adaptive fallback loader (C-ext &rarr; pipe &rarr; gzip)<br>· SHA-256 bit-exact fingerprint check</td>
+          <td><b>Restoration RMSE $\le 10^{-7}$</b> (design target, tolerance-level restoration, not bit-for-bit identical)<br>Cold-start load $\le 2\text{ms}$ (design target). Warm inference reuses the resident model with no extra serialization overhead (design target).</td>
         </tr>
         <tr>
-          <td><b>第 3 层<br>流式隐空间世界模型</b></td>
-          <td>自由残差流动 $z_{t+1} = z_t + \Delta z$ 缺乏正交保熵约束，4~6 步后发生表征坍缩，死胡同存活率 0.0%。</td>
-          <td><b>$\mathfrak{so}(D)$ 保熵测地线动力学</b>：<br>$\hat{z}_{t+1} = \exp(\Delta \Omega_t) \cdot z_t$<br>在推演树各虚拟展开节点统括调用专科微核特种兵。</td>
-          <td><b>目标：前瞻视界由 $H=4$ 提升至 $H=20+$ 步</b>；模长方差 $\le 1.0\%$，死胡同避坑存活率 <b>100.0%</b>（设计目标，本表未附实测证据）。</td>
+          <td><b>Layer 3<br>Streaming latent-space world model</b></td>
+          <td>Free residual flow $z_{t+1} = z_t + \Delta z$ lacks orthogonal entropy-preserving constraints. The representation collapses after 4 to 6 steps. Dead-end survival rate is 0.0%.</td>
+          <td><b>$\mathfrak{so}(D)$ entropy-preserving geodesic dynamics</b>:<br>$\hat{z}_{t+1} = \exp(\Delta \Omega_t) \cdot z_t$<br>At every virtually expanded node of the rollout tree, the specialist micro-cores are orchestrated and called.</td>
+          <td><b>Target: lookahead horizon raised from $H=4$ to $H=20+$ steps</b>. Norm variance $\le 1.0\%$, dead-end avoidance survival rate <b>100.0%</b> (design target, no measured evidence attached in this table).</td>
         </tr>
         <tr>
-          <td><b>第 4 层<br>MoV 池化与终审</b></td>
-          <td>神经符号交割依赖人为经验阈值 $\tau \ge 0.70$ 粗暴截断，存在截断摩擦与安全边界误阻断。</td>
-          <td><b>解析布尔线性投影解码</b>：<br>直接从无损向量 $z$ 抽取确定性布尔约束 $W_{sat} \cdot z \in \{0, 1\}$，无缝注入 Google OR-Tools CP-SAT。</td>
-          <td><b>0 经验阈值摩擦</b><br>在已编码约束范围内做确定性硬过滤，不依赖概率阈值截断；约束未覆盖的风险、错误的输入与模型误判不在保证之内。</td>
+          <td><b>Layer 4<br>MoV pooling &amp; final review</b></td>
+          <td>The neuro-symbolic handoff relies on a hand-tuned empirical threshold $\tau \ge 0.70$ for a crude cutoff, which causes cutoff friction and false blocks at the safety boundary.</td>
+          <td><b>Analytic Boolean linear-projection decoding</b>:<br>Extracts deterministic Boolean constraints $W_{sat} \cdot z \in \{0, 1\}$ directly from the lossless vector $z$ and feeds them seamlessly into Google OR-Tools CP-SAT.</td>
+          <td><b>0 empirical-threshold friction</b><br>Deterministic hard filtering within the encoded constraints, with no probability-threshold cutoff. Risks the constraints do not cover, wrong inputs, and model misjudgments are outside the guarantee.</td>
         </tr>
       </tbody>
     </table>
 
-    <!-- 架构深层考量：LLM 流形失配与三大解耦落地路径 -->
+    <!-- Deeper architecture considerations: LLM manifold mismatch and three decoupling paths -->
     <div class="callout" style="margin-top:24px;border-left:4px solid var(--accent);background:rgba(60,193,174,0.08)">
       <h4 style="margin-top:0;color:var(--accent);display:flex;align-items:center;gap:8px">
-        <svg class="icon"><use href="#i-chip"/></svg> 核心架构解析：为什么不能直接把数学无损向量灌给预训练 LLM？（流形对齐与三大落地机制）
+        <svg class="icon"><use href="#i-chip"/></svg> Core architecture analysis: why can we not feed mathematically lossless vectors straight into a pretrained LLM? (manifold alignment and three landing mechanisms)
       </h4>
       <p style="font-size:0.92rem;line-height:1.65;margin-bottom:12px">
-        <b>1. 流形失配风险（Manifold Mismatch）：</b>开源预训练底座（如 Qwen-0.6B/0.8B）是在常规自然语言词表上预训练的，其 28 层 Transformer 绝未见过人工纯数学构造的 Simplex ETF 或 Cauchy RS 向量。如果直接强行灌入第一层，会导致注意力权重错乱与表征坍缩，绝不可行。<br>
-        <b>2. 三大工程落地解耦机制：</b>
+        <b>1. Manifold mismatch risk (Manifold Mismatch):</b> Open-source pretrained bases (such as Qwen-0.6B/0.8B) are pretrained on a regular natural-language vocabulary. Their 28-layer Transformer has never seen artificial, purely mathematical Simplex ETF or Cauchy RS vectors. Forcing them into the first layer would scramble attention weights and collapse the representation. This is not feasible.<br>
+        <b>2. Three engineering decoupling mechanisms:</b>
       </p>
       <ul style="font-size:0.9rem;line-height:1.65;padding-left:20px;margin-bottom:12px">
-        <li><b>机制一 · 伴随侧流保真（Sidecar Companion Manifold，生产主推）：</b>借鉴 <code>gen2-cdx1</code> 的“单源真相 vs 派生缓存”分离设计，LLM 骨干依然吃自然语言 Token 序列（运行在最熟悉的预训练流形区），而无损可逆向量 $z$ 作为伴随侧流直通第 2 层 NanoCore 微核与第 4 层 CP-SAT 求解器，兼得语义宽度与符号精度。</li>
-        <li><b>机制二 · NanoCore 专科微核直通（Bypass LLM Reflex）：</b>针对 70% 的轻量反射型安全/路由决策，微核本身就是用保熵结构化分布训练微调的，直接以 $z$ 为输入在 0.35ms 内完成前向输出，完全绕开 28 层 LLM 庞大计算。</li>
-        <li><b>机制三 · 轻量可逆适配器（Invertible Adapter）：</b>若长程推演确需全量 LLM 参与，则通过单层正交投影 $e = \text{Embedding}(token) + W_{proj} \cdot z$ 经不变性蒸馏对齐后作为残差微扰注入，不破坏底座预训练结构。</li>
+        <li><b>Mechanism 1 · Sidecar fidelity (Sidecar Companion Manifold, main production recommendation):</b> Borrowing the "single source of truth vs derived cache" separation of <code>gen2-cdx1</code>, the LLM backbone still consumes natural-language token sequences (running in the pretrained manifold region it knows best). The lossless reversible vector $z$ goes as a sidecar stream straight to the Layer 2 NanoCore micro-cores and the Layer 4 CP-SAT solver. This gives both semantic breadth and symbolic precision.</li>
+        <li><b>Mechanism 2 · NanoCore specialist micro-core bypass (Bypass LLM Reflex):</b> For the 70% of lightweight reflex-type safety/routing decisions, the micro-core itself is fine-tuned on entropy-preserving structured distributions. It takes $z$ directly as input and finishes the forward pass in 0.35ms, bypassing the heavy 28-layer LLM compute entirely.</li>
+        <li><b>Mechanism 3 · Lightweight invertible adapter (Invertible Adapter):</b> If long-range rollout truly needs the full LLM, a single-layer orthogonal projection $e = \text{Embedding}(token) + W_{proj} \cdot z$ is aligned through invariance distillation and injected as a residual perturbation. This does not damage the pretrained structure of the base.</li>
       </ul>
       <p style="font-size:0.88rem;color:var(--good);margin-bottom:0">
-        <b>✔ 验收红线保证：</b>根据 Issue #69 验收标准，三大决策头 Accuracy Delta 必须严格为 0.00%。若发现任何流形漂移导致决策降级，一票否决！
+        <b>✔ Acceptance red-line guarantee:</b> Under the Issue #69 acceptance criteria, the Accuracy Delta of the three decision heads must be exactly 0.00%. If any manifold drift degrades a decision, it is vetoed outright.
       </p>
     </div>
 
-    <!-- 1.3 隐空间思维链 (Latent-Space CoT) 三大连续流形动力学路径 -->
+    <!-- 1.3 Latent-Space CoT: three continuous manifold-dynamics paths -->
     <h3 style="margin-top:2.4rem;display:flex;align-items:center;gap:8px">
-      <svg class="icon"><use href="#i-refresh"/></svg> 1.3 隐空间思维链（Latent-Space CoT）三大连续流形动力学路径（0-Token 慢思考规范）
+      <svg class="icon"><use href="#i-refresh"/></svg> 1.3 Latent-Space CoT: Three Continuous Manifold-Dynamics Paths (0-Token Slow-Thinking Spec)
     </h3>
     <p style="font-size:0.92rem;color:var(--text-muted);margin-bottom:16px">
-      传统思维链依赖离散词表的逐 Token 自回归生成，受制于显存带宽墙与采样不可微缺陷。Gen-Zero 在白化流形 $\mathcal{M}$ 之上，将推理过程重构为<strong>连续相空间中的有向动力学演化轨道</strong>（详见专门规范文档 <a href="zero/08-latent-space-cot-and-continuous-reasoning-spec.md" target="_blank" style="color:var(--accent);text-decoration:underline"><code>ZERO-LATENT-COT-08</code></a>）：
+      Traditional chain-of-thought relies on token-by-token autoregressive generation over a discrete vocabulary. It is limited by the memory-bandwidth wall and by non-differentiable sampling. On the whitened manifold $\mathcal{M}$, Gen-Zero reframes reasoning as a <strong>directed dynamical evolution trajectory in a continuous phase space</strong> (see the dedicated spec <a href="zero/08-latent-space-cot-and-continuous-reasoning-spec.md" target="_blank" style="color:var(--accent);text-decoration:underline"><code>ZERO-LATENT-COT-08</code></a>):
     </p>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:24px">
       <!-- Path 1 -->
       <div style="background:var(--card-bg, #1a202c);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span style="background:rgba(52,211,153,0.15);color:#34D399;font-weight:700;font-size:0.75rem;padding:2px 8px;border-radius:4px">路径一 · 已落地</span>
-          <b style="font-size:0.95rem">常微分神经动力学 (Neural ODE)</b>
+          <span style="background:rgba(52,211,153,0.15);color:#34D399;font-weight:700;font-size:0.75rem;padding:2px 8px;border-radius:4px">Path 1 · Implemented</span>
+          <b style="font-size:0.95rem">Neural ordinary differential equations (Neural ODE)</b>
         </div>
         <p style="font-size:0.85rem;line-height:1.6;color:var(--text-muted);margin-bottom:8px">
-          <b>数学原理（理论探索形式）：</b>在 64 维超球面 $\mathbb{S}^{63}$ 上，由候选吸引力场与竞争项斥力场联合驱动的连续系统：
+          <b>Mathematical principle (theoretical exploration form):</b> On the 64-D hypersphere $\mathbb{S}^{63}$, a continuous system driven jointly by a candidate attraction field and a competitor repulsion field:
           $$\frac{dz}{dt} = Az(t) + Bx + \sum \alpha_i (z_{c_i} - z) - \sum \beta_j \frac{z_{c_j} - z}{\|z_{c_j} - z\|^2}$$
         </p>
         <p style="font-size:0.82rem;line-height:1.6;color:var(--text-muted);margin-bottom:8px">
-          <b>离散与连续稳定性条件不可混用：</b>代码实际计算并约束的是<b>离散</b>隐状态转移矩阵 $A$（递推 $z_{t+1} = A z_t + \dots$）：用 float64 SVD 求最大奇异值 $\sigma_{\text{raw}}$，再整体缩放 $a_{\text{scale}} = \min(1, \rho_{\max}/\sigma_{\text{raw}})$，保证谱范数 $\sigma_{\max}(A) < 1.0$，维持离散递推的数值稳定（<code>causal/causal_mcts_rnn.py</code> <code>certified_contraction</code>、<code>causal/rnn_set_adapter.py</code> <code>_check_stability</code>；<code>ContinuousCausalReasoningExpert</code> 载入时由 <code>causal/dynamics_calibrator.py</code> <code>certify()</code> 检查 $\rho(A) \le 0.55$ 且 $\sigma_{\max}(A) \le 0.95$）。
-          而上式连续 ODE $\dot{z} = Az + \dots$ 的线性稳定性需要连续李雅普诺夫条件：存在 $P \succ 0$ 使 $A^T P + P A \prec 0$（即 $A$ 为 Hurwitz 矩阵，全部特征值实部为负）。离散谱条件 $\sigma_{\max}(A) < 1$ <b>不是</b>连续系统稳定的充分条件（例如 $A = 0.5I$ 满足 $\sigma_{\max} < 1$，但 $\dot{z} = 0.5z$ 发散）。当前代码<b>未检查</b>连续 Hurwitz 条件。
+          <b>Do not mix discrete and continuous stability conditions:</b> The code actually computes and constrains the <b>discrete</b> latent-state transition matrix $A$ (recurrence $z_{t+1} = A z_t + \dots$). It takes the largest singular value $\sigma_{\text{raw}}$ with a float64 SVD, then rescales the whole matrix by $a_{\text{scale}} = \min(1, \rho_{\max}/\sigma_{\text{raw}})$. This guarantees the spectral norm $\sigma_{\max}(A) < 1.0$ and keeps the discrete recurrence numerically stable (<code>causal/causal_mcts_rnn.py</code> <code>certified_contraction</code>, <code>causal/rnn_set_adapter.py</code> <code>_check_stability</code>. When <code>ContinuousCausalReasoningExpert</code> loads, <code>causal/dynamics_calibrator.py</code> <code>certify()</code> checks $\rho(A) \le 0.55$ and $\sigma_{\max}(A) \le 0.95$).
+          The linear stability of the continuous ODE $\dot{z} = Az + \dots$ above needs a continuous Lyapunov condition: there exists $P \succ 0$ such that $A^T P + P A \prec 0$ (that is, $A$ is a Hurwitz matrix and all eigenvalues have negative real part). The discrete spectral condition $\sigma_{\max}(A) < 1$ is <b>not</b> a sufficient condition for stability of the continuous system (for example, $A = 0.5I$ satisfies $\sigma_{\max} < 1$, but $\dot{z} = 0.5z$ diverges). The current code does <b>not check</b> the continuous Hurwitz condition.
         </p>
         <p style="font-size:0.82rem;color:#34D399;margin-bottom:0">
-          <b>实测特性：</b>单核求解时延 $\approx 200 \sim 500\ \mu\text{s}$，已在 <code>ContinuousCausalReasoningExpert</code> 落地并全套单测通关。落地形式是离散递推 <code>step()</code>，不是上式的 RK4 连续积分。
+          <b>Measured properties:</b> Single-core solve latency is $\approx 200 \sim 500\ \mu\text{s}$. It is implemented in <code>ContinuousCausalReasoningExpert</code> and the full unit-test suite passes. The implemented form is the discrete recurrence <code>step()</code>, not the RK4 continuous integration of the formula above.
         </p>
       </div>
 
       <!-- Path 2 -->
       <div style="background:var(--card-bg, #1a202c);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span style="background:rgba(96,165,250,0.15);color:#60A5FA;font-weight:700;font-size:0.75rem;padding:2px 8px;border-radius:4px">路径二 · 规划中</span>
-          <b style="font-size:0.95rem">隐式循环回传 (Latent Recurrence)</b>
+          <span style="background:rgba(96,165,250,0.15);color:#60A5FA;font-weight:700;font-size:0.75rem;padding:2px 8px;border-radius:4px">Path 2 · Planned</span>
+          <b style="font-size:0.95rem">Latent Recurrence</b>
         </div>
         <p style="font-size:0.85rem;line-height:1.6;color:var(--text-muted);margin-bottom:8px">
-          <b>数学原理：</b>借鉴 Coconut / Quiet-STaR 范式，在 896 维隐藏层直接将上一轮输出隐状态作为连续虚拟 Token $e_{t+1} = P_{\text{recur}} h_t$ 注入 KV 缓存，循环 $K$ 步深度逻辑前向：
+          <b>Mathematical principle:</b> Following the Coconut / Quiet-STaR paradigm, the 896-D hidden layer feeds the previous round's output hidden state back as a continuous virtual token $e_{t+1} = P_{\text{recur}} h_t$ into the KV cache, looping a deep logical forward pass for $K$ steps:
           $$h_{t+1} = \text{Trunk}(e_{t+1}, \text{past\_kv}), \quad h_K \to \text{Proj}_{\mathcal{M}}(h_K)$$
         </p>
         <p style="font-size:0.82rem;color:#60A5FA;margin-bottom:0">
-          <b>实测勘误（2026-09-23）：</b>纯 CPU INT8 带 KV 缓存的单 token 步实测 <b>p50 275 ms，min 266 ms</b>，不是早期写的 15~30 ms。根因：<code>Int8WeightOnlyLinear.forward</code> 每步反量化整块权重，成本与 token 数无关。$K$ 步按 $K \times 275$ ms 线性外推，外推值不作结论（详见 <code>ZERO-UNFREEZE-10</code> §2）。
+          <b>Measured erratum (2026-09-23):</b> A single-token step on pure-CPU INT8 with a KV cache measured <b>p50 275 ms, min 266 ms</b>, not the 15 to 30 ms written earlier. Root cause: <code>Int8WeightOnlyLinear.forward</code> dequantizes the whole weight block at every step, and the cost does not depend on token count. $K$ steps extrapolate linearly to $K \times 275$ ms. The extrapolated value is not a conclusion (see <code>ZERO-UNFREEZE-10</code> §2).
         </p>
       </div>
 
       <!-- Path 3 -->
       <div style="background:var(--card-bg, #1a202c);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-          <span style="background:rgba(244,114,182,0.15);color:#F472B6;font-weight:700;font-size:0.75rem;padding:2px 8px;border-radius:4px">路径三 · 理论验证</span>
-          <b style="font-size:0.95rem">流形条件流匹配 (Flow Matching)</b>
+          <span style="background:rgba(244,114,182,0.15);color:#F472B6;font-weight:700;font-size:0.75rem;padding:2px 8px;border-radius:4px">Path 3 · Theoretically verified</span>
+          <b style="font-size:0.95rem">Manifold conditional flow matching (Flow Matching)</b>
         </div>
         <p style="font-size:0.85rem;line-height:1.6;color:var(--text-muted);margin-bottom:8px">
-          <b>数学原理：</b>将思考过程定义为流形上从问题初态 $p_0$ 沿测地线滑向确证结论 $p_1$ 的连续概率流，由切空间速度场网络驱动最优传输：
+          <b>Mathematical principle:</b> The thinking process is defined as a continuous probability flow on the manifold, sliding along a geodesic from the problem's initial state $p_0$ to the confirmed conclusion $p_1$, with optimal transport driven by a tangent-space velocity-field network:
           $$z_{k+1} = \text{Proj}_{\mathbb{S}^{63}}(z_k + \Delta t \cdot v_\theta(z_k, t_k, c))$$
         </p>
         <p style="font-size:0.82rem;color:#F472B6;margin-bottom:0">
-          <b>实测特性：</b>流线高度直线化（Straightened Flow），推断仅需 2~4 步欧拉积分，单核极速时延 &le; 100\ \mu\text{s}$。
+          <b>Measured properties:</b> Streamlines are highly straightened (Straightened Flow). Inference needs only 2 to 4 Euler integration steps. Single-core latency is &le; 100\ \mu\text{s}$.
         </p>
       </div>
     </div>
 
-    <!-- 1.4 放开 16KB 枷锁与 Trunk 渐进解冻升级路线 -->
+    <!-- 1.4 Lifting the 16KB shackle and the Trunk progressive-unfreeze upgrade path -->
     <h3 style="margin-top:2.4rem;display:flex;align-items:center;gap:8px">
-      <svg class="icon"><use href="#i-zap"/></svg> 1.4 破除 16KB 线性头与 Trunk 绝对冻结：高容量流形与分层微调升级方案
+      <svg class="icon"><use href="#i-zap"/></svg> 1.4 Breaking the 16KB Linear Head and the Absolute Trunk Freeze: High-Capacity Manifold and Layered Fine-Tuning Upgrade Plan
     </h3>
     <p style="font-size:0.92rem;color:var(--text-muted);margin-bottom:16px">
-      针对仅靠 16 KB 单一双线性矩阵 W 难以充分表征跨领域异构语义的瓶颈，主控已通过双子代理（gpt-6-astra & fable）完成了高容量流形扩展与 Trunk 渐进解冻的严密数学推演与系统工程设计：
+      A single 16 KB bilinear matrix W struggles to represent heterogeneous cross-domain semantics. To address this bottleneck, the lead has completed a rigorous mathematical derivation and system-engineering design of the high-capacity manifold extension and progressive Trunk unfreezing through two sub-agents (gpt-6-astra &amp; fable):
     </p>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:24px">
       <div style="background:var(--card-bg, #1a202c);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px">
-        <b style="color:var(--accent);display:block;margin-bottom:6px">高容量流形与专科 MoE 任务头规范 (09)</b>
+        <b style="color:var(--accent);display:block;margin-bottom:6px">High-Capacity Manifold and Specialist MoE Task-Head Spec (09)</b>
         <p style="font-size:0.85rem;line-height:1.6;color:var(--text-muted);margin-bottom:8px">
-          <b>核心推导：</b>从 16KB 线性矩阵扩展为<b>参数化非线性切空间残差网络</b>与<b>无监督软路由专科 MoE 头群</b> $\{W_{\text{intent}}, W_{\text{code}}, W_{\text{science}}\}$，彻底隔绝任务负迁移。严密给出了李雅普诺夫稳态收敛证明（详见 <a href="zero/09-high-capacity-manifold-and-moe-task-heads-spec.md" target="_blank" style="color:var(--accent);text-decoration:underline"><code>ZERO-CAPACITY-09</code></a>）。
+          <b>Core derivation:</b> The 16KB linear matrix is extended into a <b>parameterized nonlinear tangent-space residual network</b> and an <b>unsupervised soft-routed specialist MoE head group</b> $\{W_{\text{intent}}, W_{\text{code}}, W_{\text{science}}\}$, which fully isolates negative task transfer. A rigorous Lyapunov steady-state convergence proof is given (see <a href="zero/09-high-capacity-manifold-and-moe-task-heads-spec.md" target="_blank" style="color:var(--accent);text-decoration:underline"><code>ZERO-CAPACITY-09</code></a>).
         </p>
       </div>
       <div style="background:var(--card-bg, #1a202c);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px">
-        <b style="color:var(--good);display:block;margin-bottom:6px">Trunk 渐进解冻与 Coconut 工程规范 (10)</b>
+        <b style="color:var(--good);display:block;margin-bottom:6px">Trunk Progressive Unfreezing and Coconut Engineering Spec (10)</b>
         <p style="font-size:0.85rem;line-height:1.6;color:var(--text-muted);margin-bottom:8px">
-          <b>工程闭环：</b>直面候选无语义病根（MMLU-Pro 单字母缺陷）；提出<b>深度投影跳连适配器（896&rarr;256&rarr;64，303,424 参数，1.21MB；代码与 7/7 单测见 <a href="#sec-evidence" style="color:var(--good);text-decoration:underline">第 10.4 节</a>，真实数据训练尚未完成）</b>与<b>末 2 层 LoRA（A100 训练后无损折叠入 INT8，0 额外推理时延与常驻内存）</b>，死守单核 1.0GB 生产红线（详见 <a href="zero/10-trunk-unfreeze-and-latent-recurrence-engineering-spec.md" target="_blank" style="color:var(--good);text-decoration:underline"><code>ZERO-UNFREEZE-10</code></a>）。
+          <b>Engineering loop:</b> It faces the root defect of candidates having no semantics (the MMLU-Pro single-letter defect). It proposes a <b>deep projection skip-connection adapter (896&rarr;256&rarr;64, 303,424 parameters, 1.21MB. Code and 7/7 unit tests are in <a href="#sec-evidence" style="color:var(--good);text-decoration:underline">Section 10.4</a>. Training on real data is not yet complete)</b> and a <b>last-2-layer LoRA (folded losslessly into INT8 after A100 training, with 0 extra inference latency and resident memory)</b>, holding the single-core 1.0GB production red line (see <a href="zero/10-trunk-unfreeze-and-latent-recurrence-engineering-spec.md" target="_blank" style="color:var(--good);text-decoration:underline"><code>ZERO-UNFREEZE-10</code></a>).
         </p>
       </div>
     </div>
 
-    <!-- 1.5 内存解绑与全宽全维流形架构 -->
+    <!-- 1.5 Memory unbinding and the full-width full-dimension manifold architecture -->
     <h3 style="margin-top:2.4rem;display:flex;align-items:center;gap:8px">
-      <svg class="icon"><use href="#i-cpu"/></svg> 1.5 战略大解放：放开 1G 内存束缚与多步慢思考（System-2）全宽全维 CPU 规格
+      <svg class="icon"><use href="#i-cpu"/></svg> 1.5 Strategic Liberation: Lifting the 1G Memory Constraint and Multi-Step Slow Thinking (System-2) Full-Width Full-Dimension CPU Spec
     </h3>
     <p style="font-size:0.92rem;color:var(--text-muted);margin-bottom:16px">
-      遵照最新最高指示，为彻底避免为死抠 1.0GB 造成严重语义损失，系统放宽至 2GB~4GB 标准 CPU 工业内存预算，全面实施原生 BF16（单步 ~35ms）、多步慢思考（Coconut K=2~8 / Neural ODE）与 896 维全维无损流形：
+      Following the latest top-level directive, and to avoid the severe semantic loss caused by clinging to 1.0GB, the system relaxes to a standard CPU industrial memory budget of 2GB to 4GB. It fully adopts native BF16 (about 35ms per step), multi-step slow thinking (Coconut K=2 to 8 / Neural ODE), and the 896-D full-dimension lossless manifold:
     </p>
 
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:24px">
       <div style="background:var(--card-bg, #1a202c);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px">
-        <b style="color:var(--accent);display:block;margin-bottom:6px">多步泛化收敛数学证明 (12)</b>
+        <b style="color:var(--accent);display:block;margin-bottom:6px">Multi-Step Generalization Convergence Proof (12)</b>
         <p style="font-size:0.85rem;line-height:1.6;color:var(--text-muted);margin-bottom:8px">
-          <b>理论证明：</b>以 Fano 不等式与马尔可夫决策动力学严格证明单步多跳因果的信息论瓶颈；证明多步慢思考下泛化风险满足指数收敛界 $\mathcal{R}(K) \le \mathcal{R}_{\infty} + \mathcal{O}(e^{-\lambda K})$（详见 <a href="zero/12-multistep-generalization-proof-and-scaling-law.md" target="_blank" style="color:var(--accent);text-decoration:underline"><code>ZERO-THEORY-12</code></a>）。
+          <b>Theoretical proof:</b> Fano's inequality and Markov decision dynamics rigorously prove the information-theoretic bottleneck of single-step multi-hop causality. They also prove that under multi-step slow thinking the generalization risk satisfies an exponential convergence bound $\mathcal{R}(K) \le \mathcal{R}_{\infty} + \mathcal{O}(e^{-\lambda K})$ (see <a href="zero/12-multistep-generalization-proof-and-scaling-law.md" target="_blank" style="color:var(--accent);text-decoration:underline"><code>ZERO-THEORY-12</code></a>).
         </p>
       </div>
       <div style="background:var(--card-bg, #1a202c);border:1px solid rgba(255,255,255,0.08);border-radius:8px;padding:16px">
-        <b style="color:var(--good);display:block;margin-bottom:6px">全宽词表 (1024D) 与全维流形 (896D) 规范 (13)</b>
+        <b style="color:var(--good);display:block;margin-bottom:6px">Full-Width Vocabulary (1024D) and Full-Dimension Manifold (896D) Spec (13)</b>
         <p style="font-size:0.85rem;line-height:1.6;color:var(--text-muted);margin-bottom:8px">
-          <b>硬件实测：</b>仅多占用 ~270MB 内存即可还原 151,643 词表 1024-D 全宽无损嵌入；实机 C 语言 AVX-512 实测 896 维点积仅需 <b>52.45 ns</b>（占比不到三万分之一！），保留完整嵌入表数值、不做降维（这指嵌入表示本身，不代表下游决策无误差；详见 <a href="zero/13-lossless-high-dimensional-manifold-and-full-vocab-spec.md" target="_blank" style="color:var(--good);text-decoration:underline"><code>ZERO-LOSSLESS-13</code></a>）。
+          <b>Hardware measurement:</b> Only about 270MB of extra memory restores the lossless full-width 1024-D embedding of the 151,643-token vocabulary. A real-machine C-language AVX-512 measurement shows an 896-D dot product takes only <b>52.45 ns</b> (less than one thirty-thousandth of the total), keeping the full embedding-table values with no dimensionality reduction (this refers to the embedding representation itself. It does not mean downstream decisions are error-free. See <a href="zero/13-lossless-high-dimensional-manifold-and-full-vocab-spec.md" target="_blank" style="color:var(--good);text-decoration:underline"><code>ZERO-LOSSLESS-13</code></a>).
         </p>
       </div>
     </div>
@@ -827,90 +827,90 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
 
   <!-- Section 2: Universal Manifold Extraction -->
   <section id="sec-manifold">
-    <h2><svg class="icon"><use href="#i-chip"/></svg> 2. A100 GPU 80GB 真机全域因果流形萃取</h2>
+    <h2><svg class="icon"><use href="#i-chip"/></svg> 2. Global Causal-Manifold Extraction on a Real A100 GPU 80GB</h2>
     <p>
-      在远程实体节点（NVIDIA A100 80GB PCIe）上，通过<strong>全域流式因果流形萃取引擎</strong>（<code>UniversalManifoldExtractionPipeline</code>），在 467.1 秒内流式遍历 44 项行业标准推理基准（1,620 个样本），提取出 Qwen3.5-9B 深度几何不变量并完成了物理验证。
+      On a remote physical node (NVIDIA A100 80GB PCIe), the <strong>global streaming causal-manifold extraction engine</strong> (<code>UniversalManifoldExtractionPipeline</code>) streamed through 44 industry-standard reasoning benchmarks (1,620 samples) in 467.1 seconds. It extracted the deep geometric invariants of Qwen3.5-9B and completed physical verification.
     </p>
 
     <div class="callout success">
-      <strong>真实物理产物证据 (零 Mock 承诺)</strong>：<br>
-      产物文件：<code>benchmarks/results/qwen35_9b_universal_manifold.npz</code> (1,083,602 字节)<br>
-      数组载荷 Payload SHA-256：<code>c8919d66a365b1fd9e8c8bc5170423d8aaf3d210dbb34029d383d7a87fb9265d</code><br>
-      归档文件 SHA-256：<code>578e3444951eb14f817a8616f81835836e4a291cf1505751fb3ad412409a1c0d</code>
+      <strong>Real physical artifact evidence (zero-mock commitment)</strong>:<br>
+      Artifact file: <code>benchmarks/results/qwen35_9b_universal_manifold.npz</code> (1,083,602 bytes)<br>
+      Array payload SHA-256: <code>c8919d66a365b1fd9e8c8bc5170423d8aaf3d210dbb34029d383d7a87fb9265d</code><br>
+      Archive file SHA-256: <code>578e3444951eb14f817a8616f81835836e4a291cf1505751fb3ad412409a1c0d</code>
     </div>
 
     <table>
       <thead>
         <tr>
-          <th>萃取支柱 (Pillar)</th>
-          <th>数学原理与算法公式</th>
-          <th>A100 真机实测数据</th>
-          <th>物理工程意义</th>
+          <th>Extraction pillar (Pillar)</th>
+          <th>Mathematical principle &amp; algorithm formula</th>
+          <th>A100 real-machine measured data</th>
+          <th>Physical engineering meaning</th>
         </tr>
       </thead>
       <tbody>
         <tr>
-          <td><strong>Pillar 4: 流式协方差累加</strong></td>
-          <td>\(C_t = C_{t-1} + X_{\text{batch}}^T X_{\text{batch}}\)，有界 \(O(d^2)\) 显存在线 SVD</td>
-          <td>正交误差 \(\|U^T U - I\| = 1.12 \times 10^{-14}\)</td>
-          <td>将 4096 维隐藏空间严格正交降维至 64 维因果流形</td>
+          <td><strong>Pillar 4: Streaming covariance accumulation</strong></td>
+          <td>\(C_t = C_{t-1} + X_{\text{batch}}^T X_{\text{batch}}\), online SVD with bounded \(O(d^2)\) memory</td>
+          <td>Orthogonality error \(\|U^T U - I\| = 1.12 \times 10^{-14}\)</td>
+          <td>Strictly orthogonal dimensionality reduction from the 4096-D hidden space to a 64-D causal manifold</td>
         </tr>
         <tr>
-          <td><strong>Pillar 3: 李雅普诺夫重构</strong></td>
-          <td>最小二乘拟合离散递推系统 \(z_{t+1} = A z_t + B u_t\)，SVD 谱缩放保持 \(\sigma_{\max}(A) < 1.0\)</td>
-          <td>最大奇异值 \(\sigma_{\max}(A) = 0.949998 < 1.0\)（<code>examples/run_9b_demo.py</code> 实测，<code>stability.sigma_max_A</code>）</td>
-          <td>对拟合出的离散线性递推代理系统保证数值收缩稳定；不覆盖真实骨干的非线性推理轨迹（注：\(\sigma_{\max}(A) < 1.0\) 为离散收缩条件，不构成连续微分系统的稳定性充分条件）</td>
+          <td><strong>Pillar 3: Lyapunov reconstruction</strong></td>
+          <td>Least-squares fit of the discrete recurrence system \(z_{t+1} = A z_t + B u_t\), with SVD spectral scaling keeping \(\sigma_{\max}(A) < 1.0\)</td>
+          <td>Largest singular value \(\sigma_{\max}(A) = 0.949998 < 1.0\) (measured by <code>examples/run_9b_demo.py</code>, <code>stability.sigma_max_A</code>)</td>
+          <td>Guarantees numerical contraction stability for the fitted discrete linear recurrence proxy system. It does not cover the nonlinear inference trajectory of the real backbone (note: \(\sigma_{\max}(A) < 1.0\) is a discrete contraction condition and is not a sufficient condition for stability of a continuous differential system)</td>
         </tr>
         <tr>
-          <td><strong>Pillar 1: CKA 相变层定位</strong></td>
-          <td>线性核 Centered Kernel Alignment 跨层特征相似度分析</td>
+          <td><strong>Pillar 1: CKA phase-transition layer localization</strong></td>
+          <td>Linear-kernel Centered Kernel Alignment cross-layer feature similarity analysis</td>
           <td>CKA(L16, L32) = 0.9341</td>
-          <td>精准捕获第 16 层语义抽象与第 32 层因果坍缩相变带</td>
+          <td>Precisely captures the layer-16 semantic abstraction band and the layer-32 causal collapse phase-transition band</td>
         </tr>
         <tr>
-          <td><strong>Pillar 2: 反事实网格采样</strong></td>
-          <td>差分位移向量 \(\Delta z = z(x) - z(\text{do}(x'))\)，余弦离散度分析</td>
-          <td>局部余弦方差 \(\sigma^2_{\cos} = 0.042\)</td>
-          <td>确立决策边界附近几何流形的局部曲率与稳定性裕度</td>
+          <td><strong>Pillar 2: Counterfactual grid sampling</strong></td>
+          <td>Differential displacement vector \(\Delta z = z(x) - z(\text{do}(x'))\), cosine dispersion analysis</td>
+          <td>Local cosine variance \(\sigma^2_{\cos} = 0.042\)</td>
+          <td>Establishes the local curvature and stability margin of the geometric manifold near the decision boundary</td>
         </tr>
       </tbody>
     </table>
 
     <div class="callout warning">
-      <strong>直面现实：词表冲突与几何化解</strong><br>
-      Qwen3.5-9B 原生词表为 248,077，而 Zero 原生词表为 151,643。两代模型无法直接进行 Token 级 Cross-Entropy 蒸馏。Gen-Zero 采用 <strong>64 维李雅普诺夫因果流形作为通用几何中介</strong>，在连续相空间实施隐藏态能量匹配，彻底化解跨词表蒸馏壁垒。
+      <strong>Facing reality: vocabulary conflict and its geometric resolution</strong><br>
+      The native vocabulary of Qwen3.5-9B has 248,077 tokens, while the native vocabulary of Zero has 151,643. Token-level cross-entropy distillation between the two model generations is not directly possible. Gen-Zero uses the <strong>64-D Lyapunov causal manifold as a general geometric intermediary</strong> and applies hidden-state energy matching in the continuous phase space. This removes the cross-vocabulary distillation barrier.
     </div>
   </section>
 
   <!-- Section 3: Optimal Transport & 4 Tangent Charts -->
   <section id="sec-ot-routing">
-    <h2><svg class="icon"><use href="#i-gauge"/></svg> 3. 连续最优传输 (Wasserstein) 路由与四正交切空间</h2>
+    <h2><svg class="icon"><use href="#i-gauge"/></svg> 3. Continuous Optimal-Transport (Wasserstein) Routing and Four Orthogonal Tangent Subspaces</h2>
     <p>
-      离散 Top-k 路由在领域相变边界上存在不连续跳变与震荡问题。Phase 2.1 & 2.2 引入基于 <strong>Bures-Wasserstein 测地线距离</strong> 的连续动力学路由网关，并配备四组拓扑正交切空间专家池：
+      Discrete top-k routing has discontinuous jumps and oscillation at domain phase-transition boundaries. Phase 2.1 &amp; 2.2 introduce a continuous dynamical routing gateway based on the <strong>Bures-Wasserstein geodesic distance</strong>, with four topologically orthogonal tangent-subspace expert pools:
     </p>
 
     <div class="grid-2" style="margin:1.4rem 0">
       <div class="card">
-        <h4 style="color:var(--accent);margin-top:0">Bures-Wasserstein 测地线连续度量</h4>
+        <h4 style="color:var(--accent);margin-top:0">Bures-Wasserstein geodesic continuous metric</h4>
         <p style="font-size:0.88rem">
-          在协方差高斯流形空间，两分布 \(\mathcal{N}_0(\mu_0, \Sigma_0)\) 与 \(\mathcal{N}_k(\mu_k, \Sigma_k)\) 的测地线距离为：
+          On the covariance Gaussian manifold, the geodesic distance between two distributions \(\mathcal{N}_0(\mu_0, \Sigma_0)\) and \(\mathcal{N}_k(\mu_k, \Sigma_k)\) is:
         </p>
         <pre>\(\mathcal{W}_2^2 = \|\mu_0 - \mu_k\|^2 + \operatorname{Tr}\left(\Sigma_0 + \Sigma_k - 2(\Sigma_0^{1/2}\Sigma_k\Sigma_0^{1/2})^{1/2}\right)\)</pre>
         <p style="font-size:0.85rem;color:var(--muted)">
-          连续 Softmax 温度加权融合：\(\lambda_k = \frac{\exp(-\mathcal{W}_2 / \tau)}{\sum_j \exp(-\mathcal{W}_2 / \tau)}\)，实现 Lipschitz 连续跨领域平滑过渡。
+          Continuous softmax temperature-weighted fusion: \(\lambda_k = \frac{\exp(-\mathcal{W}_2 / \tau)}{\sum_j \exp(-\mathcal{W}_2 / \tau)}\), giving a Lipschitz-continuous smooth transition across domains.
         </p>
       </div>
 
       <div class="card">
-        <h4 style="color:var(--accent);margin-top:0">四正交切空间专家池 (Tangent Pool)</h4>
+        <h4 style="color:var(--accent);margin-top:0">Four orthogonal tangent-subspace expert pools (Tangent Pool)</h4>
         <ul style="font-size:0.85rem;padding-left:18px">
-          <li><strong>语法切空间 (\(M_{\text{syntax}}\))</strong>：处理代码 AST 语法骨架与标点转移</li>
-          <li><strong>逻辑切空间 (\(M_{\text{logic}}\))</strong>：处理因果推演、布尔判定与演绎关系</li>
-          <li><strong>数值切空间 (\(M_{\text{numeric}}\))</strong>：处理算术连续量与高精度数量绑定</li>
-          <li><strong>意图切空间 (\(M_{\text{intent}}\))</strong>：对齐多轮交互目标、意图引导与安全防护</li>
+          <li><strong>Syntax tangent space (\(M_{\text{syntax}}\))</strong>: handles the code AST syntax skeleton and punctuation transitions</li>
+          <li><strong>Logic tangent space (\(M_{\text{logic}}\))</strong>: handles causal rollout, Boolean judgment, and deductive relations</li>
+          <li><strong>Numeric tangent space (\(M_{\text{numeric}}\))</strong>: handles continuous arithmetic quantities and high-precision numeric binding</li>
+          <li><strong>Intent tangent space (\(M_{\text{intent}}\))</strong>: aligns multi-turn interaction goals, intent guidance, and safety protection</li>
         </ul>
         <p style="font-size:0.85rem;color:var(--good)">
-          <strong>严格代数正交性保证</strong>：\(U_i^T U_j = 0 \; (\forall i \neq j)\)，且每个切空间内均独立配备收缩李雅普诺夫矩阵 (\(\rho(A_k) < 1.0\))。
+          <strong>Strict algebraic orthogonality guarantee</strong>: \(U_i^T U_j = 0 \; (\forall i \neq j)\), and every tangent space has its own contraction Lyapunov matrix (\(\rho(A_k) < 1.0\)).
         </p>
       </div>
     </div>
@@ -918,45 +918,45 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
 
   <!-- Section 4: 220M Compact & Sparse MoE -->
   <section id="sec-compact-moe">
-    <h2><svg class="icon"><use href="#i-cpu"/></svg> 4. 微动力学稀疏 MoE 与 220M 算术壁垒突破</h2>
+    <h2><svg class="icon"><use href="#i-cpu"/></svg> 4. Micro-Dynamics Sparse MoE and Breaking the 220M Arithmetic Barrier</h2>
     <p>
-      早期规划曾提出将 463M 模型的活跃参数压至 220M 级。经严格数学核算，151K 词表对应 Embedding 即占 155.3M 参数，24 层全注意力占 100.7M 参数，两者<strong>保底物理底线为 256.0M 参数</strong>。直接声称 220M 属于算术层面的虚假承诺。
+      An early plan proposed compressing the active parameters of the 463M model to the 220M class. A strict arithmetic audit shows the embedding for a 151K vocabulary alone takes 155.3M parameters and the 24 full-attention layers take 100.7M parameters. Together they set a <strong>physical floor of 256.0M parameters</strong>. Claiming 220M directly would be a false commitment at the arithmetic level.
     </p>
 
     <div class="callout accent-border" style="background:var(--surface)">
-      <strong>科学突破方案：低秩嵌入因式分解 (Factorized Embedding Parameterization)</strong><br>
-      将词表矩阵解构为 \(V \times E_d\) 与 \(E_d \times d\) 两级映射（选取 \(E_d = 128\)）：<br>
-      $$\text{Embedding 参数} = 151,643 \times 128 + 128 \times 1,024 = 19,410,304 + 131,072 \approx \mathbf{19.5\text{M}}$$
-      单项参数立减 <strong>135.8M</strong>！结合后 8 层 8 专家 Top-1 稀疏 MoE，将单 Token 活跃参数量真正压入 <strong>220M 级（&le; 230M）</strong>，同时使全模型物理存储稳降至 <strong>600MB~700MB</strong>，完美守住 1.0GB 硬预算！
+      <strong>Scientific breakthrough: low-rank embedding factorization (Factorized Embedding Parameterization)</strong><br>
+      The vocabulary matrix is split into a two-stage mapping, \(V \times E_d\) and \(E_d \times d\) (choose \(E_d = 128\)):<br>
+      $$\text{Embedding parameters} = 151,643 \times 128 + 128 \times 1,024 = 19,410,304 + 131,072 \approx \mathbf{19.5\text{M}}$$
+      This one item drops by <strong>135.8M</strong> parameters. Combined with the sparse top-1 MoE with 8 experts in the last 8 layers, the per-token active parameter count truly falls into the <strong>220M class (&le; 230M)</strong>. Total physical storage also falls steadily to <strong>600MB to 700MB</strong>, which holds the 1.0GB hard budget.
     </div>
   </section>
 
   <!-- Section 5: GEPA Closed-Loop Flywheel -->
   <section id="sec-gepa">
-    <h2><svg class="icon"><use href="#i-shield"/></svg> 5. Phase 2.4 GEPA 闭环对抗自进化飞轮</h2>
+    <h2><svg class="icon"><use href="#i-shield"/></svg> 5. Phase 2.4 GEPA Closed-Loop Adversarial Self-Evolution Flywheel</h2>
     <p>
-      目标形态的端侧 Zero 模型需要不依赖全量重新训练的自修复能力。GEPA 闭环按三阶段流水线设计，目标是在线连续演化（当前没有线上生产流量接入）：
+      A target-form edge Zero model needs self-repair that does not depend on full retraining. The GEPA closed loop is designed as a three-stage pipeline. Its goal is continuous online evolution (no live production traffic is connected today):
     </p>
 
     <div class="grid-3" style="margin:1.4rem 0">
       <div class="card">
-        <h4 style="margin-top:0;color:var(--prob)">1. 边界用例扫描</h4>
+        <h4 style="margin-top:0;color:var(--prob)">1. Boundary-case scanning</h4>
         <p style="font-size:0.85rem">
-          <code>BoundaryTraceScanner</code> 设计为监听推理 Trace，当置信度裕度 \(\text{margin} \le 0.20\) 或李雅普诺夫残差突增时，自动标记为临界对抗样本并隔离保存。
+          <code>BoundaryTraceScanner</code> is designed to monitor inference traces. When the confidence margin is \(\text{margin} \le 0.20\) or the Lyapunov residual spikes, it flags the case as a critical adversarial sample and saves it in isolation.
         </p>
       </div>
 
       <div class="card">
-        <h4 style="margin-top:0;color:var(--bad)">2. 黎曼测地线微扰合成</h4>
+        <h4 style="margin-top:0;color:var(--bad)">2. Riemannian geodesic perturbation synthesis</h4>
         <p style="font-size:0.85rem">
-          <code>CounterfactualAdversarialSynthesizer</code> 沿当前流形梯度的法向方向合成具有严格上界（\(\|\delta\| \le 0.05\)）的反事实微扰，测试临界决策吸引子的盆地稳定性。
+          <code>CounterfactualAdversarialSynthesizer</code> synthesizes counterfactual perturbations with a strict upper bound (\(\|\delta\| \le 0.05\)) along the normal direction of the current manifold gradient. It tests the basin stability of the critical decision attractor.
         </p>
       </div>
 
       <div class="card">
-        <h4 style="margin-top:0;color:var(--good)">3. 增量收缩矩阵打补丁</h4>
+        <h4 style="margin-top:0;color:var(--good)">3. Incremental contraction-matrix patching</h4>
         <p style="font-size:0.85rem">
-          <code>IncrementalManifoldCodebookPatcher</code> 执行秩-1 投影更新，并通过谱缩放定理动态维持 \(\rho(A) < 1.0\)。内置流式 SVD 再正交化机制，消除成千上万次更新引起的累积基底退化。
+          <code>IncrementalManifoldCodebookPatcher</code> runs rank-1 projection updates and dynamically keeps \(\rho(A) < 1.0\) through the spectral scaling theorem. A built-in streaming SVD re-orthogonalization mechanism removes the cumulative basis degradation caused by thousands of updates.
         </p>
       </div>
     </div>
@@ -964,78 +964,78 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
 
   <!-- Section 6: Lossless Vector & LodGraph -->
   <section id="sec-lossless">
-    <h2><svg class="icon"><use href="#i-flask"/></svg> 6. 双通道无损可逆输入向量编码与 LodGraph 结晶容器</h2>
+    <h2><svg class="icon"><use href="#i-flask"/></svg> 6. Dual-Channel Lossless Reversible Input-Vector Encoding and the LodGraph Crystallization Container</h2>
     <p>
-      继承并强化 RFC-069 原生数学体系：针对端侧推理中的离散输入，采用双通道无损编码体系：
+      Inheriting and strengthening the native RFC-069 mathematical system: for discrete inputs in edge inference, a dual-channel lossless encoding system is used:
     </p>
     <div class="grid-2">
       <div class="card">
-        <h4 style="color:var(--accent);margin-top:0">通道 A：Simplex ETF 几何紧框架</h4>
+        <h4 style="color:var(--accent);margin-top:0">Channel A: Simplex ETF geometric tight frame</h4>
         <p style="font-size:0.85rem">
-          构建等角紧框架（Equiangular Tight Frame），将离散 Token 映射至均值归一化的超球面上。对于任意两个基底向量 \(i \neq j\)，严格满足内积 \(v_i^T v_j = -1/(K-1)\)，实现最大化几何角间隔与零距离模糊。
+          Builds an Equiangular Tight Frame that maps discrete tokens onto a mean-normalized hypersphere. For any two basis vectors \(i \neq j\), the inner product strictly satisfies \(v_i^T v_j = -1/(K-1)\). This maximizes the geometric angular margin and removes distance ambiguity.
         </p>
       </div>
 
       <div class="card">
-        <h4 style="color:var(--accent);margin-top:0">通道 B：Cauchy RS 纠错算子</h4>
+        <h4 style="color:var(--accent);margin-top:0">Channel B: Cauchy RS error-correction operator</h4>
         <p style="font-size:0.85rem">
-          基于有限域上的柯西生成矩阵（Cauchy Reed-Solomon），将输入特征编码为带校验冗余的数字符号。在擦除数不超过校验冗余的设计范围内（设计值 30% 丢包）可确定性还原输入符号。这是编码层的纠删能力，不能阻止模型本身的幻觉或推理错误。
+          Based on the Cauchy generator matrix over a finite field (Cauchy Reed-Solomon), it encodes input features into digital symbols with parity redundancy. Within the designed range where the number of erasures does not exceed the parity redundancy (design value: 30% packet loss), the input symbols can be restored deterministically. This is the erasure-correction ability of the encoding layer. It cannot stop hallucination or reasoning errors in the model itself.
         </p>
       </div>
     </div>
 
     <div class="card" style="margin-top:16px">
-      <h4 style="color:var(--purple);margin-top:0">LodGraph-V1 紧致权重结晶容器 (crates/gen2-crystallizer)</h4>
+      <h4 style="color:var(--purple);margin-top:0">LodGraph-V1 compact weight crystallization container (crates/gen2-crystallizer)</h4>
       <p style="font-size:0.85rem">
-        通过 <code>crystallize-zero</code> 编译器 CLI，将 Zero 模型的 safetensors 权重、因果转移 CSR 图、辛 Koopman 动态矩阵与 H-ETF 紧框架字典无损结晶为 150MB 单一二进制镜像，支持 64B 对齐与零拷贝 mmap 纳秒级极速装载。
+        The <code>crystallize-zero</code> compiler CLI losslessly crystallizes the Zero model's safetensors weights, causal-transition CSR graph, symplectic Koopman dynamics matrix, and H-ETF tight-frame dictionary into a single 150MB binary image. It supports 64B alignment and zero-copy mmap loading at nanosecond-level speed.
       </p>
     </div>
   </section>
 
   <!-- Section 7: Interactive Lab -->
   <section id="sec-interactive">
-    <h2><svg class="icon"><use href="#i-flask"/></svg> 7. 交互式物理仿真实验室 (Interactive Lab)</h2>
+    <h2><svg class="icon"><use href="#i-flask"/></svg> 7. Interactive Physical Simulation Lab (Interactive Lab)</h2>
     <div class="interactive-panel">
       <div class="tabs">
-        <button class="tab-btn active" onclick="switchLabTab('tab-spectrum')">1. Zero 弹性规格参数仿真</button>
-        <button class="tab-btn" onclick="switchLabTab('tab-lyapunov')">2. 李雅普诺夫收缩相空间模拟</button>
-        <button class="tab-btn" onclick="switchLabTab('tab-ot')">3. Wasserstein 连续路由权重</button>
-        <button class="tab-btn" onclick="switchLabTab('tab-encoder')">4. 双通道无损可逆编码验证</button>
+        <button class="tab-btn active" onclick="switchLabTab('tab-spectrum')">1. Zero elastic-spec parameter simulation</button>
+        <button class="tab-btn" onclick="switchLabTab('tab-lyapunov')">2. Lyapunov contraction phase-space simulation</button>
+        <button class="tab-btn" onclick="switchLabTab('tab-ot')">3. Wasserstein continuous routing weights</button>
+        <button class="tab-btn" onclick="switchLabTab('tab-encoder')">4. Dual-channel lossless reversible encoding check</button>
       </div>
 
       <!-- Tab 1: Spectrum Calculator -->
       <div id="tab-spectrum" class="tab-content active">
         <p style="font-size:0.88rem;color:var(--muted)">
-          实时调节 Zero 模型的隐藏维度、层数与稀疏专家配置，动态查看全量参数量、活跃前向参数量、BF16 物理常驻内存与单核单线程 CPU 估算延迟。
+          Adjust the hidden dimension, layer count, and sparse-expert setup of the Zero model in real time. The page shows total parameters, active forward parameters, BF16 physical resident memory, and the estimated single-core single-thread CPU latency.
         </p>
         <div class="grid-2">
           <div>
             <div class="slider-group">
-              <label><span>网络层数 (Layers)</span><span id="val-layers" class="mono">24</span></label>
+              <label><span>Network layers (Layers)</span><span id="val-layers" class="mono">24</span></label>
               <input type="range" id="sl-layers" min="12" max="36" step="2" value="24" oninput="updateSpectrumSim()">
             </div>
             <div class="slider-group">
-              <label><span>隐藏维度 (Hidden Size)</span><span id="val-hidden" class="mono">1024</span></label>
+              <label><span>Hidden dimension (Hidden Size)</span><span id="val-hidden" class="mono">1024</span></label>
               <input type="range" id="sl-hidden" min="512" max="2048" step="256" value="1024" oninput="updateSpectrumSim()">
             </div>
             <div class="slider-group">
-              <label><span>嵌入因式分解维度 (Embedding Dim)</span><span id="val-emb" class="mono">128</span></label>
+              <label><span>Embedding factorization dimension (Embedding Dim)</span><span id="val-emb" class="mono">128</span></label>
               <input type="range" id="sl-emb" min="64" max="1024" step="64" value="128" oninput="updateSpectrumSim()">
             </div>
             <div class="slider-group">
-              <label><span>稀疏专家激活 (Top-k Experts)</span><span id="val-topk" class="mono">Top-1 / 8</span></label>
+              <label><span>Sparse expert activation (Top-k Experts)</span><span id="val-topk" class="mono">Top-1 / 8</span></label>
               <input type="range" id="sl-topk" min="1" max="4" step="1" value="1" oninput="updateSpectrumSim()">
             </div>
           </div>
 
           <div class="card" style="background:var(--ground)">
-            <h4 style="margin-top:0;color:var(--accent)">实时架构指标核算结果</h4>
+            <h4 style="margin-top:0;color:var(--accent)">Live architecture-metric results</h4>
             <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px">
-              <div class="metric-pill">单 Token 活跃参数量：<b id="out-active-param">220.4 M</b></div>
-              <div class="metric-pill">物理存储总参数量：<b id="out-total-param">312.8 M</b></div>
-              <div class="metric-pill">BF16 物理存储体积：<b id="out-bf16-mem">625.6 MB</b></div>
-              <div class="metric-pill">1.0 GB 预算合规性：<b id="out-budget-status" style="color:var(--good)">严格合规 (&lt; 1.0 GB)</b></div>
-              <div class="metric-pill">单核 CPU 前向估算耗时：<b id="out-cpu-lat">4.8 ms / token</b></div>
+              <div class="metric-pill">Active parameters per token: <b id="out-active-param">220.4 M</b></div>
+              <div class="metric-pill">Total physical-storage parameters: <b id="out-total-param">312.8 M</b></div>
+              <div class="metric-pill">BF16 physical storage size: <b id="out-bf16-mem">625.6 MB</b></div>
+              <div class="metric-pill">1.0 GB budget compliance: <b id="out-budget-status" style="color:var(--good)">Strictly compliant (&lt; 1.0 GB)</b></div>
+              <div class="metric-pill">Estimated single-core CPU forward time: <b id="out-cpu-lat">4.8 ms / token</b></div>
             </div>
           </div>
         </div>
@@ -1044,13 +1044,13 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
       <!-- Tab 2: Lyapunov Phase Space -->
       <div id="tab-lyapunov" class="tab-content">
         <p style="font-size:0.88rem;color:var(--muted)">
-          交互式观察李雅普诺夫转移矩阵 \(A\) 在谱半径 \(\rho(A) = 0.9800\) 下对任意随机初态扰动的指数收敛性证明。
+          Interactively observe the exponential-convergence proof of the Lyapunov transition matrix \(A\) at spectral radius \(\rho(A) = 0.9800\) under arbitrary random initial-state perturbations.
         </p>
         <div style="margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
-          <button class="tab-btn active" style="padding:6px 14px" onclick="injectPerturbation()">注入随机扰动并重演轨迹</button>
-          <span class="metric-pill">理论收缩率：<b id="out-rho">&rho; = 0.9800</b></span>
-          <span class="metric-pill">当前能量残差 \(\|z(t)\|\)：<b id="out-energy">0.0012</b></span>
-          <span class="metric-pill">稳定性证明：<b style="color:var(--good)">渐近稳定 (Asymptotically Stable)</b></span>
+          <button class="tab-btn active" style="padding:6px 14px" onclick="injectPerturbation()">Inject random perturbation and replay trajectory</button>
+          <span class="metric-pill">Theoretical contraction rate: <b id="out-rho">&rho; = 0.9800</b></span>
+          <span class="metric-pill">Current energy residual \(\|z(t)\|\): <b id="out-energy">0.0012</b></span>
+          <span class="metric-pill">Stability proof: <b style="color:var(--good)">Asymptotically Stable</b></span>
         </div>
         <canvas id="lyapunovCanvas" class="sim-canvas"></canvas>
       </div>
@@ -1058,28 +1058,28 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
       <!-- Tab 3: Wasserstein OT Gateway -->
       <div id="tab-ot" class="tab-content">
         <p style="font-size:0.88rem;color:var(--muted)">
-          调节任务发散度与测地线 Softmax 温度，实时观察四正交切空间专家池的连续权重分配。
+          Adjust task divergence and the geodesic softmax temperature to observe, in real time, the continuous weight allocation across the four orthogonal tangent-subspace expert pools.
         </p>
         <div class="grid-2">
           <div>
             <div class="slider-group">
-              <label><span>任务领域发散度 (Task Divergence)</span><span id="val-ot-div" class="mono">0.45</span></label>
+              <label><span>Task domain divergence (Task Divergence)</span><span id="val-ot-div" class="mono">0.45</span></label>
               <input type="range" id="sl-ot-div" min="0" max="1" step="0.05" value="0.45" oninput="updateOtSim()">
             </div>
             <div class="slider-group">
-              <label><span>测地线温度 (\(\tau\))</span><span id="val-ot-temp" class="mono">0.80</span></label>
+              <label><span>Geodesic temperature (\(\tau\))</span><span id="val-ot-temp" class="mono">0.80</span></label>
               <input type="range" id="sl-ot-temp" min="0.1" max="2.0" step="0.1" value="0.8" oninput="updateOtSim()">
             </div>
           </div>
 
           <div class="card" style="background:var(--ground)">
-            <h4 style="margin-top:0;color:var(--accent)">四正交切空间连续权重 \(\lambda_k\)</h4>
+            <h4 style="margin-top:0;color:var(--accent)">Four orthogonal tangent-subspace continuous weights \(\lambda_k\)</h4>
             <div style="display:flex;flex-direction:column;gap:8px;margin-top:10px">
-              <div>语法切空间 (\(M_{\text{syntax}}\))：<b id="w-syntax" class="mono" style="color:var(--accent)">0.34</b></div>
-              <div>逻辑切空间 (\(M_{\text{logic}}\))：<b id="w-logic" class="mono" style="color:var(--good)">0.42</b></div>
-              <div>数值切空间 (\(M_{\text{numeric}}\))：<b id="w-numeric" class="mono" style="color:var(--blue)">0.14</b></div>
-              <div>意图切空间 (\(M_{\text{intent}}\))：<b id="w-intent" class="mono" style="color:var(--purple)">0.10</b></div>
-              <div style="font-size:0.8rem;color:var(--muted);margin-top:4px">严格凸组合条件：\(\sum \lambda_k \equiv 1.0000\)</div>
+              <div>Syntax tangent space (\(M_{\text{syntax}}\)): <b id="w-syntax" class="mono" style="color:var(--accent)">0.34</b></div>
+              <div>Logic tangent space (\(M_{\text{logic}}\)): <b id="w-logic" class="mono" style="color:var(--good)">0.42</b></div>
+              <div>Numeric tangent space (\(M_{\text{numeric}}\)): <b id="w-numeric" class="mono" style="color:var(--blue)">0.14</b></div>
+              <div>Intent tangent space (\(M_{\text{intent}}\)): <b id="w-intent" class="mono" style="color:var(--purple)">0.10</b></div>
+              <div style="font-size:0.8rem;color:var(--muted);margin-top:4px">Strict convex-combination condition: \(\sum \lambda_k \equiv 1.0000\)</div>
             </div>
           </div>
         </div>
@@ -1088,27 +1088,27 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
       <!-- Tab 4: Lossless Encoder -->
       <div id="tab-encoder" class="tab-content">
         <p style="font-size:0.88rem;color:var(--muted)">
-          基于 Simplex ETF 与 Cauchy RS 的双通道输入向量无损可逆编码模拟（RFC-069 原生数学内核）。
+          Dual-channel lossless reversible encoding simulation of input vectors based on Simplex ETF and Cauchy RS (RFC-069 native mathematical kernel).
         </p>
         <div class="grid-2">
           <div>
             <div class="slider-group">
-              <label><span>离散输入符号数 (K)</span><span id="val-k" class="mono">16</span></label>
+              <label><span>Discrete input symbol count (K)</span><span id="val-k" class="mono">16</span></label>
               <input type="range" id="sl-k" min="4" max="64" step="4" value="16" oninput="updateEncoderSim()">
             </div>
             <div class="slider-group">
-              <label><span>信道高斯噪声幅度 (\(\sigma\))</span><span id="val-noise" class="mono">0.00</span></label>
+              <label><span>Channel Gaussian noise amplitude (\(\sigma\))</span><span id="val-noise" class="mono">0.00</span></label>
               <input type="range" id="sl-noise" min="0" max="0.3" step="0.02" value="0" oninput="updateEncoderSim()">
             </div>
           </div>
 
           <div class="card" style="background:var(--ground)">
-            <h4 style="margin-top:0;color:var(--accent)">可逆还原与等角性检测</h4>
+            <h4 style="margin-top:0;color:var(--accent)">Reversible restoration and equiangularity check</h4>
             <div style="display:flex;flex-direction:column;gap:10px;margin-top:10px">
-              <div class="metric-pill">双射重构均方误差 (RMSE)：<b id="out-rmse">1.12e-16</b></div>
-              <div class="metric-pill">ETF 等角内积误差：<b id="out-etf-err">0.00e+00</b></div>
-              <div class="metric-pill">信息保熵度：<b id="out-entropy" style="color:var(--good)">100.0% (无损可逆)</b></div>
-              <div class="metric-pill">判定状态：<b id="out-bijection" style="color:var(--good)">Bijective Lossless</b></div>
+              <div class="metric-pill">Bijective reconstruction mean squared error (RMSE): <b id="out-rmse">1.12e-16</b></div>
+              <div class="metric-pill">ETF equiangular inner-product error: <b id="out-etf-err">0.00e+00</b></div>
+              <div class="metric-pill">Information entropy preservation: <b id="out-entropy" style="color:var(--good)">100.0% (lossless, reversible)</b></div>
+              <div class="metric-pill">Verdict: <b id="out-bijection" style="color:var(--good)">Bijective Lossless</b></div>
             </div>
           </div>
         </div>
@@ -1119,107 +1119,107 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
 
   <!-- Section 8: Cross-System Benchmark: Gen-Zero (Zero) vs Laya vs Jev -->
   <section id="sec-laya-benchmark">
-    <h2><svg class="icon"><use href="#i-gauge"/></svg> 8. 全景横向对标：Gen-Zero (Zero 自主架构) vs Laya (421M ModernBERT) vs Jev 深度评测矩阵</h2>
+    <h2><svg class="icon"><use href="#i-gauge"/></svg> 8. Panoramic Head-to-Head Benchmark: Gen-Zero (Zero Autonomous Architecture) vs Laya (421M ModernBERT) vs Jev Deep Evaluation Matrix</h2>
     <p>
-      2026 年最新开源的 Laya (Convai Innovations, 421M ModernBERT 非自回归单步分类模型) 宣称在单步分类、低推理延迟与置信度校准上超越闭源商业决策 API Jev。然而在真实的复杂自主决策、不可逆长程博弈与端侧严苛常驻场景中，纯 System 1 单步映射暴露出本质性缺陷。
+      Laya (Convai Innovations, a 421M ModernBERT non-autoregressive single-step classifier), newly open-sourced in 2026, claims to beat the closed-source commercial decision API Jev on single-step classification, low inference latency, and confidence calibration. In real complex autonomous decisions, irreversible long-horizon games, and strict edge-resident scenarios, however, a pure System 1 single-step mapping shows essential flaws.
     </p>
     <p>
-      本系统基于 <strong>Pipeline v2 全量基准 (1,104 题)</strong> 与 <strong>30 组不可逆死胡同欺骗陷阱</strong>，针对三代 AI 决策架构展开了 <strong>11 大核心维度</strong> 的真实交叉横向实测：
+      This system ran a real cross-comparison of three generations of AI decision architectures on <strong>11 core dimensions</strong>, using the <strong>Pipeline v2 full benchmark (1,104 questions)</strong> and <strong>30 irreversible dead-end deception traps</strong>:
     </p>
 
     <div style="overflow-x:auto">
       <table>
         <thead>
           <tr>
-            <th style="min-width:160px">对比维度</th>
-            <th style="min-width:180px">Jev (闭源商业 API)</th>
+            <th style="min-width:160px">Dimension</th>
+            <th style="min-width:180px">Jev (closed-source commercial API)</th>
             <th style="min-width:200px">Laya (421M ModernBERT)</th>
-            <th style="min-width:240px;color:var(--accent)">Gen-Zero (Zero 自主架构)</th>
-            <th style="min-width:220px">理论与实证架构优势解析</th>
+            <th style="min-width:240px;color:var(--accent)">Gen-Zero (Zero autonomous architecture)</th>
+            <th style="min-width:220px">Theoretical and empirical architectural advantage analysis</th>
           </tr>
         </thead>
         <tbody>
           <tr>
-            <td><strong>参数规模与架构机制</strong></td>
-            <td>闭源黑盒云端大模型</td>
-            <td>421M ModernBERT<br><span style="font-size:0.8rem;color:var(--muted)">非自回归单步分类器</span></td>
-            <td><strong style="color:var(--accent)">Zero-Lite 463.7M / Zero-Compact 210.6M</strong><br><span style="font-size:0.8rem;color:var(--good)">Dual-Head + 8 大规划器 MoE</span></td>
-            <td><span class="badge green">双系统代际跃迁</span>：Laya 仅具 System 1 反射；Zero 深度融合 System 1 极速直出与 System 2 动力学显式规划。</td>
+            <td><strong>Parameter scale &amp; architecture mechanism</strong></td>
+            <td>Closed-source black-box cloud LLM</td>
+            <td>421M ModernBERT<br><span style="font-size:0.8rem;color:var(--muted)">Non-autoregressive single-step classifier</span></td>
+            <td><strong style="color:var(--accent)">Zero-Lite 463.7M / Zero-Compact 210.6M</strong><br><span style="font-size:0.8rem;color:var(--good)">Dual-Head + 8-planner MoE</span></td>
+            <td><span class="badge green">Dual-system generational leap</span>: Laya has only System 1 reflex. Zero deeply fuses System 1 fast direct output with System 2 explicit dynamical planning.</td>
           </tr>
           <tr>
-            <td><strong>单题端到端推理时延</strong></td>
-            <td>200 ~ 500 ms<br><span style="font-size:0.8rem;color:var(--bad)">(公网往返与服务端排队瓶颈)</span></td>
-            <td>约 33.0 ms<br><span style="font-size:0.8rem;color:var(--prob)">(强依赖独立 GPU 前向)</span></td>
+            <td><strong>Per-question end-to-end inference latency</strong></td>
+            <td>200 ~ 500 ms<br><span style="font-size:0.8rem;color:var(--bad)">(public-network round trip and server queueing bottleneck)</span></td>
+            <td>About 33.0 ms<br><span style="font-size:0.8rem;color:var(--prob)">(strongly depends on a dedicated GPU forward pass)</span></td>
             <td>
-              • 规则反射缓存：<b class="mono" style="color:var(--good)">0.02 ms</b><br>
-              • 纯 CPU 单核单线程：<b class="mono" style="color:var(--accent)">468.98 ms</b><br>
-              • GPU 前向加速：<b class="mono" style="color:var(--blue)">15 ~ 25 ms</b><br>
-              • MCTS / A* 规划：<b class="mono">5 ~ 15 ms</b>
+              • Rule reflex cache: <b class="mono" style="color:var(--good)">0.02 ms</b><br>
+              • Pure CPU single core, single thread: <b class="mono" style="color:var(--accent)">468.98 ms</b><br>
+              • GPU forward acceleration: <b class="mono" style="color:var(--blue)">15 ~ 25 ms</b><br>
+              • MCTS / A* planning: <b class="mono">5 ~ 15 ms</b>
             </td>
-            <td><span class="badge blue">实事求是分层时延</span>：高频路径微秒级零开销直达；纯单核 CPU 满足边缘预算；GPU 下前向速度超越 Laya。</td>
+            <td><span class="badge blue">Tiered latency, stated plainly</span>: the high-frequency path reaches microsecond-level, zero-overhead direct output. Pure single-core CPU meets the edge budget. On GPU the forward speed exceeds Laya.</td>
           </tr>
           <tr>
-            <td><strong>Typed-Decisions 准确率</strong></td>
-            <td>72.7%<br><span style="font-size:0.8rem;color:var(--muted)">(官方公开基准)</span></td>
-            <td>76.6%<br><span style="font-size:0.8rem;color:var(--muted)">(官方公开基准)</span></td>
-            <td><strong style="color:var(--good)">82.1% (Pipeline v2 全集 1,104 题)</strong><br><span style="font-size:0.8rem;color:var(--accent)">业务族 (客服/目录/智能调度): 98.4%~100%</span></td>
-            <td><span class="badge green">+5.5% 领先</span>：Set-Attention 候选交互感知机制消除候选偏序偏差，大幅增强语义判决力。</td>
+            <td><strong>Typed-Decisions accuracy</strong></td>
+            <td>72.7%<br><span style="font-size:0.8rem;color:var(--muted)">(official public benchmark)</span></td>
+            <td>76.6%<br><span style="font-size:0.8rem;color:var(--muted)">(official public benchmark)</span></td>
+            <td><strong style="color:var(--good)">82.1% (Pipeline v2 full set, 1,104 questions)</strong><br><span style="font-size:0.8rem;color:var(--accent)">Business families (customer service / catalog / smart dispatch): 98.4% to 100%</span></td>
+            <td><span class="badge green">+5.5% lead</span>: the Set-Attention candidate-interaction-aware mechanism removes candidate-order bias and greatly strengthens semantic judgment.</td>
           </tr>
           <tr>
-            <td><strong>置信度校准 (ECE / Brier)</strong></td>
-            <td>ECE = 0.246<br><span style="font-size:0.8rem;color:var(--bad)">高过自信偏差</span></td>
-            <td>ECE = 0.081<br><span style="font-size:0.8rem;color:var(--prob)">标准温度缩放</span></td>
-            <td><strong style="color:var(--good)">ECE = 0.0620 / Brier = 0.0007</strong><br><span style="font-size:0.8rem;color:var(--accent)">因果流形流形曲率联合校准</span></td>
-            <td><span class="badge green">极高置信保真</span>：概率输出杜绝虚高或系统性漂移，高置信具备经验校准保证。</td>
+            <td><strong>Confidence calibration (ECE / Brier)</strong></td>
+            <td>ECE = 0.246<br><span style="font-size:0.8rem;color:var(--bad)">High overconfidence bias</span></td>
+            <td>ECE = 0.081<br><span style="font-size:0.8rem;color:var(--prob)">Standard temperature scaling</span></td>
+            <td><strong style="color:var(--good)">ECE = 0.0620 / Brier = 0.0007</strong><br><span style="font-size:0.8rem;color:var(--accent)">Joint calibration with causal-manifold curvature</span></td>
+            <td><span class="badge green">Very high confidence fidelity</span>: probability outputs avoid inflated values and systematic drift, and high confidence has an empirical calibration guarantee.</td>
           </tr>
           <tr>
-            <td><strong>50% 自动放行准确率 (HITL)</strong></td>
-            <td>约 84.0%</td>
-            <td>约 92.0%</td>
-            <td><strong style="color:var(--good)">98.40%</strong><br><span style="font-size:0.8rem;color:var(--accent)">结合 CP-SAT 硬约束与不确定度拒答</span></td>
-            <td><span class="badge green">+6.4% 净增</span>：人机协同高保真自动落地，模糊边界样本精准拒答并流转人工。</td>
+            <td><strong>50% auto-release accuracy (HITL)</strong></td>
+            <td>About 84.0%</td>
+            <td>About 92.0%</td>
+            <td><strong style="color:var(--good)">98.40%</strong><br><span style="font-size:0.8rem;color:var(--accent)">Combines CP-SAT hard constraints with uncertainty-based abstention</span></td>
+            <td><span class="badge green">+6.4% net gain</span>: human-machine collaboration lands decisions with high fidelity. Ambiguous boundary samples are precisely declined and routed to humans.</td>
           </tr>
           <tr>
-            <td><strong>欺骗性死胡同存活率 (长程不可逆)</strong></td>
-            <td>0.0%<br><span style="font-size:0.8rem;color:var(--bad)">纯贪婪单步理论必死</span></td>
-            <td>0.0%<br><span style="font-size:0.8rem;color:var(--bad)">非自回归无前瞻推演必死</span></td>
-            <td><strong style="color:var(--good)">100.0% (30/30 评估样本通过)</strong><br><span style="font-size:0.8rem;color:var(--accent)">隐空间世界模型 + PRM 剪枝 MCTS</span></td>
-            <td><span class="badge green">前瞻搜索优势</span>：单步模型受制于贪婪诱骗；Zero 具备多步视野展开与死锁剪枝，显著降低陷入局部极值概率。</td>
+            <td><strong>Deceptive dead-end survival rate (long-horizon irreversible)</strong></td>
+            <td>0.0%<br><span style="font-size:0.8rem;color:var(--bad)">Pure greedy single step is doomed in theory</span></td>
+            <td>0.0%<br><span style="font-size:0.8rem;color:var(--bad)">Non-autoregressive, no lookahead rollout, doomed</span></td>
+            <td><strong style="color:var(--good)">100.0% (30/30 evaluation samples passed)</strong><br><span style="font-size:0.8rem;color:var(--accent)">Latent-space world model + PRM-pruned MCTS</span></td>
+            <td><span class="badge green">Lookahead search advantage</span>: single-step models are trapped by greedy lures. Zero expands a multi-step horizon and prunes deadlocks, which sharply lowers the chance of falling into a local extremum.</td>
           </tr>
           <tr>
-            <td><strong>高维连续控制 (Continuous Action)</strong></td>
-            <td>不支持<br><span style="font-size:0.8rem;color:var(--muted)">仅支持离散候选文本</span></td>
-            <td>不支持<br><span style="font-size:0.8rem;color:var(--muted)">仅支持离散分类</span></td>
-            <td><strong style="color:var(--good)">原生支持</strong><br><span style="font-size:0.8rem;color:var(--accent)">隐空间动力学 + 连续交叉熵 CEM 规划</span></td>
-            <td>支持 TSLA 5 资产单纯形配置 (+10.99% 超额收益) 与 4-DOF 机械臂连续关节轨迹追踪。</td>
+            <td><strong>High-dimensional continuous control (Continuous Action)</strong></td>
+            <td>Not supported<br><span style="font-size:0.8rem;color:var(--muted)">Discrete candidate text only</span></td>
+            <td>Not supported<br><span style="font-size:0.8rem;color:var(--muted)">Discrete classification only</span></td>
+            <td><strong style="color:var(--good)">Native support</strong><br><span style="font-size:0.8rem;color:var(--accent)">Latent-space dynamics + continuous cross-entropy method (CEM) planning</span></td>
+            <td>Supports TSLA 5-asset simplex allocation (+10.99% excess return) and continuous joint-trajectory tracking of a 4-DOF robot arm.</td>
           </tr>
           <tr>
-            <td><strong>不完全信息博弈对手建模</strong></td>
-            <td>不支持</td>
-            <td>不支持</td>
-            <td><strong style="color:var(--good)">原生支持</strong><br><span style="font-size:0.8rem;color:var(--accent)">贝叶斯 Dirichlet 信念追踪 + Safe-CFR</span></td>
-            <td>实时侦测非平稳对手认知偏见 (\(\text{KL} > 0.3\))，自适应切换对抗剥削策略。</td>
+            <td><strong>Opponent modeling in imperfect-information games</strong></td>
+            <td>Not supported</td>
+            <td>Not supported</td>
+            <td><strong style="color:var(--good)">Native support</strong><br><span style="font-size:0.8rem;color:var(--accent)">Bayesian Dirichlet belief tracking + Safe-CFR</span></td>
+            <td>Detects the cognitive biases of non-stationary opponents in real time (\(\text{KL} > 0.3\)) and adaptively switches to an exploitative counter-strategy.</td>
           </tr>
           <tr>
-            <td><strong>动力学稳定性与收敛证明</strong></td>
-            <td>无收敛证明</td>
-            <td>无连续流形收敛保证<br><span style="font-size:0.8rem;color:var(--bad)">高维表征易在相变点发散</span></td>
-            <td><strong style="color:var(--good)">李雅普诺夫全局收缩证明</strong><br><span style="font-size:0.8rem;color:var(--accent)">&rho;(A) = 0.9800 &lt; 1.0 (A100 真机认证)</span></td>
-            <td><span class="badge blue">数学确定性保证</span>：对拟合的线性代理动力学，李雅普诺夫方程 \(A^T P A - P = -Q\) 有正定解，代理轨迹渐近收敛；这不覆盖真实骨干的非线性推理轨迹。</td>
+            <td><strong>Dynamical stability and convergence proof</strong></td>
+            <td>No convergence proof</td>
+            <td>No continuous-manifold convergence guarantee<br><span style="font-size:0.8rem;color:var(--bad)">High-dimensional representations tend to diverge at phase-transition points</span></td>
+            <td><strong style="color:var(--good)">Lyapunov global contraction proof</strong><br><span style="font-size:0.8rem;color:var(--accent)">&rho;(A) = 0.9800 &lt; 1.0 (certified on a real A100)</span></td>
+            <td><span class="badge blue">Mathematically deterministic guarantee</span>: for the fitted linear proxy dynamics, the Lyapunov equation \(A^T P A - P = -Q\) has a positive-definite solution and proxy trajectories converge asymptotically. This does not cover the nonlinear inference trajectory of the real backbone.</td>
           </tr>
           <tr>
-            <td><strong>编译结晶固化与零拷贝常驻</strong></td>
-            <td>无法本地结晶<br><span style="font-size:0.8rem;color:var(--muted)">强依赖云端</span></td>
-            <td>无法生成紧致流形图<br><span style="font-size:0.8rem;color:var(--bad)">依赖庞大 PyTorch/HF 动态加载</span></td>
-            <td><strong style="color:var(--good)">原生结晶编译器 (crystallize-zero)</strong><br><span style="font-size:0.8rem;color:var(--accent)">编译为 150MB LodGraph-V1 紧致容器</span></td>
-            <td><span class="badge purple">微秒级 mmap 零反序列化</span>：零内存拷贝直接常驻，启动时间由秒级降低至微秒级。</td>
+            <td><strong>Compiled crystallization and zero-copy residency</strong></td>
+            <td>Cannot crystallize locally<br><span style="font-size:0.8rem;color:var(--muted)">Strongly cloud-dependent</span></td>
+            <td>Cannot produce a compact manifold graph<br><span style="font-size:0.8rem;color:var(--bad)">Depends on heavy dynamic PyTorch/HF loading</span></td>
+            <td><strong style="color:var(--good)">Native crystallization compiler (crystallize-zero)</strong><br><span style="font-size:0.8rem;color:var(--accent)">Compiles into a 150MB LodGraph-V1 compact container</span></td>
+            <td><span class="badge purple">Microsecond mmap with zero deserialization</span>: resident directly with zero memory copy, cutting startup time from seconds to microseconds.</td>
           </tr>
           <tr>
-            <td><strong>自研可控性与安全审计</strong></td>
-            <td>商业黑盒付费<br><span style="font-size:0.8rem;color:var(--bad)">按 Token 计费，数据隐私泄漏风险</span></td>
-            <td>开源 Apache 2.0<br><span style="font-size:0.8rem;color:var(--prob)">第三方外部黑盒权重，训练源未知</span></td>
-            <td><strong style="color:var(--good)">单一自主模型 Zero，Apache 2.0</strong><br><span style="font-size:0.8rem;color:var(--accent)">开放核心；依赖第三方开源骨干与库（见 python/pyproject.toml）</span></td>
-            <td>严格遵守双裁决模型 (GPT-6 Astra / Fable) 严苛防作弊审计宪章，具备完全自主知识产权。</td>
+            <td><strong>Self-owned controllability and security audit</strong></td>
+            <td>Commercial black box, paid<br><span style="font-size:0.8rem;color:var(--bad)">Per-token billing, data-privacy leak risk</span></td>
+            <td>Open source, Apache 2.0<br><span style="font-size:0.8rem;color:var(--prob)">Third-party external black-box weights, training sources unknown</span></td>
+            <td><strong style="color:var(--good)">Single autonomous model Zero, Apache 2.0</strong><br><span style="font-size:0.8rem;color:var(--accent)">Open core. Depends on third-party open-source backbones and libraries (see python/pyproject.toml)</span></td>
+            <td>Strictly follows the strict anti-cheating audit charter of the two adjudicator models (GPT-6 Astra / Fable), with fully self-owned intellectual property.</td>
           </tr>
         </tbody>
       </table>
@@ -1227,20 +1227,20 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
 
     <div class="grid-2" style="margin-top:1.4rem">
       <div class="card bad-border">
-        <h3 style="margin-top:0;color:var(--bad)">为什么 Laya (ModernBERT) 无法胜任真实复杂决策？</h3>
+        <h3 style="margin-top:0;color:var(--bad)">Why can Laya (ModernBERT) not handle real complex decisions?</h3>
         <p style="font-size:0.88rem;color:var(--muted);line-height:1.6">
-          1. <strong>单步贪婪映射的“地平线死穴”</strong>：Laya 本质是单步映射函数 \(f: \mathcal{S} \to \Delta(\mathcal{A})\)。在具有不可逆转移的马尔可夫决策中，单步贪婪选择看起来距离目标更近（曼哈顿距离缩短），但在 3~5 步后必定陷入死锁死胡同。在 30 组欺骗性死胡同实测中，<strong>Laya 存活率为 0.0%</strong>。<br>
-          2. <strong>缺乏动态规划算力分配</strong>：Laya 对简单反射任务和复杂死锁博弈均消耗固定的 33ms GPU 深度前向算力，无法根据状态熵自适应调用 MCTS 或 A*。<br>
-          3. <strong>无法离线因果闭环自进化</strong>：权重静态冻结，在遭遇反事实对抗扰动或分布外样本时无法在线秩-1 修复与动态重新正交化。
+          1. <strong>The "horizon blind spot" of single-step greedy mapping</strong>: Laya is essentially a single-step mapping function \(f: \mathcal{S} \to \Delta(\mathcal{A})\). In a Markov decision process with irreversible transitions, a single-step greedy choice looks closer to the goal (shorter Manhattan distance), but after 3 to 5 steps it always lands in a deadlock dead end. In the 30 deceptive dead-end trials, <strong>Laya's survival rate was 0.0%</strong>.<br>
+          2. <strong>No dynamic allocation of planning compute</strong>: Laya spends the same fixed 33ms of deep GPU forward compute on simple reflex tasks and on complex deadlock games. It cannot call MCTS or A* adaptively based on state entropy.<br>
+          3. <strong>No offline causal closed-loop self-evolution</strong>: its weights are frozen. Under counterfactual adversarial perturbation or out-of-distribution samples, it cannot do online rank-1 repair or dynamic re-orthogonalization.
         </p>
       </div>
 
       <div class="card good-border">
-        <h3 style="margin-top:0;color:var(--good)">Gen-Zero (Zero) 双系统架构的破局之道</h3>
+        <h3 style="margin-top:0;color:var(--good)">How the Gen-Zero (Zero) dual-system architecture breaks through</h3>
         <p style="font-size:0.88rem;color:var(--muted);line-height:1.6">
-          1. <strong>System 1 与 System 2 动态连续调度</strong>：常规低熵决策直接命中 0.02ms 规则反射缓存；复杂边缘状态自动激活 64 维流形动力学推演与 MCTS 规划，<strong>死胡同存活率达成 100.0% 满分破局</strong>。<br>
-          2. <strong>严守单核 CPU 与 1.0GB 物理常驻红线</strong>：Zero-Compact-220M 实测单核 CPU 单线程延迟 468.98 ms，BF16 物理大小仅 693.8 MB，推理不依赖 GPU；693.8 MB 的体量超出微控制器的内存，目标部署形态是端侧网关与工控机级 CPU 设备。<br>
-          3. <strong>李雅普诺夫收缩与 GEPA 在线自进化飞轮</strong>：以谱半径 \(\rho(A)=0.9800 < 1.0\) 确保动力学收敛，并通过后台 Daemon 实时监控相变，实现无损正交增量更新。
+          1. <strong>Dynamic continuous scheduling between System 1 and System 2</strong>: routine low-entropy decisions hit the 0.02ms rule-reflex cache directly. Complex edge states automatically activate 64-D manifold dynamical rollout and MCTS planning, and the <strong>dead-end survival rate reaches a perfect 100.0%</strong>.<br>
+          2. <strong>Holding the single-core CPU and 1.0GB physical-residency red lines</strong>: Zero-Compact-220M measures 468.98 ms single-core, single-thread CPU latency, and its BF16 physical size is only 693.8 MB. Inference does not depend on a GPU. A 693.8 MB footprint exceeds the memory of a microcontroller. The target deployment form is edge gateways and industrial-PC-class CPU devices.<br>
+          3. <strong>Lyapunov contraction and the GEPA online self-evolution flywheel</strong>: a spectral radius \(\rho(A)=0.9800 < 1.0\) ensures dynamical convergence, and a background daemon monitors phase transitions in real time to apply lossless orthogonal incremental updates.
         </p>
       </div>
     </div>
@@ -1249,60 +1249,60 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
   <!-- Section 9: Charter & Review Governance -->
   <!-- Section 10: Blind-test evidence, four root causes, adapter -->
   <section id="sec-evidence">
-    <h2><svg class="icon"><use href="#i-flask"/></svg> 10. 泛化实测证据链、四大隐秘病根根治与 1.21 MB 容量扩容（2026-09-23）</h2>
+    <h2><svg class="icon"><use href="#i-flask"/></svg> 10. Measured Generalization Evidence Chain, Fixing Four Hidden Root Causes, and the 1.21 MB Capacity Expansion (2026-09-23)</h2>
     <p>
-      本节只写仓库里能复核的数字。证据文件三处：<code>benchmarks/results/zero_cpu_open_v1_summary.json</code>（930 题盲测）、<code>notes/task-b-memory-evidence/chunk_size_sweep_summary.json</code>（内存分块扫描）、<code>benchmarks/tests/test_deep_projection_adapter.py</code>（适配器单测）。没有证据的说法一律标为<strong>未验证</strong>或<strong>未完成</strong>。Markdown 全文见 <a href="zero/README.md" target="_blank" style="color:var(--accent);text-decoration:underline">zero/README.md</a> 与 <a href="zero/open-data-distillation-design-20260923.md" target="_blank" style="color:var(--accent);text-decoration:underline">蒸馏设计文档第 10 节</a>。
+      This section lists only numbers that can be re-checked in the repository. There are three evidence files: <code>benchmarks/results/zero_cpu_open_v1_summary.json</code> (930-question blind test), <code>notes/task-b-memory-evidence/chunk_size_sweep_summary.json</code> (memory chunk sweep), and <code>benchmarks/tests/test_deep_projection_adapter.py</code> (adapter unit tests). Any claim without evidence is marked <strong>unverified</strong> or <strong>not done</strong>. The full Markdown text is in <a href="zero/README.md" target="_blank" style="color:var(--accent);text-decoration:underline">zero/README.md</a> and <a href="zero/open-data-distillation-design-20260923.md" target="_blank" style="color:var(--accent);text-decoration:underline">Section 10 of the distillation design doc</a>.
     </p>
 
-    <h3 style="margin-top:2rem"><svg class="icon"><use href="#i-shield"/></svg> 10.1 不作弊证据链：零重叠、置换不变、小容量</h3>
+    <h3 style="margin-top:2rem"><svg class="icon"><use href="#i-shield"/></svg> 10.1 Anti-Cheating Evidence Chain: Zero Overlap, Permutation Invariance, Small Capacity</h3>
     <div class="grid-4" style="margin:1.2rem 0">
       <div class="card good-border">
-        <h3 style="margin-top:0">ID / context 交集</h3>
+        <h3 style="margin-top:0">ID / context intersection</h3>
         <p style="font-size:1.6rem;font-weight:700;margin:4px 0;color:var(--good)" class="mono">0 / 0</p>
-        <p style="font-size:0.82rem;color:var(--muted)">930 题测试集 vs 5,304 条训练池，双方 SHA256 记录在 summary 的 <code>isolation</code> 字段。</p>
+        <p style="font-size:0.82rem;color:var(--muted)">The 930-question test set vs the 5,304-record training pool. Both SHA256 hashes are recorded in the <code>isolation</code> field of the summary.</p>
       </div>
       <div class="card good-border">
-        <h3 style="margin-top:0">候选置换对照</h3>
+        <h3 style="margin-top:0">Candidate permutation control</h3>
         <p style="font-size:1.6rem;font-weight:700;margin:4px 0;color:var(--good)" class="mono">186 / 186</p>
-        <p style="font-size:0.82rem;color:var(--muted)">每 5 条记录随机打乱候选顺序再判一次，预测 100% 一致。是一次随机重排对照，不是置换群穷举。</p>
+        <p style="font-size:0.82rem;color:var(--muted)">For every 5th record, the candidate order is shuffled at random and judged again. Predictions agree 100%. This is a single random-shuffle control, not an exhaustive enumeration of the permutation group.</p>
       </div>
       <div class="card blue-border">
-        <h3 style="margin-top:0">任务头容量</h3>
-        <p style="font-size:1.6rem;font-weight:700;margin:4px 0;color:var(--blue)" class="mono">4,096 参数</p>
-        <p style="font-size:0.82rem;color:var(--muted)">64×64 float32，16,384 字节，在 2,474 条训练池记录上拟合并正则向单位阵。存不下 930 道题的答案。</p>
+        <h3 style="margin-top:0">Task-head capacity</h3>
+        <p style="font-size:1.6rem;font-weight:700;margin:4px 0;color:var(--blue)" class="mono">4,096 parameters</p>
+        <p style="font-size:0.82rem;color:var(--muted)">64×64 float32, 16,384 bytes, fitted on 2,474 training-pool records and regularized toward the identity matrix. It cannot store the answers to 930 questions.</p>
       </div>
       <div class="card purple-border">
-        <h3 style="margin-top:0">流形滤波</h3>
+        <h3 style="margin-top:0">Manifold filtering</h3>
         <p style="font-size:1.6rem;font-weight:700;margin:4px 0;color:var(--purple)" class="mono">energy 0.9008</p>
-        <p style="font-size:0.82rem;color:var(--muted)">896 维经 ZCA 白化投到 64 维，丢弃约 10% 方差，<code>shrink=0.1</code>。这是滤波事实，不是因果证明。</p>
+        <p style="font-size:0.82rem;color:var(--muted)">896 dimensions are ZCA-whitened and projected to 64 dimensions, discarding about 10% of the variance, <code>shrink=0.1</code>. This is a filtering fact, not a causal proof.</p>
       </div>
     </div>
     <div class="callout danger">
-      <strong>边界必须说清。</strong>以上证明的是「没有背题」：与 Zero 自身训练池零重叠，且预测不依赖候选位置。它不能排除骨干 Qwen2.5-0.5B 预训练语料见过这些题（蒸馏设计文档第 4 节已声明），也不构成因果不变性的证明：白化、PCA、余弦都不是因果识别（同文档第 1 节）。「VC 维极低所以必然学到全局因果不变性」在本仓库没有实验支持，不采纳。
+      <strong>The boundary must be stated clearly.</strong> The above shows "no memorization of answers": zero overlap with Zero's own training pool, and predictions do not depend on candidate position. It cannot rule out that the pretraining corpus of the backbone Qwen2.5-0.5B has seen these questions (already declared in Section 4 of the distillation design doc). It also does not prove causal invariance: whitening, PCA, and cosine are not causal identification (Section 1 of the same doc). The claim "a very low VC dimension therefore necessarily learns global causal invariance" has no experimental support in this repository and is not adopted.
     </div>
 
-    <h3 style="margin-top:2rem"><svg class="icon"><use href="#i-bars"/></svg> 10.2 930 题盲测多维全量实测（自然语言长文本新池 5,304 条 + 4 档流形对比，支持多线程）</h3>
+    <h3 style="margin-top:2rem"><svg class="icon"><use href="#i-bars"/></svg> 10.2 Full Multi-Dimensional Measurements on the 930-Question Blind Test (new natural-language long-text pool of 5,304 records + 4-tier manifold comparison, multithreading supported)</h3>
     <div class="badges">
-      <span class="badge green">64-D Macro 35.88%（超越机会水平 33.16%，旧基准 +3.33%）</span>
+      <span class="badge green">64-D Macro 35.88% (above the 33.16% chance level, +3.33% over the old baseline)</span>
       <span class="badge">64-D Micro 39.89%</span>
-      <span class="badge blue">BoolQ 83.3%（较旧版 20.0% 暴涨 +63.3%，区间击穿机会水平）</span>
-      <span class="badge green">Civil Comments 90.0%（256-D 命中率，区间击穿机会水平）</span>
-      <span class="badge purple">候选置换不变 100%（186/186 控制组完全一致）</span>
-      <span class="badge orange">已解绑 1GB 内存与单核锁定（支持多线程并发加速）</span>
+      <span class="badge blue">BoolQ 83.3% (up +63.3% from the old 20.0%, interval clears the chance level)</span>
+      <span class="badge green">Civil Comments 90.0% (256-D hit rate, interval clears the chance level)</span>
+      <span class="badge purple">Candidate-permutation invariance 100% (186/186 control group fully consistent)</span>
+      <span class="badge orange">1GB memory and single-core lock removed (multithreaded acceleration supported)</span>
     </div>
     <p style="font-size:0.9rem">
-      基于 5,304 条全量自然语言长文本新池（104,865 个 896-D 隐状态）在 AI Server A100 GPU 蒸馏拟合，并在本地纯 CPU 上对 930 题冻结盲测集完成 4 套流形维度（64-D、128-D、256-D、896-D 原生全维）逐题评估（详见 <code>benchmarks/results/zero_cpu_natural_multidim_eval_summary.json</code>）：
+      Distilled and fitted on an AI Server A100 GPU from the new pool of 5,304 full natural-language long-text records (104,865 896-D hidden states). Evaluated question by question on the local pure CPU against the 930-question frozen blind set under 4 manifold dimensions (64-D, 128-D, 256-D, and native full-dimension 896-D) (see <code>benchmarks/results/zero_cpu_natural_multidim_eval_summary.json</code>):
     </p>
     <table>
       <thead>
         <tr>
-          <th>任务</th><th>n</th><th>机会</th><th>多数类</th>
-          <th>64-D 准确率</th><th>128-D 准确率</th><th>256-D 准确率</th><th>896-D 原生全维</th>
+          <th>Task</th><th>n</th><th>Chance</th><th>Majority class</th>
+          <th>64-D accuracy</th><th>128-D accuracy</th><th>256-D accuracy</th><th>896-D native full-dim</th>
         </tr>
       </thead>
       <tbody>
-        <tr><td>boolq</td><td>30</td><td>50.0%</td><td>83.3%</td><td><b style="color:var(--good)">83.3%</b> (CI超机会)</td><td>70.0% (CI超机会)</td><td>20.0%</td><td>40.0%</td></tr>
-        <tr><td>civil_comments</td><td>30</td><td>50.0%</td><td>86.7%</td><td>36.7%</td><td>40.0%</td><td><b style="color:var(--good)">90.0%</b> (CI超机会)</td><td>80.0%</td></tr>
+        <tr><td>boolq</td><td>30</td><td>50.0%</td><td>83.3%</td><td><b style="color:var(--good)">83.3%</b> (CI above chance)</td><td>70.0% (CI above chance)</td><td>20.0%</td><td>40.0%</td></tr>
+        <tr><td>civil_comments</td><td>30</td><td>50.0%</td><td>86.7%</td><td>36.7%</td><td>40.0%</td><td><b style="color:var(--good)">90.0%</b> (CI above chance)</td><td>80.0%</td></tr>
         <tr><td>aegis_safety</td><td>30</td><td>50.0%</td><td>63.3%</td><td>63.3%</td><td>63.3%</td><td>63.3%</td><td>40.0%</td></tr>
         <tr><td>squad2</td><td>30</td><td>50.0%</td><td>53.3%</td><td>53.3%</td><td>56.7%</td><td>50.0%</td><td>53.3%</td></tr>
         <tr><td>paws</td><td>400</td><td>50.0%</td><td>50.0%</td><td>50.5%</td><td>49.3%</td><td>46.3%</td><td>50.0%</td></tr>
@@ -1317,7 +1317,7 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
       </tbody>
       <tfoot>
         <tr style="background:var(--card);font-weight:700">
-          <td>全局 Micro / Macro</td>
+          <td>Global Micro / Macro</td>
           <td>930</td>
           <td>33.16%</td>
           <td>48.08%</td>
@@ -1329,55 +1329,55 @@ canvas.sim-canvas{display:block;width:100%;height:260px;background:var(--ground)
       </tfoot>
     </table>
     <p style="font-size:0.9rem">
-      如实解读：自然语言候选文本重构后，<strong>64-D、128-D 与 896-D 的 Macro 准确率全面跨过 33.16% 机会水平</strong>（64-D 达 35.88%，较旧版 32.55% 净增 3.33%）。BoolQ 在 64-D 下达 83.3% 击穿机会水平区间下界；Civil Comments 在 256-D 下达 90.0% 同样击穿机会下界；896-D 原生全维在 GSM8K (27.0%)、PubMedQA (36.7%) 及多语言意图识别 (Massive) 展现出全宽语义无损表达的特有优势。
+      Honest reading: after the candidate texts were rebuilt as natural language, the <strong>Macro accuracy of 64-D, 128-D, and 896-D all crosses the 33.16% chance level</strong> (64-D reaches 35.88%, a net gain of 3.33% over the old 32.55%). BoolQ at 64-D reaches 83.3%, clearing the lower bound of the chance interval. Civil Comments at 256-D reaches 90.0%, also clearing the lower bound. The native full-dimension 896-D shows the particular advantage of full-width lossless semantic expression on GSM8K (27.0%), PubMedQA (36.7%), and multilingual intent recognition (Massive).
     </p>
 
-    <h3 style="margin-top:2rem"><svg class="icon"><use href="#i-warn"/></svg> 10.3 四大隐秘病根：事实、修复、验证状态</h3>
+    <h3 style="margin-top:2rem"><svg class="icon"><use href="#i-warn"/></svg> 10.3 Four Hidden Root Causes: Facts, Fixes, Verification Status</h3>
     <table>
-      <thead><tr><th style="width:14%">病根</th><th style="width:30%">事实</th><th style="width:26%">修复</th><th>验证状态</th></tr></thead>
+      <thead><tr><th style="width:14%">Root cause</th><th style="width:30%">Fact</th><th style="width:26%">Fix</th><th>Verification status</th></tr></thead>
       <tbody>
         <tr>
-          <td><b>1. 输入候选无语义</b></td>
-          <td>旧训练池中 ARC / MMLU-Pro 的 <code>candidates</code> 只是 <code>A</code>..<code>J</code> 单字母，候选隐状态不携带选项内容。</td>
+          <td><b>1. Input candidates carry no semantics</b></td>
+          <td>In the old training pool, the <code>candidates</code> of ARC / MMLU-Pro were only single letters <code>A</code>..<code>J</code>, so candidate hidden states carried no option content.</td>
           <td>Natural-text rebuild of the training pool (script and pool moved to gen-zero-research).</td>
-          <td><b style="color:var(--good)">已闭环验证</b>：5,304 条全部自然语言重构，AI Server GPU 提取 104,865 个隐状态完成 4 维蒸馏，930 题实测 Macro 从 32.55% 跃升至 <b>35.88%</b>。</td>
+          <td><b style="color:var(--good)">Verified end to end</b>: all 5,304 records were rebuilt as natural language. The AI Server GPU extracted 104,865 hidden states and finished 4-dimension distillation. The measured 930-question Macro jumped from 32.55% to <b>35.88%</b>.</td>
         </tr>
         <tr>
-          <td><b>2. 1000 MB 内存与单核锁定</b></td>
-          <td>旧设计硬性限制 1.0GB 物理内存与单核 <code>torch_threads=1</code>，限制了模型处理复杂多跳与长候选（如 Banking77 K=77）的能力，推理吞吐受限。</td>
-          <td>按指令彻底废除 1.0GB 内存硬限，代码解绑 <code>single_core</code>，支持 <code>--num-threads</code> 多线程并发与全宽张量并行。</td>
-          <td><b style="color:var(--good)">已闭环验证</b>：<code>zero_runtime.py</code> 与评测脚本均已支持动态多线程与全宽张量并行，单测通过；解除 1GB 枷锁，支持 2GB~4GB+ 工业内存预算。</td>
+          <td><b>2. 1000 MB memory and single-core lock</b></td>
+          <td>The old design hard-limited physical memory to 1.0GB and set single-core <code>torch_threads=1</code>. This limited the model on complex multi-hop tasks and long candidate lists (such as Banking77 with K=77) and capped inference throughput.</td>
+          <td>On instruction, the 1.0GB hard memory limit was removed entirely and <code>single_core</code> was unbound in code. <code>--num-threads</code> multithreaded concurrency and full-width tensor parallelism are supported.</td>
+          <td><b style="color:var(--good)">Verified end to end</b>: both <code>zero_runtime.py</code> and the evaluation scripts support dynamic multithreading and full-width tensor parallelism, and the unit tests pass. The 1GB shackle is lifted, and industrial memory budgets of 2GB to 4GB+ are supported.</td>
         </tr>
         <tr>
-          <td><b>3. Coconut 时延勘误</b></td>
-          <td>08 号文档曾写单步 +12 ms；实测纯 CPU INT8 带 KV 缓存单 token 步 <b>p50 275 ms，min 266 ms</b>。根因是每步反量化整块 int8 权重（约 3.58 亿参数），成本与 token 数无关。</td>
-          <td>08 / 10 号文档勘误；03 号文档与本页路径二卡片同步改正。</td>
-          <td><b style="color:var(--good)">已实现</b>（勘误）。K 步成本按 K×275 ms 外推，外推值不作结论引用。</td>
+          <td><b>3. Coconut latency erratum</b></td>
+          <td>Document 08 once stated a single step costs +12 ms. Measured on pure-CPU INT8 with a KV cache, a single-token step takes <b>p50 275 ms, min 266 ms</b>. The root cause is that each step dequantizes the whole int8 weight block (about 358M parameters), and the cost does not depend on token count.</td>
+          <td>Documents 08 and 10 were corrected. Document 03 and the Path 2 card on this page were updated to match.</td>
+          <td><b style="color:var(--good)">Implemented</b> (erratum). The cost of K steps is extrapolated as K×275 ms. The extrapolated value is not cited as a conclusion.</td>
         </tr>
         <tr>
-          <td><b>4. 样本截断与数据政策</b></td>
-          <td><code>extract_open_features.py</code> 原默认 <code>--max-samples 2500</code>，只提取了 2,474 条。</td>
-          <td>默认无上限并指向自然语言池；丢弃样本逐条写 stderr 附原因；AI Server GPU 实现多 Worker DataLoader 与全张量并发批处理。</td>
-          <td><b style="color:var(--good)">已闭环验证</b>：5,304 条样本 100% 提取无截断，A100 GPU 提取耗时 3,604s，训练产出 4 套多维权重并在 CPU 930 题上完整复核。</td>
+          <td><b>4. Sample truncation and data policy</b></td>
+          <td><code>extract_open_features.py</code> originally defaulted to <code>--max-samples 2500</code> and extracted only 2,474 records.</td>
+          <td>The default is now unlimited and points to the natural-language pool. Every dropped sample is written to stderr with its reason. The AI Server GPU runs a multi-worker DataLoader and full-tensor concurrent batch processing.</td>
+          <td><b style="color:var(--good)">Verified end to end</b>: all 5,304 samples were extracted with no truncation. A100 GPU extraction took 3,604s. Training produced 4 sets of multi-dimensional weights, which were fully re-checked on the 930 CPU questions.</td>
         </tr>
       </tbody>
     </table>
 
-    <h3 style="margin-top:2rem"><svg class="icon"><use href="#i-layers"/></svg> 10.4 容量扩容 74 倍：1.21 MB 深度投影跳连适配器</h3>
+    <h3 style="margin-top:2rem"><svg class="icon"><use href="#i-layers"/></svg> 10.4 Capacity Expanded 74x: the 1.21 MB Deep-Projection Skip-Connection Adapter</h3>
     <div class="grid-2" style="margin:1.2rem 0">
       <div class="card accent-border">
-        <h3 style="margin-top:0">拓扑与参数</h3>
-        <p style="font-size:0.88rem">$z = \mathrm{normalize}\big(S(h-\mu) + W_2\,\mathrm{GELU}(W_1(h-\mu)+b_1) + b_2\big)$，$h \in \mathbb{R}^{896}$，瓶颈 256，输出 64。</p>
+        <h3 style="margin-top:0">Topology and parameters</h3>
+        <p style="font-size:0.88rem">$z = \mathrm{normalize}\big(S(h-\mu) + W_2\,\mathrm{GELU}(W_1(h-\mu)+b_1) + b_2\big)$, $h \in \mathbb{R}^{896}$, bottleneck 256, output 64.</p>
         <ul style="padding-left:18px;font-size:0.85rem">
-          <li>跳连 $S$：896×64 = 57,344，由流形 <code>diag(scale) @ basis.T</code> 初始化</li>
-          <li>$W_1, b_1$：229,632；$W_2, b_2$：16,448</li>
-          <li>合计 <b>303,424</b> 参数，float32 <b>1,213,696 字节 ≈ 1.21 MB</b></li>
-          <li>与 16,384 字节任务头之比 <b>74.08×</b>（参数量之比，不是实测能力增益）</li>
-          <li>$W_2$ 零初始化：构造时 $\Delta z \equiv 0$，与 <code>ZeroManifold.project</code> 等价（float64 误差约 1e-8，float32 约 2.2e-7）</li>
+          <li>Skip connection $S$: 896×64 = 57,344, initialized from the manifold <code>diag(scale) @ basis.T</code></li>
+          <li>$W_1, b_1$: 229,632; $W_2, b_2$: 16,448</li>
+          <li>Total <b>303,424</b> parameters, float32 <b>1,213,696 bytes ≈ 1.21 MB</b></li>
+          <li>Ratio to the 16,384-byte task head: <b>74.08×</b> (a parameter-count ratio, not a measured capability gain)</li>
+          <li>$W_2$ zero-initialized: at construction $\Delta z \equiv 0$, equivalent to <code>ZeroManifold.project</code> (float64 error about 1e-8, float32 about 2.2e-7)</li>
         </ul>
       </div>
       <div class="card good-border">
-        <h3 style="margin-top:0">单测证据（本次亲自复跑）</h3>
+        <h3 style="margin-top:0">Unit-test evidence (re-run in person this time)</h3>
 <pre style="font-size:0.78rem;line-height:1.5;margin:0;white-space:pre-wrap">$ python3 -m pytest benchmarks/tests/test_deep_projection_adapter.py -v
 test_parameter_count_and_byte_size PASSED
 test_zero_init_equals_zero_manifold_project PASSED
@@ -1390,19 +1390,19 @@ test_non_tensor_input_raises_type_error PASSED
       </div>
     </div>
     <div class="callout danger">
-      <strong>训练状态必须如实。</strong><code>benchmarks/results/deep_adapter_cpu_training_report.json</code> 标注 <code>"synthetic": true</code>，是随机 896 维向量上的训练循环机制冒烟测试（可训练参数 246,080，跳连 $S$ 冻结），其 76.2% 「准确率」不是任何真实任务的成绩。仓库中没有 896 维真实隐状态缓存，适配器的真实训练与 930 题评测<strong>未完成</strong>。
+      <strong>The training status must be stated honestly.</strong> <code>benchmarks/results/deep_adapter_cpu_training_report.json</code> is marked <code>"synthetic": true</code>. It is a smoke test of the training-loop mechanics on random 896-D vectors (trainable parameters 246,080, skip connection $S$ frozen). Its 76.2% "accuracy" is not a result on any real task. The repository has no cache of real 896-D hidden states, so real training of the adapter and the 930-question evaluation are <strong>not done</strong>.
     </div>
   </section>
 
   <section id="sec-charter">
-    <h2><svg class="icon"><use href="#i-shield"/></svg> 9. 绝对最优先遵守的审计与防作弊宪章</h2>
+    <h2><svg class="icon"><use href="#i-shield"/></svg> 9. Audit and Anti-Cheating Charter (Highest Priority, Must Be Obeyed)</h2>
     <div class="callout danger">
-      <strong>最高防作弊铁律（Zero Tolerance Charter）</strong><br>
-      1. <strong>直面现实</strong>：主动深挖最致命、最尴尬的问题与虚假承诺，不回避、不粉饰。<br>
-      2. <strong>严禁作弊式实现</strong>：严禁 Mock、严禁用 Fallback 掩盖失败、严禁硬编码、严禁使用 Regex 或模式匹配冒充逻辑推理、严禁针对特定任务偷看格式或标签泄漏。<br>
-      3. <strong>严禁通用性缺失</strong>：严禁依赖英文等特定语言、缺乏通用性的投机实现。<br>
-      4. <strong>成果必须可验证</strong>：严格区分<strong>已实现</strong>（附真实命令与输出）、<strong>未验证</strong>与<strong>未完成</strong>，杜绝一切虚报。<br>
-      5. <strong>双独立 Reviewer 互盲裁决</strong>：所有核心交付物必须由异构外部模型（如 <code>gpt-6-astra</code> 与 <code>fable</code>）独立双盲评审，全票通过方可合入。
+      <strong>Top anti-cheating iron law (Zero Tolerance Charter)</strong><br>
+      1. <strong>Face reality</strong>: proactively dig out the most fatal and most embarrassing problems and false promises. Do not dodge or whitewash.<br>
+      2. <strong>No cheating implementations</strong>: no mocks, no fallbacks that hide failure, no hard-coding, no regex or pattern matching posing as logical reasoning, and no peeking at formats or label leaks for a specific task.<br>
+      3. <strong>No loss of generality</strong>: no speculative implementations that depend on English or any specific language and lack generality.<br>
+      4. <strong>Results must be verifiable</strong>: strictly separate <strong>implemented</strong> (with real commands and output), <strong>unverified</strong>, and <strong>not done</strong>, and rule out every false report.<br>
+      5. <strong>Two independent reviewers adjudicate blind to each other</strong>: every core deliverable must pass independent double-blind review by heterogeneous external models (such as <code>gpt-6-astra</code> and <code>fable</code>). It may be merged only with a unanimous pass.
     </div>
   </section>
 
@@ -1470,10 +1470,10 @@ function updateSpectrumSim() {
   document.getElementById('out-bf16-mem').textContent = bf16MB + " MB";
   const budgetElem = document.getElementById('out-budget-status');
   if (isBudgetValid) {
-    budgetElem.textContent = "严格合规 (< 1.0 GB)";
+    budgetElem.textContent = "Strictly compliant (< 1.0 GB)";
     budgetElem.style.color = "var(--good)";
   } else {
-    budgetElem.textContent = "超限警告 (> 1.0 GB)";
+    budgetElem.textContent = "Over-limit warning (> 1.0 GB)";
     budgetElem.style.color = "var(--bad)";
   }
   document.getElementById('out-cpu-lat').textContent = estLat + " ms / token";
@@ -1613,7 +1613,7 @@ function updateEncoderSim() {
 
   const rmse = noise === 0 ? "1.12e-16" : (noise * 0.85).toFixed(4);
   const etfErr = "0.00e+00";
-  const entropy = noise === 0 ? "100.0% (无损可逆)" : (100 - noise * 35).toFixed(1) + "%";
+  const entropy = noise === 0 ? "100.0% (lossless, reversible)" : (100 - noise * 35).toFixed(1) + "%";
   const bijection = noise === 0 ? "Bijective Lossless" : "Noise Corrected (RS RS)";
 
   document.getElementById('out-rmse').textContent = rmse;

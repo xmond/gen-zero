@@ -1076,7 +1076,9 @@ fn demo_adapter_file_loads_and_verifies_embeddings() {
     let decider = TriTeacherPairDecider::from_adapter(adapter, 0.91).expect("create decider");
     let u = vec![0.1f32; 896];
     let v = vec![0.1f32; 896];
-    let res = decider.decide_embeddings(&u, &v).expect("decide embeddings");
+    let res = decider
+        .decide_embeddings(&u, &v)
+        .expect("decide embeddings");
     assert!((res.tri_sim - 1.0).abs() < 1e-5);
     assert!(res.same_meaning);
 }

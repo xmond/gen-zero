@@ -32,7 +32,7 @@ pub use semantic_qwen::{
 };
 pub use tri_teacher::{
     calibrated_probability, decide_projections, ProjectionHead, TeacherSlot, TeacherWeights,
-    TriTeacherAdapterConfig, TriTeacherDecision, TriTeacherDeciderInfo, TriTeacherLoRAAdapter,
+    TriTeacherAdapterConfig, TriTeacherDeciderInfo, TriTeacherDecision, TriTeacherLoRAAdapter,
     TriTeacherPairDecider, TriTeacherProjector, DEFAULT_TRI_TEACHER_THRESHOLD,
     TRI_TEACHER_ADAPTER_FORMAT, TRI_TEACHER_SIGMOID_SLOPE,
 };

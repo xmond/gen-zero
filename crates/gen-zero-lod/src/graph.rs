@@ -2185,7 +2185,9 @@ impl LodGraph {
             return Err(LodError::OperatorNodeFalsified(node_id));
         }
         if input.node_id != node_id {
-            return Err(refuse("input is bound to a different execution node".into()));
+            return Err(refuse(
+                "input is bound to a different execution node".into(),
+            ));
         }
         let op = self.operator(&sig)?;
         if op.signature() != &sig || op.is_pure() != sig.pure {
@@ -2204,7 +2206,9 @@ impl LodGraph {
         let live = self.state.read();
         let live_node = live.node(node_id).ok_or(LodError::NodeNotFound(node_id))?;
         if live_node.entity_id != entity_id || live_node.operator.as_ref() != Some(&sig) {
-            return Err(refuse("execution target changed during preconditions".into()));
+            return Err(refuse(
+                "execution target changed during preconditions".into(),
+            ));
         }
         check_space(&sig, live.embedder_space())?;
         if live.is_revoked(entity_id) {
@@ -5589,7 +5593,8 @@ mod tests {
         let graph = with_distractors();
         let target = graph
             .add_node(
-                text_node(&graph, CLOSE_MAIN_VALVE, 1).with_aliases(["отсечка главного клапана", "Valve closure"]),
+                text_node(&graph, CLOSE_MAIN_VALVE, 1)
+                    .with_aliases(["отсечка главного клапана", "Valve closure"]),
             )
             .unwrap();
         let result = graph

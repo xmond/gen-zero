@@ -2912,11 +2912,18 @@ mod fatigue_phase_tests {
         // A real excess past the 9th decimal is not rounded away.
         assert_eq!(ClockPhase::onset_tick(100, 0.0700000001).unwrap(), 8);
         for k in 1..=99_u64 {
-            assert_eq!(ClockPhase::onset_tick(100, k as f64 / 100.0).unwrap(), k, "k = {k}");
+            assert_eq!(
+                ClockPhase::onset_tick(100, k as f64 / 100.0).unwrap(),
+                k,
+                "k = {k}"
+            );
         }
         assert_eq!(ClockPhase::onset_tick(10, 0.35).unwrap(), 4);
         assert_eq!(ClockPhase::onset_tick(7, 0.42).unwrap(), 3);
-        assert_eq!(ClockPhase::onset_tick(u32::MAX, 1.0).unwrap(), u64::from(u32::MAX));
+        assert_eq!(
+            ClockPhase::onset_tick(u32::MAX, 1.0).unwrap(),
+            u64::from(u32::MAX)
+        );
         assert_eq!(ClockPhase::onset_tick(1, FATIGUE_FRAC_QUANTUM).unwrap(), 1);
         assert!(!ClockPhase::new(6, 100, Some(0.07)).unwrap().fatigued);
         assert!(ClockPhase::new(7, 100, Some(0.07)).unwrap().fatigued);
@@ -2925,8 +2932,14 @@ mod fatigue_phase_tests {
     fn onset_tick_is_exact_for_decimal_fractions_at_large_budgets() {
         // A relative rounding band widens with the budget; past 600_000 it
         // swallowed a whole real excess of 1e-9 * b and fired one tick early.
-        assert_eq!(ClockPhase::onset_tick(600_001, 0.999400001).unwrap(), 599_642);
-        assert_eq!(ClockPhase::onset_tick(1_437_833, 0.515309497).unwrap(), 740_930);
+        assert_eq!(
+            ClockPhase::onset_tick(600_001, 0.999400001).unwrap(),
+            599_642
+        );
+        assert_eq!(
+            ClockPhase::onset_tick(1_437_833, 0.515309497).unwrap(),
+            740_930
+        );
     }
     #[test]
     fn onset_tick_keeps_tiny_real_excess() {
@@ -2944,7 +2957,11 @@ mod fatigue_phase_tests {
             let f = q as f64 / FATIGUE_FRAC_PARTS as f64;
             for b in budgets {
                 let exact = (q * u64::from(b)).div_ceil(FATIGUE_FRAC_PARTS);
-                assert_eq!(ClockPhase::onset_tick(b, f).unwrap(), exact, "q = {q}, b = {b}");
+                assert_eq!(
+                    ClockPhase::onset_tick(b, f).unwrap(),
+                    exact,
+                    "q = {q}, b = {b}"
+                );
             }
             q += 999_983;
         }

@@ -88,7 +88,11 @@ fn real_verifier_runs_stage_2_only_inside_the_band() {
     let adapter_str = std::env::var("GENZERO_TRI_TEACHER_ADAPTER")
         .unwrap_or_else(|_| "examples/weights/tri_teacher_demo.safetensors".into());
     let adapter = resolve_adapter(&adapter_str);
-    assert!(adapter.exists(), "adapter not found at {}", adapter.display());
+    assert!(
+        adapter.exists(),
+        "adapter not found at {}",
+        adapter.display()
+    );
 
     let model_str = model.to_str().unwrap();
     let adapter_str = adapter.to_str().unwrap();
@@ -110,5 +114,8 @@ fn real_verifier_runs_stage_2_only_inside_the_band() {
     let threshold = slow["config"]["tri_teacher_threshold"].as_f64().unwrap();
     // The verdict follows the measured similarity, whichever way it falls.
     assert_eq!(ev["is_answerable"].as_bool().unwrap(), tri_sim >= threshold);
-    println!("tri_sim {tri_sim} threshold {threshold} answerable {}", ev["is_answerable"]);
+    println!(
+        "tri_sim {tri_sim} threshold {threshold} answerable {}",
+        ev["is_answerable"]
+    );
 }

@@ -492,9 +492,7 @@ impl TournamentTriadPipeline {
         };
         // Against every sampled path of every shard, not only the elites: a
         // reorder or probe can land on a plan a shard sampled but did not keep.
-        let reordered = !outcomes
-            .iter()
-            .any(|o| o.paths.iter().any(|p| *p == committed.path));
+        let reordered = !outcomes.iter().any(|o| o.paths.contains(&committed.path));
         let actions = |path: &[usize]| -> Vec<ActionId> {
             path.iter().map(|&i| problem.dag.node(i).action).collect()
         };

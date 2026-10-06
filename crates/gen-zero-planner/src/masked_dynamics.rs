@@ -22,7 +22,6 @@ impl StateActionMask for FiniteStateActionMask {
     }
 }
 
-
 pub struct MaskedDynamics<D: WorldModelDynamics> {
     inner: D,
     mask: Arc<dyn StateActionMask>,

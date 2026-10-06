@@ -298,11 +298,11 @@ pub const INJECTION_MARKERS: &[&str] = &[
     "[inst]",
     "<<sys>>",
     "\u{5ffd}\u{7565}\u{4e4b}\u{524d}\u{7684}\u{6307}\u{4ee4}", // ignore previous instructions
-    "\u{5ffd}\u{7565}\u{4ee5}\u{4e0a}", // ignore the above
-    "\u{5ffd}\u{7565}\u{6240}\u{6709}\u{6307}\u{4ee4}", // ignore all instructions
+    "\u{5ffd}\u{7565}\u{4ee5}\u{4e0a}",                         // ignore the above
+    "\u{5ffd}\u{7565}\u{6240}\u{6709}\u{6307}\u{4ee4}",         // ignore all instructions
     "\u{5ffd}\u{7565}\u{4e0a}\u{9762}\u{7684}\u{6307}\u{4ee4}", // ignore the instructions above
-    "\u{6cc4}\u{9732}\u{7cfb}\u{7edf}\u{63d0}\u{793a}", // leak the system prompt
-    "\u{8d8a}\u{72f1}", // jailbreak
+    "\u{6cc4}\u{9732}\u{7cfb}\u{7edf}\u{63d0}\u{793a}",         // leak the system prompt
+    "\u{8d8a}\u{72f1}",                                         // jailbreak
 ];
 
 /// Words skipped before a clause's verb and stripped from its name.

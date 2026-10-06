@@ -4284,7 +4284,12 @@ impl PolymorphicZeroEngine {
             let name = &candidates[step.action];
             let verdict = self
                 .gate
-                .evaluate(action_id(name), step.entropy, Some(self.graph.as_ref()), None)
+                .evaluate(
+                    action_id(name),
+                    step.entropy,
+                    Some(self.graph.as_ref()),
+                    None,
+                )
                 .map_err(|e| ServiceError::Core(e.to_string()))?;
             if verdict.tier > worst {
                 worst = verdict.tier;
@@ -5767,7 +5772,12 @@ mod tests {
 
         assert_eq!(out.meta["semantic_scoring"], true, "{}", out.meta);
         assert_eq!(out.meta["formal_checked"], false, "{}", out.meta);
-        assert_eq!(out.meta["formally_infeasible"], json!(["revoked"]), "{}", out.meta);
+        assert_eq!(
+            out.meta["formally_infeasible"],
+            json!(["revoked"]),
+            "{}",
+            out.meta
+        );
         assert_eq!(out.meta["best_action"], "safe", "{}", out.meta);
 
         // When all candidate actions are revoked, imagine must fail closed.
@@ -5789,10 +5799,27 @@ mod tests {
             .unwrap();
         server.abort();
 
-        assert!(out_revoked.is_error, "all revoked actions must be stopped: {}", out_revoked.meta);
-        assert_eq!(out_revoked.meta["engine"], "formal_filter", "{}", out_revoked.meta);
-        assert_eq!(out_revoked.meta["fallback_reason"], "every candidate action is formally infeasible", "{}", out_revoked.meta);
-        assert_eq!(out_revoked.meta["formally_infeasible"], json!(["revoked", "also_revoked"]), "{}", out_revoked.meta);
+        assert!(
+            out_revoked.is_error,
+            "all revoked actions must be stopped: {}",
+            out_revoked.meta
+        );
+        assert_eq!(
+            out_revoked.meta["engine"], "formal_filter",
+            "{}",
+            out_revoked.meta
+        );
+        assert_eq!(
+            out_revoked.meta["fallback_reason"], "every candidate action is formally infeasible",
+            "{}",
+            out_revoked.meta
+        );
+        assert_eq!(
+            out_revoked.meta["formally_infeasible"],
+            json!(["revoked", "also_revoked"]),
+            "{}",
+            out_revoked.meta
+        );
     }
 
     #[tokio::test]

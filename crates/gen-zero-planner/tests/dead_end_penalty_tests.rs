@@ -146,8 +146,10 @@ fn mcts_penalizes_deep_dead_end_and_reports_marker() {
 
     assert_eq!(action, ActionId(2));
     assert!(marker.load(Ordering::Acquire));
-    assert!(DEAD_END_PENALTY.is_finite());
-    assert!(DEAD_END_PENALTY < 0.0);
+    const {
+        assert!(DEAD_END_PENALTY.is_finite());
+        assert!(DEAD_END_PENALTY < 0.0);
+    }
 }
 
 #[test]

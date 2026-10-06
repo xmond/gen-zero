@@ -181,7 +181,13 @@ fn dag_refuses_every_structural_violation() {
     let s: CausalDagSpec = serde_json::from_value(v).unwrap();
     let m = invalid_msg(CausalDag::from_spec(&CANDS, &s));
     assert!(m.contains("must lie in 1..="), "{m}");
-    assert!(CausalDag::new(vec![node(1, 1)], &[], ActionId(1), gen_zero_planner::triad::MAX_TRIAD_BUDGET).is_ok());
+    assert!(CausalDag::new(
+        vec![node(1, 1)],
+        &[],
+        ActionId(1),
+        gen_zero_planner::triad::MAX_TRIAD_BUDGET
+    )
+    .is_ok());
 
     let mut bad_value = node(1, 1);
     bad_value.value = f64::NAN;
@@ -445,7 +451,9 @@ fn gate_is_deterministic_and_ranks_by_net_reward_then_time() {
     let mut v = spec_value();
     v["value"] = json!({"7": 5.0});
     let valued = CausalDag::from_spec(&CANDS, &serde_json::from_value(v).unwrap()).unwrap();
-    let (best, _) = CausalGate::new(&valued, ctx()).select(&paths, None).unwrap();
+    let (best, _) = CausalGate::new(&valued, ctx())
+        .select(&paths, None)
+        .unwrap();
     let best = best.unwrap();
     assert_eq!(best.path, path(&d, &[1, 2, 3, 4, 7, 5]));
     assert_eq!(best.net_reward, 5.0 - 10.0);
@@ -1352,7 +1360,10 @@ fn triad_run_options_accepts_valid_robust_spec_and_refuses_unknown_field() {
     let e = serde_json::from_value::<TriadRunOptions>(json!({"seed": 1, "robust": {"typo": 1}}))
         .unwrap_err()
         .to_string();
-    assert!(e.contains("unknown field `typo`") || e.contains("missing field `model`"), "{e}");
+    assert!(
+        e.contains("unknown field `typo`") || e.contains("missing field `model`"),
+        "{e}"
+    );
 }
 
 #[test]
