@@ -1011,16 +1011,25 @@ fn energy_alpha_zero_reproduces_the_pre_steering_sampler() {
             )
             .unwrap();
         for (k, path) in set.paths.iter().enumerate() {
-            let want: Vec<usize> = r["paths"][k]
+            let want_paths: Vec<usize> = r["paths"][k]
                 .as_array()
                 .unwrap()
                 .iter()
                 .map(|x| x.as_u64().unwrap() as usize)
                 .collect();
-            assert_eq!(path.actions, want);
-            // Exact bits: serde_json's default float parser can be 1 ulp off.
-            let want = r["log_pf_bits"][k].as_u64().unwrap();
-            assert_eq!(path.log_pf.to_bits(), want, "log_pf {:?}", path.log_pf);
+            assert_eq!(path.actions, want_paths);
+            // Exact bits: cross-platform float arithmetic and serde_json can be 1 ulp off.
+            let want_bits = r["log_pf_bits"][k].as_u64().unwrap();
+            let got_bits = path.log_pf.to_bits();
+            let ulp_diff = (got_bits as i128 - want_bits as i128).unsigned_abs();
+            assert!(
+                ulp_diff <= 1,
+                "log_pf {:?} got_bits {} want_bits {} ulp_diff {}",
+                path.log_pf,
+                got_bits,
+                want_bits,
+                ulp_diff
+            );
         }
     }
 }
