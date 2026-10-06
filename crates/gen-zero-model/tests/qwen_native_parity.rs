@@ -359,3 +359,69 @@ fn pmi_parity_with_python_gguf() {
         "GGUF picks a different candidate than the fp32 reference"
     );
 }
+
+fn cosine(a: &[f32], b: &[f32]) -> f32 {
+    a.iter().zip(b).map(|(x, y)| x * y).sum()
+}
+
+/// `embed` gives one finite unit vector of the hidden width per text,
+/// deterministic across calls, and refuses text with no token.
+#[test]
+#[ignore = "needs Qwen2.5-0.5B GGUF weights"]
+fn embed_returns_finite_unit_vectors_of_hidden_width() {
+    let scorer = gguf_scorer();
+    assert_eq!(scorer.info().hidden_size, 896);
+    let v = scorer
+        .embed("Restart the payment service after the outage.")
+        .unwrap();
+    assert_eq!(v.len(), 896);
+    assert!(v.iter().all(|x| x.is_finite()));
+    let norm: f32 = v.iter().map(|x| x * x).sum::<f32>().sqrt();
+    assert!((norm - 1.0).abs() < 1e-4, "norm {norm}");
+    assert_eq!(
+        v,
+        scorer
+            .embed("Restart the payment service after the outage.")
+            .unwrap()
+    );
+    assert!(scorer.embed("").is_err());
+    // Longer than one window: every token still pooled, no truncation error.
+    let long = "The quarterly audit found no anomalies in the ledger. ".repeat(120);
+    assert!(scorer.encode(&long).unwrap().len() > gen_zero_model::qwen::MAX_SEQ_LEN);
+    let v = scorer.embed(&long).unwrap();
+    assert_eq!(v.len(), 896);
+    assert!(v.iter().all(|x| x.is_finite()));
+}
+
+/// Paraphrases with no shared content word must sit closer than unrelated
+/// texts. Prints the cosine matrix so the spread (anisotropy) is on record.
+#[test]
+#[ignore = "needs Qwen2.5-0.5B GGUF weights"]
+fn embed_puts_paraphrases_closer_than_unrelated_texts() {
+    let scorer = gguf_scorer();
+    let texts = [
+        "The physician prescribed antibiotics for the infection.",
+        "A doctor gave the patient medicine to treat bacteria.",
+        "The stock market fell sharply after the interest rate hike.",
+        "Shares dropped when the central bank raised borrowing costs.",
+        "She planted tomatoes in the garden this spring.",
+        "The compiler rejected the program because of a type error.",
+    ];
+    let vecs: Vec<Vec<f32>> = texts.iter().map(|t| scorer.embed(t).unwrap()).collect();
+    for (i, a) in vecs.iter().enumerate() {
+        let row: Vec<String> = vecs
+            .iter()
+            .map(|b| format!("{:.3}", cosine(a, b)))
+            .collect();
+        println!("cos[{i}] = {}", row.join(" "));
+    }
+    for (a, b) in [(0usize, 1usize), (2, 3)] {
+        let pair = cosine(&vecs[a], &vecs[b]);
+        for other in (0..texts.len()).filter(|&o| o != a && o != b) {
+            assert!(
+                pair > cosine(&vecs[a], &vecs[other]) && pair > cosine(&vecs[b], &vecs[other]),
+                "pair ({a},{b}) cos {pair} not above text {other}"
+            );
+        }
+    }
+}

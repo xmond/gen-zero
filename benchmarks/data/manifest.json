@@ -13660,7 +13660,7 @@
     "full_13": {
       "full13_aegis_safety": {
         "file": "full_13/aegis_safety.jsonl",
-        "sha256": "e5a2ea26af5040c85ff25c4bb3302557f833c5bdd3eda4bad87235f7178ce50f",
+        "sha256": "8f2fa1534437274b08025f44bb94f092d8093a8e47f088e9a33f894dd1556af4",
         "samples_count": 250,
         "task_values": {
           "aegis_safety": 250
@@ -14567,7 +14567,7 @@
       },
       "full13_helpsteer2": {
         "file": "full_13/helpsteer2.jsonl",
-        "sha256": "8718472e03287fd414f8c252fba3d2a78129f71deea8e812fc8e7a9fa86eb7f2",
+        "sha256": "8cc0d9f220d71e2610cbcac3c674f4e346be5f533005f57c395b9e430d7fa7a9",
         "samples_count": 249,
         "task_values": {
           "helpsteer2": 249
@@ -17254,7 +17254,7 @@
       },
       "full13_vitaminc": {
         "file": "full_13/vitaminc.jsonl",
-        "sha256": "bfc1f1fb67505fa88bcd48979562809f96da87e20027cefbd23c8fde97cfbe67",
+        "sha256": "beff6477c480d6f9dc59c65ec509e99b9706cadd2c6dd9778ab34e1b4f2576b3",
         "samples_count": 599,
         "task_values": {
           "vitaminc": 599

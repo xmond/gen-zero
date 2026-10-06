@@ -2,7 +2,7 @@
 
 Generated 2026-09-25T11:41:33.139390+00:00 on `DESKTOP-B0ALJME` (cores 24, loadavg at start [1.38, 7.24, 5.73]).
 
-Command: `suites/evaluate_manifold_pareto_ensemble.py --qwen-dir /home/sapex/gz_offload_b0925h/features/q --llama-dir /home/sapex/gz_offload_b0925h/features/l --out /home/sapex/gz_offload_b0925h/out/report --workers 3 --skip-references`
+Command: `suites/evaluate_manifold_pareto_ensemble.py --qwen-dir <FEATURES_ROOT>/q --llama-dir <FEATURES_ROOT>/l --out <FEATURES_ROOT>/out --workers 3 --skip-references`
 
 ## Headline (test split, macro over 13 tasks, %)
 

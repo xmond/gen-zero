@@ -306,6 +306,7 @@ fn pipeline_does_not_silently_restore_the_old_ranker_without_a_goal() {
         entropy: NormalizedEntropy::ZERO,
         return_trajectory: false,
         horizon: 3,
+        causal_triad: None,
     };
     assert!(matches!(
         pipeline.decide(&request),

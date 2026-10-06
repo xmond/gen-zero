@@ -30,7 +30,9 @@ tracing = { workspace = true }
 zstd = { workspace = true }
 futures-util = "0.3"
 # Plain HTTP client for the co-located Python semantic scorer (no TLS on purpose).
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
+# rustls-tls is added for the LLM arbitrator's outbound HTTPS calls (e.g.
+# api.openai.com); the closed-loop plain-HTTP usage above is unaffected.
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 thiserror = { workspace = true }
 blake3 = { workspace = true }
 # Spec 25 §5.3 mount digests are SHA-256 by contract (blake3 stays for token compare).
@@ -43,3 +45,5 @@ rand = { workspace = true }
 gen-zero-nanocore = { workspace = true, features = ["test-fixtures"] }
 tower = { workspace = true, features = ["util"] }
 tempfile = "3.27"
+# Patch builder tests inject commit failures with SQLite triggers.
+rusqlite = { workspace = true }

@@ -412,7 +412,7 @@ mod tests {
         let texts = [
             "a",
             "x y z",
-            "水在一百度沸腾",
+            "water boils at one hundred degrees",
             "The quick brown fox jumps over the lazy dog, again and again and again.",
         ];
         for c in [0.25_f32, 1.0, 4.0, 25.0] {
@@ -437,8 +437,8 @@ mod tests {
     fn a_translation_with_no_shared_ngram_is_as_far_as_an_unrelated_text() {
         // The limit the aliases and the dense track exist for.
         for (a, b) in [
-            ("valve closure", "关闭主阀"),
-            ("coolant leak", "冷却液泄漏"),
+            ("valve closure", "закрыть главный клапан"),
+            ("coolant leak", "утечка охлаждающей жидкости"),
             ("pressure drop", "decompression"),
         ] {
             let h = hdc_hamming_distance_256(&project(a).1, &project(b).1);
@@ -567,9 +567,9 @@ mod tests {
 
     #[test]
     fn unicode_text_without_spaces_still_shares_trigrams() {
-        let (a, fa) = project("水在一百度沸腾");
-        let (b, fb) = project("水在一百度沸腾了");
-        let (_, fc) = project("股票市场今天下跌");
+        let (a, fa) = project("water boils at one hundred degrees");
+        let (b, fb) = project("water boiled at one hundred degrees");
+        let (_, fc) = project("the stock market fell today");
         assert!(hdc_hamming_distance_256(&fa, &fb) < hdc_hamming_distance_256(&fa, &fc));
         assert!(distance(&a, &b).is_finite());
     }

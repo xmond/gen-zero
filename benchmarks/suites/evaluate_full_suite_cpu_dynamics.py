@@ -20,7 +20,7 @@ Three configurations are reported per task, matching the task brief exactly:
       number.
   (c) `no_counterfactual_full` (cf=False, langevin=True, expert=True): the continuous
       causal-reasoning-expert + annealed-Langevin path with the counterfactual term forced
-      to W_c=0.  This is an ASSUMPTION about what the task brief's "修复后的连续动力学专家模式"
+      to W_c=0.  This is an ASSUMPTION about what the task brief's "fixed continuous dynamics expert mode"
       refers to -- `git log` has no commits touching continuous_causal_reasoning_expert.py,
       so "fixed" cannot be verified against a diff; it is inferred only from the pruning
       diagnostic (see report).  This config is defined on ALL 13 tasks (it never touches c),
@@ -489,7 +489,7 @@ def main() -> int:
                 "langevin=True, expert=True). Defined ONLY on paws/multinli/vitaminc -- the only "
                 "tasks with a genuine counterfactual vector in the frozen npz.",
             "c_fixed_continuous_dynamics_expert": "no_counterfactual_full (cf=False, langevin=True, "
-                "expert=True). ASSUMPTION: mapped from the task brief's \"修复后的连续动力学专家模式\" "
+                "expert=True). ASSUMPTION: mapped from the task brief's \"fixed continuous dynamics expert mode\" "
                 "-- git history has no commits touching continuous_causal_reasoning_expert.py, so "
                 "whether a fix landed cannot be verified from a diff; see diagnostics comparison "
                 "in the limitations section. Defined on all 13 tasks.",
@@ -518,7 +518,7 @@ def main() -> int:
             "and must not be compared to the 55.05/53.33/56.73/55.76 numbers as if equal-information",
             "(b) full_calibrated_dynamics is defined on 3 of 13 tasks only; its mean is a 3-task "
             "average, never a macro11 or macro13, and must not sit next to Nimble/Jev in a table",
-            "(c) no_counterfactual_full's identity with the task brief's '修复后的连续动力学专家模式' "
+            "(c) no_counterfactual_full's identity with the task brief's 'fixed continuous dynamics expert mode' "
             "is an assumption (see config_definitions); git has no history for the expert module",
             "A is set contractive (0.5 I), not learned: with <=24 calibration rows A has no "
             "learnable signal (see artifact provenance a_note)",
@@ -549,46 +549,46 @@ def main() -> int:
 
 def render_md(rep: Dict[str, Any]) -> str:
     L: List[str] = []
-    L.append("# 全任务集(13 项)CPU 零 Token 干净评测（%s）" % rep["generated_at_utc"][:10])
+    L.append("# Full-suite (13-task) CPU zero-token clean evaluation (%s)" % rep["generated_at_utc"][:10])
     L.append("")
-    L.append("> **本次比较的是什么。** 同一批冻结的 Qwen3.5-9B 隐状态（A100 2026-09-22 抽取，13 任务 x 每任务 30 条 id，共 390 条）。")
-    L.append("> (a) 零标签 9B 头（A100 产物，仅引用，本机不重跑）；(b) 校准反事实漂移动力学 CPU 读出（仅 paws/multinli/vitaminc")
-    L.append("> 三个任务在冻结特征里有真实反事实向量，其余 10 个任务标记 not_applicable，不编造）；")
-    L.append("> (c) 关闭反事实项的连续动力学专家模式（覆盖全部 13 任务，是否对应任务书里的\"修复后\"版本是一个假设，见下文说明）。")
-    L.append("> 本机无 GPU、无 9B 权重：没有新的 9B 前向。")
+    L.append("> **What is being compared.** The same frozen Qwen3.5-9B hidden states (extracted on an A100 on 2026-09-22, 13 tasks x 30 ids per task, 390 rows).")
+    L.append("> (a) zero-label 9B head (A100 artifact, cited only; not rerun on this host); (b) calibrated counterfactual-drift dynamics CPU readout (only paws/multinli/vitaminc")
+    L.append("> have genuine counterfactual vectors in the frozen features; the other 10 tasks are marked not_applicable and no values are fabricated);")
+    L.append("> (c) continuous dynamics expert mode with the counterfactual term disabled (covers all 13 tasks; whether this corresponds to the task brief's \"fixed\" version is an assumption, explained below).")
+    L.append("> This host has no GPU or 9B weights: no new 9B forward pass.")
     L.append("")
-    L.append("命令：`%s`  HEAD：`%s`  特征 SHA-256：`%s`  用时：%.1fs" % (
+    L.append("Command: `%s`  HEAD: `%s`  Feature SHA-256: `%s`  Elapsed: %.1fs" % (
         rep["command"], rep["git_head"], rep["inputs"]["features_sha256"], rep["elapsed_s"]))
     L.append("")
-    L.append("## 数字冲突说明（任务书 vs 源数据）")
+    L.append("## Numeric conflict (task brief vs source data)")
     L.append("")
     L.append(rep["comparison_frame"]["bare_9b_number_conflict_in_task_brief"])
     L.append("")
     L.append(rep["comparison_frame"]["shared11_macro_note"])
     L.append("")
-    L.append("## 宏平均汇总")
+    L.append("## Macro-average summary")
     L.append("")
-    L.append("| 方法 | macro13 | macro11(共享) | 覆盖 |")
+    L.append("| Method | macro13 | macro11 (shared) | Coverage |")
     L.append("|---|---:|---:|---|")
     m = rep["macros"]
     for key, label in [
-        ("reference_winning_expert_paired30", "(a) 零标签 9B，winning expert（同 30 id）"),
-        ("reference_ar_loglik_only_paired30", "(a) 零标签 9B，仅 ar_loglik（同 30 id）"),
-        ("no_counterfactual_full_cpu_dynamics", "(c) 关闭反事实·全配置 CPU 动力学"),
-        ("no_counterfactual_readout_cpu_dynamics", "关闭反事实·仅读出 CPU 动力学"),
-        ("harness_nearest_mean_prototype", "harness 最近类均值原型基线"),
-        ("calibration_fold_majority", "校准折多数类基线"),
-        ("majority_baseline_all30", "全 30 样本多数类基线"),
+        ("reference_winning_expert_paired30", "(a) Zero-label 9B, winning expert (same 30 ids)"),
+        ("reference_ar_loglik_only_paired30", "(a) Zero-label 9B, ar_loglik only (same 30 ids)"),
+        ("no_counterfactual_full_cpu_dynamics", "(c) No-counterfactual, full CPU dynamics"),
+        ("no_counterfactual_readout_cpu_dynamics", "No-counterfactual, readout-only CPU dynamics"),
+        ("harness_nearest_mean_prototype", "Harness nearest-class-mean prototype baseline"),
+        ("calibration_fold_majority", "Calibration-fold majority baseline"),
+        ("majority_baseline_all30", "All-30-sample majority baseline"),
     ]:
         r13, r11 = m[key]["macro13"], m[key]["macro11_shared"]
-        L.append("| %s | %.2f (n=%d) | %.2f (n=%d) | 全 13 任务 |" % (
+        L.append("| %s | %.2f (n=%d) | %.2f (n=%d) | All 13 tasks |" % (
             label, r13["macro_pct"], r13["n_tasks"], r11["macro_pct"], r11["n_tasks"]))
     cf3 = m["full_calibrated_dynamics_cf_tasks_only"]
-    L.append("| (b) 校准反事实漂移动力学（**仅** %s，非 macro） | %.2f | – | 仅 3 任务，禁止与官方 macro11 并列 |" % (
+    L.append("| (b) Calibrated counterfactual-drift dynamics (**only** %s, not a macro) | %.2f | – | Only 3 tasks; do not place alongside official macro11 |" % (
         ", ".join(cf3["tasks"]), cf3["mean_pct"]))
     L.append("")
-    L.append("官方参照（Track C 引用，未在本机复现）：Nimble-9B macro11=%.2f，Jev 1.13.0 macro11=%.2f，"
-              "gen_zero 零标签全量 macro11=%.2f，gen_zero 零标签首30条 macro11=%.2f，多数类基线 macro11=%.2f" % (
+    L.append("Official references (Track C citation, not reproduced on this host): Nimble-9B macro11=%.2f, Jev 1.13.0 macro11=%.2f, "
+              "gen_zero zero-label full macro11=%.2f, gen_zero zero-label first-30 macro11=%.2f, majority-class baseline macro11=%.2f" % (
         rep["comparison_frame"]["shared11_macro_reference"]["nimble_9b"],
         rep["comparison_frame"]["shared11_macro_reference"]["jev_1_13_0"],
         rep["comparison_frame"]["shared11_macro_reference"]["gen_zero_zerolabel_full"],
@@ -596,21 +596,21 @@ def render_md(rep: Dict[str, Any]) -> str:
         rep["comparison_frame"]["shared11_macro_reference"]["majority_baseline"]))
     L.append("")
     for task, t in rep["tasks"].items():
-        L.append("## %s（n=%d，%d 候选，dim=%d，多数类 %.2f%%，反事实可用=%s）" % (
+        L.append("## %s (n=%d, %d candidates, dim=%d, majority class %.2f%%, counterfactual available=%s)" % (
             task, t["n"], t["k_candidates"], t["dim"], t["majority_baseline_pct_all30"], t["cf_available"]))
         L.append("")
-        L.append("反事实向量 c：%s" % t["counterfactual_definition"])
+        L.append("Counterfactual vector c: %s" % t["counterfactual_definition"])
         if t["small_classes_lt_nfolds"]:
             L.append("")
-            L.append("样本数 < 5 折的小类：%s" % t["small_classes_lt_nfolds"])
+            L.append("Classes with fewer than 5 samples (less than the number of folds): %s" % t["small_classes_lt_nfolds"])
         L.append("")
-        L.append("| 配置 | 均值准确率 %% (%d 次重复) | 重复间 std | 最小/最大 | repeat0 Wilson95 |" % t["protocol"]["repeats"])
+        L.append("| Configuration | Mean accuracy %% (%d repeats) | Std. across repeats | Min/max | repeat0 Wilson95 |" % t["protocol"]["repeats"])
         L.append("|---|---:|---:|---|---|")
         z = t["reference_zero_label_paired_30_ids"]
-        L.append("| (a) 零标签 9B，winning expert（同 30 id） | %.2f | – | – | %s |" % (z["winning_expert_accuracy_pct"], z["winning_expert_wilson95_pct"]))
-        L.append("| (a) 零标签 9B，仅 ar_loglik（同 30 id） | %.2f | – | – | %s |" % (z["ar_loglik_only_accuracy_pct"], z["ar_loglik_only_wilson95_pct"]))
+        L.append("| (a) Zero-label 9B, winning expert (same 30 ids) | %.2f | – | – | %s |" % (z["winning_expert_accuracy_pct"], z["winning_expert_wilson95_pct"]))
+        L.append("| (a) Zero-label 9B, ar_loglik only (same 30 ids) | %.2f | – | – | %s |" % (z["ar_loglik_only_accuracy_pct"], z["ar_loglik_only_wilson95_pct"]))
         zf = t["reference_zero_label_full"]
-        L.append("| (a) 零标签 9B（全量 n=%d，参照，n 可能不同） | %.2f | – | – | %s |" % (zf["n"], zf["accuracy_pct"], zf["wilson95_pct"]))
+        L.append("| (a) Zero-label 9B (full n=%d, reference; n may differ) | %.2f | – | – | %s |" % (zf["n"], zf["accuracy_pct"], zf["wilson95_pct"]))
         for name, r in t["results"].items():
             if r.get("status") == "not_applicable":
                 L.append("| %s | not_applicable | – | – | – |" % name)
@@ -619,32 +619,32 @@ def render_md(rep: Dict[str, Any]) -> str:
                 name, r["mean_accuracy_pct"], r["std_over_repeats_pct"], r["min_pct"], r["max_pct"], r["repeat0_wilson95_pct"]))
         o = t.get("reference_official")
         if o:
-            L.append("| 官方 Nimble-9B（%s, n=%d） | %.1f | – | – | – |" % (o["subset"], o["n"], o["nimble_9b_pct"]))
-            L.append("| 官方 Jev 1.13.0（%s, n=%d） | %.1f | – | – | – |" % (o["subset"], o["n"], o["jev_1_13_0_pct"]))
+            L.append("| Official Nimble-9B (%s, n=%d) | %.1f | – | – | – |" % (o["subset"], o["n"], o["nimble_9b_pct"]))
+            L.append("| Official Jev 1.13.0 (%s, n=%d) | %.1f | – | – | – |" % (o["subset"], o["n"], o["jev_1_13_0_pct"]))
         L.append("")
         d = t["diagnostics"]
-        L.append("诊断（测量自 %s）：Langevin 收敛比例 %.3f；专家把真候选剪掉的比例 %.3f；松弛残差最大 %.2e；ridge λ 直方图 %s" % (
+        L.append("Diagnostics (measured on %s): Langevin convergence fraction %.3f; fraction where the expert pruned the true candidate %.3f; max relaxation residual %.2e; ridge λ histogram %s" % (
             d["measured_on_config"], d["langevin_converged_fraction"], d["expert_pruned_true_candidate_fraction"], d["relaxation_residual_max"], d["ridge_lambda_histogram"]))
         L.append("")
         lat = t["latency_cpu_ms_post_feature"]
         pf, pr = t["primary_full_config"], t["primary_readout_config"]
-        L.append("| 时延/吞吐 | P50 ms | P90 ms | 吞吐 样本/s | 说明 |")
+        L.append("| Latency/throughput | P50 ms | P90 ms | Throughput samples/s | Notes |")
         L.append("|---|---:|---:|---:|---|")
-        L.append("| CPU %s（特征之后） | %.3f | %.3f | %.1f | 不含 9B 前向 |" % (pf, lat[pf]["p50"], lat[pf]["p90"], lat[pf]["throughput_samples_per_s"]))
-        L.append("| CPU %s（特征之后） | %.3f | %.3f | %.1f | 不含 9B 前向 |" % (pr, lat[pr]["p50"], lat[pr]["p90"], lat[pr]["throughput_samples_per_s"]))
-        L.append("| A100 零标签 e2e（同 30 id） | %.2f | %.2f | – | 含 9B 前向 + ar 打分，不可直接比 |" % (z["a100_e2e_ms_p50"], z["a100_e2e_ms_p90"]))
+        L.append("| CPU %s (post-feature) | %.3f | %.3f | %.1f | Excludes 9B forward pass |" % (pf, lat[pf]["p50"], lat[pf]["p90"], lat[pf]["throughput_samples_per_s"]))
+        L.append("| CPU %s (post-feature) | %.3f | %.3f | %.1f | Excludes 9B forward pass |" % (pr, lat[pr]["p50"], lat[pr]["p90"], lat[pr]["throughput_samples_per_s"]))
+        L.append("| A100 zero-label e2e (same 30 ids) | %.2f | %.2f | – | Includes 9B forward + ar scoring; not directly comparable |" % (z["a100_e2e_ms_p50"], z["a100_e2e_ms_p90"]))
         L.append("")
         mm = t["memory"]
-        L.append("内存：全配置 30 样本 tracemalloc 峰值 %d 字节；工件工作集 %d 字节（dim=%d）；GPU 显存 0。" % (
+        L.append("Memory: full configuration, 30 samples, tracemalloc peak %d bytes; artifact working set %d bytes (dim=%d); GPU memory 0." % (
             mm["tracemalloc_peak_bytes_full_config_30_samples"], mm["artifact_working_set_bytes"], t["dim"]))
         L.append("")
-    L.append("## L1/L2 缓存对照")
+    L.append("## L1/L2 cache comparison")
     L.append("")
-    L.append("`lscpu`：L1d 768 KiB / 24 instances = 每核 32 KiB；L2 24 MiB total（未做 perf 计数器采样，")
-    L.append("下面只是“工作集字节数 vs 缓存容量”的静态比较，不是实测命中率）。dim=16 的 11 个任务工作集见各任务内存行；")
-    L.append("massive_en/de 因 18 类候选超过 dim=16 上限，改用 dim=20，工作集相应更大（见其内存行）。")
+    L.append("`lscpu`: L1d 768 KiB / 24 instances = 32 KiB per core; L2 24 MiB total (no perf counter sampling was performed,")
+    L.append("the following is only a static comparison of working-set bytes vs. cache capacity, not a measured hit rate). The dim=16 working sets for 11 tasks appear in their memory rows;")
+    L.append("massive_en/de use dim=20 because 18 candidate classes exceed the dim=16 limit, so their working sets are correspondingly larger (see their memory rows).")
     L.append("")
-    L.append("## 限制")
+    L.append("## Limitations")
     L.append("")
     for lim in rep["limitations"]:
         L.append("- " + lim)

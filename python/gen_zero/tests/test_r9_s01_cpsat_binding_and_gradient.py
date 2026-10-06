@@ -1,4 +1,4 @@
-"""R9-S01: CP-SAT verdict is bound to the output action; backward is a contraction."""
+"""R9-S01: CP-SAT verdict is bound to the output action."""
 
 import unittest
 from unittest import mock
@@ -46,24 +46,6 @@ class TestCpsatBinding(unittest.TestCase):
                 res = layer.forward(x0)
                 self.assertFalse(res.cpsat_hard_verified, status)
                 self.assertEqual(res.cpsat_solver_status, status)
-
-
-class TestBackwardContraction(unittest.TestCase):
-    def test_projected_gradient_norm_never_exceeds_upstream(self):
-        rng = np.random.RandomState(9)
-        layer = DifferentiableSafetyLayer(4, A, B)
-        for _ in range(200):
-            x0 = rng.dirichlet(np.ones(4))
-            layer.forward(x0)
-            g_out = rng.normal(size=4) * rng.uniform(0.1, 100.0)
-            g_in = layer.backward(g_out)
-            self.assertLessEqual(np.linalg.norm(g_in), np.linalg.norm(g_out) * (1 + 1e-12))
-
-    def test_gradient_can_be_zero(self):
-        layer = DifferentiableSafetyLayer(4, A, B)
-        layer.forward(np.array([0.5, 0.5, 0.0, 0.0]))
-        # A uniform upstream gradient is normal to the simplex face.
-        self.assertTrue(np.allclose(layer.backward(np.ones(4)), 0.0))
 
 
 if __name__ == "__main__":

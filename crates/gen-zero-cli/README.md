@@ -21,8 +21,8 @@ Binary name: `gen-zero`.
   K-MoE router thresholds).
 - `serve`: launch the polymorphic MCP service in stdio or SSE mode, with an
   optional auth token and cognitive assets file to mount before serving.
-- `mcp`: alias for the MCP server command, with explicit `--stdio`/`--sse`
-  flags.
+- `mcp`: alias for the MCP server command. Serves SSE on `--host` (default
+  `127.0.0.1`) and `--port`, or stdio with `--stdio`.
 - `keygen`: generate a cryptographically secure Gen-Zero connection token.
 - `reflex`: evaluate a single-step reflex decision, optionally against the
   numeric cognitive runtime.

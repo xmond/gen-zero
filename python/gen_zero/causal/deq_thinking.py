@@ -2,15 +2,13 @@
 
 Implements a Deep Equilibrium Model for iterative reasoning:
 - Forward: Anderson-accelerated fixed-point iteration z* = f(z*, x)
-- Backward: Implicit Function Theorem (IFT) gradient via custom autograd Function
-  that re-solves the fixed-point equation in the backward pass for O(1) memory training.
+- Inference only: the solve runs without autograd, so memory is O(1) in iterations.
 
 Key components:
 1. DEQThinkingBlock: residual-MLP reasoning layer parameterizing f(z, x).
 2. AndersonAccelerator: NumPy Anderson mixing (reference implementation).
-3. DEQThinkingFunction: torch.autograd.Function with IFT backward. It returns
-   gradients for x AND for every block parameter.
-4. DEQThinkingModule: nn.Module wrapper for seamless training.
+3. DEQThinkingFunction: torch.autograd.Function wrapping the forward solve.
+4. DEQThinkingModule: nn.Module wrapper for the fixed-point solve.
 
 Dropout is deliberately absent: a stochastic f has no well-defined fixed point.
 
@@ -253,8 +251,7 @@ if HAS_TORCH:
         """Batched Anderson solve of z = f(z). Never builds an autograd graph.
 
         Each sample (dim 0) gets its own least-squares mixing weights, so
-        samples stay independent. Works for affine f too, which is how the
-        backward pass reuses it for the IFT linear system.
+        samples stay independent. Works for affine f too.
 
         Returns the iterate with the lowest worst-case relative residual.
         """
@@ -316,25 +313,12 @@ if HAS_TORCH:
 
 
     class DEQThinkingFunction(torch.autograd.Function):
-        """Fixed-point solve with an implicit-function-theorem backward.
+        """Inference-only fixed-point solve.
 
         Forward runs entirely without autograd, so memory does not grow with
-        the iteration count. Only (x, z*, params) are saved.
-
-        Backward: at z* = f(z*, x; W), for a loss gradient v = dL/dz*,
-
-            u = (I - J^T)^{-1} v,   J = df/dz at z*
-            dL/dx = u^T df/dx,      dL/dW = u^T df/dW
-
-        The linear solve is Anderson-accelerated fixed-point iteration on
-        u = J^T u + v, with J^T u taken from vjp calls on one cached graph of
-        a single f evaluation. It needs rho(J) < 1.
-
-        Second-order gradients are not supported.
+        the iteration count. Inference only: no gradient is defined.
 
         Call as: apply(x, z0, block, max_iter, tol, anderson_m, stats, *params)
-        where params = tuple(block.parameters()). Passing them as inputs is
-        what makes autograd route their gradients here.
         """
 
         @staticmethod
@@ -348,56 +332,17 @@ if HAS_TORCH:
             z_star = block(z_star, x)
             if stats is not None:
                 stats["forward"] = state
-            ctx.block = block
-            ctx.stats = stats
-            ctx.cfg = (max_iter, tol, anderson_m)
-            ctx.n_params = len(params)
-            ctx.save_for_backward(x, z_star, *params)
             return z_star
-
-        @staticmethod
-        @torch.autograd.function.once_differentiable
-        def backward(ctx, grad_output):
-            x, z_star, *params = ctx.saved_tensors
-            max_iter, tol, anderson_m = ctx.cfg
-            need = ctx.needs_input_grad
-            need_x = need[0]
-            need_p = list(need[7:])
-
-            with torch.enable_grad():
-                z_leaf = z_star.detach().requires_grad_(True)
-                x_leaf = x.detach().requires_grad_(need_x)
-                fz = ctx.block(z_leaf, x_leaf)
-
-                def vjp_z(u: torch.Tensor) -> torch.Tensor:
-                    (jtu,) = torch.autograd.grad(fz, z_leaf, grad_outputs=u, retain_graph=True)
-                    return jtu
-
-                u, state = _anderson_solve(
-                    lambda u: vjp_z(u) + grad_output, grad_output, anderson_m, max_iter, tol,
-                )
-                if ctx.stats is not None:
-                    ctx.stats["backward"] = state
-
-                targets = ([x_leaf] if need_x else []) \
-                    + [p for p, n in zip(params, need_p) if n]
-                grads = iter(torch.autograd.grad(fz, targets, grad_outputs=u, allow_unused=True)) \
-                    if targets else iter(())
-
-            grad_x = next(grads) if need_x else None
-            grad_p = [next(grads) if n else None for n in need_p]
-            # (x, z0, block, max_iter, tol, anderson_m, stats, *params)
-            return (grad_x, None, None, None, None, None, None, *grad_p)
 
 
     class DEQThinkingModule(nn.Module):
-        """Deep Equilibrium thinking module with O(1)-memory training.
+        """Deep Equilibrium thinking module (inference-only fixed-point solve).
 
         Args:
             dim: Dimensionality of the fixed-point state z.
             context_dim: Dimensionality of the conditioning input x.
             hidden_mult: MLP hidden expansion factor. Default 4.
-            max_iter: Maximum solver iterations (forward and backward). Default 50.
+            max_iter: Maximum solver iterations. Default 50.
             anderson_m: Anderson history size. Default 5.
             tol: Relative-residual convergence tolerance. Default 1e-5.
         """
@@ -422,11 +367,6 @@ if HAS_TORCH:
         def last_state(self) -> Optional[DEQSolverState]:
             """Telemetry of the most recent forward solve."""
             return self._stats.get("forward")
-
-        @property
-        def last_backward_state(self) -> Optional[DEQSolverState]:
-            """Telemetry of the most recent backward (IFT) solve."""
-            return self._stats.get("backward")
 
         def forward(
             self, x: torch.Tensor, z0: Optional[torch.Tensor] = None,

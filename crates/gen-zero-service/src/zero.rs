@@ -1,6 +1,6 @@
 //! The Single Polymorphic `zero` Tool Router.
 //!
-//! Exposes 20 Cognitive Verbs (see [`ZeroVerb`]):
+//! Exposes 24 Cognitive Verbs (see [`ZeroVerb`]):
 //! 1. ask: Discrete decision over candidates, scored by the semantic bridge
 //! 2. route: Tool ranking by semantic relevance to the intent
 //! 3. imagine: Multi-step PUCT lookahead with semantic priors + formal feasibility
@@ -13,7 +13,14 @@
 //! 10. simulate: Fixed action plan rolled out on the latent world model
 //! 11. what_if: Counterfactual comparison of candidate first actions on the latent world model
 //! 12. audit: Shadow risk review of one planned action (never an approval)
-//! 13. graph_*: Eight LodGraph memory operations (deposit, recall, rag, ppr, prune, evolve, coarse_grain, zoom)
+//! 13. graph_*: Ten LodGraph operations (deposit, recall, rag, ppr, prune, evolve, coarse_grain, zoom, induce, execute_operator)
+//! 14. causal_plan: Exact cheapest completion order on a symbolic AND/OR causal DAG
+//! 15. qa_gate: Two-stage answerability gate over caller-supplied reader scores
+//!
+//! A request whose `action`/`verb` names no verb, is not a string, or (with no
+//! action) carries no field any verb reads is refused with
+//! [`ServiceError::InvalidVerb`] (HTTP 400 `InvalidParams`). It is never
+//! answered as `ask`.
 //!
 //! `ask` (alias `decide`) also takes a `mode`: `auto`/`reflex` run the semantic
 //! ask; `mcts` runs the semantic PUCT lookahead (`imagine`) or, with a numeric
@@ -66,7 +73,10 @@ use crate::cognitive::{
     ENGINE_COGNITIVE,
 };
 use crate::error::ServiceError;
-use crate::graph_verb::{execute_graph, load_seed, GraphOp};
+use crate::graph_verb::{embed_graph_request, execute_graph, load_seed, GraphOp, QwenVectors};
+use crate::hot_reload::{
+    CanaryConfig, CanaryDecision, CanaryGuard, HotReloadError, HotReloadManager,
+};
 use crate::imagine::{
     run_lookahead, LookaheadConfig, RootNoise, SemanticOracle, DEFAULT_C_PUCT, MAX_HORIZON,
     MAX_SIMULATIONS,
@@ -75,28 +85,37 @@ use crate::mount::{
     digest_hex, AssetDigests, AtomicMountRegistry, Budget, CandidateMount, MountKey, MountRegistry,
     MountSnapshot, Proposal, Reject, RequestBinding, SnapshotChange,
 };
+use crate::patch_builder::CompiledPatch;
 use crate::pipeline_verb::execute_pipeline;
 use crate::semantic::{NativeConfig, NativeQwen, SemanticBackend};
 use crate::worldsim::{self, PlannerMode};
 use gen_zero_core::{
     ActionId, CompressedLatent, CoreError, LocalActionFrame, NormalizedEntropy, WorldModelDynamics,
 };
-use gen_zero_gate::{PolicyGate, PolicyTier, SemanticRisk};
+use gen_zero_gate::{
+    CausalVerifier, GateError, PolicyGate, PolicyTier, RefusalTraceEvent, RefusalTraceSink,
+    SemanticRisk, TeacherWeights, TwoStageConfig, TwoStageDualTrackGateway,
+};
 use gen_zero_lod::{
     AxiomWeights, FoldOutcome, Gender, GeometryParams, LodGraph, LogProbSemiring, RelId,
     RelationKey, RelationSemiring, ResultSet, SoftResultSet, TropicalSemiring, WeightedFoldOutcome,
 };
 use gen_zero_model::{
-    contains_raw_control_marker, ActionETFChoiceHead, MetricKind, DEFAULT_UNCALIBRATED_TEMPERATURE,
+    contains_raw_control_marker, ActionETFChoiceHead, MetricKind, TriTeacherPairDecider,
+    DEFAULT_TRI_TEACHER_THRESHOLD, DEFAULT_UNCALIBRATED_TEMPERATURE,
 };
 use gen_zero_nanocore::{
     DomainId, MoVFusionEngine, NanoCoreFleetScheduler, NanoCoreInstance, WatchdogConfig,
 };
+use gen_zero_planner::{exact_causal_plan, CausalDagError, CausalDagRequest};
+use gen_zero_planner::{FiniteStateActionMask, MaskedDynamics, StateActionMask};
 use gen_zero_provenance::{
     CapabilityArbiter, CapabilityFlags, CapabilityToken, DecisionAuditEntry, MmrInclusionProof,
     MmrLedger, MAX_AUDIT_LEAVES,
 };
-use gen_zero_storage::GoldenSnapshotManager;
+use gen_zero_storage::{
+    CanaryMetricInput, DurableRefusalStore, GoldenSnapshotManager, RefusalTraceInput, StorageError,
+};
 use gen_zero_worldmodel::LatentDynamicsWorldModel;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
@@ -106,10 +125,13 @@ use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 #[cfg(unix)]
 use std::os::unix::fs::OpenOptionsExt;
+
+/// `_meta.engine` of every `causal_plan` outcome.
+const ENGINE_CAUSAL_PLAN: &str = "causal_dag_exact";
 
 /// Polymorphic Verb in the `zero` tool.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -153,6 +175,16 @@ pub enum ZeroVerb {
     GraphCoarseGrain,
     /// Move one node one Lod band in or out, or to the band its coordinate implies.
     GraphZoom,
+    /// Text-to-Graph: a task text, behind the answerability gate, becomes a
+    /// causal action DAG, optionally deposited into the live LodGraph.
+    GraphInduce,
+    GraphExecuteOperator,
+    /// Exact cheapest completion order on a symbolic AND/OR causal DAG
+    /// (goal-cone pruning, then Dijkstra over completion sets).
+    CausalPlan,
+    /// Two-stage answerability gate: stage 1 reader scores, tri-teacher
+    /// stage 2 inside the ambiguity band.
+    QaGate,
 }
 
 impl ZeroVerb {
@@ -172,18 +204,32 @@ impl ZeroVerb {
             Self::GraphEvolve => Some(GraphOp::Evolve),
             Self::GraphCoarseGrain => Some(GraphOp::CoarseGrain),
             Self::GraphZoom => Some(GraphOp::Zoom),
+            Self::GraphInduce => Some(GraphOp::Induce),
+            Self::GraphExecuteOperator => Some(GraphOp::ExecuteOperator),
             _ => None,
         }
     }
 
-    /// Inferred or parsed verb from input JSON.
+    /// Inferred or parsed verb from input JSON. An explicit `action`/`verb`
+    /// that is not a known verb name, or a request with no explicit verb and
+    /// no field any verb reads, is `InvalidVerb`, never a default verb.
     pub fn infer_from_input(val: &Value) -> Result<Self, ServiceError> {
+        if !val.is_object() {
+            return Err(ServiceError::InvalidVerb(
+                "the `zero` request must be a JSON object".into(),
+            ));
+        }
         // Explicit "action" or "verb" parameter
-        if let Some(act) = val
+        if let Some((field, raw)) = val
             .get("action")
-            .or_else(|| val.get("verb"))
-            .and_then(|v| v.as_str())
+            .map(|v| ("action", v))
+            .or_else(|| val.get("verb").map(|v| ("verb", v)))
         {
+            let Some(act) = raw.as_str() else {
+                return Err(ServiceError::InvalidVerb(format!(
+                    "unknown action: `{field}` must be a verb name string, got {raw}"
+                )));
+            };
             match act.to_lowercase().as_str() {
                 "ask" | "decide" => return Ok(Self::Ask),
                 "route" | "prune" => return Ok(Self::Route),
@@ -205,13 +251,29 @@ impl ZeroVerb {
                 "graph_evolve" => return Ok(Self::GraphEvolve),
                 "graph_coarse_grain" => return Ok(Self::GraphCoarseGrain),
                 "graph_zoom" => return Ok(Self::GraphZoom),
-                _ => {}
+                "graph_induce" => return Ok(Self::GraphInduce),
+                "graph_execute_operator" => return Ok(Self::GraphExecuteOperator),
+                "causal_plan" => return Ok(Self::CausalPlan),
+                "qa_gate" | "qa_verify" => return Ok(Self::QaGate),
+                _ => {
+                    return Err(ServiceError::InvalidVerb(format!(
+                        "unknown action: `{field}` = {act:?} names no zero verb"
+                    )))
+                }
             }
         }
 
         // Implicit intent inference by parameter heuristics (Doc 07 section 2)
-        if val.get("pipeline").is_some() {
+        if val.get("best_span_score").is_some()
+            && val.get("null_score").is_some()
+            && val.get("context").is_some()
+            && val.get("question").is_some()
+        {
+            Ok(Self::QaGate)
+        } else if val.get("pipeline").is_some() {
             Ok(Self::Pipeline)
+        } else if val.get("causal_plan").is_some() {
+            Ok(Self::CausalPlan)
         } else if val.get("causal_fold").is_some() {
             Ok(Self::CausalFold)
         } else if val.get("entailment").is_some() {
@@ -249,9 +311,18 @@ impl ZeroVerb {
             || val.get("text").is_some()
         {
             Ok(Self::Compact)
-        } else {
-            // Default fallback is fast reflex ask
+        } else if val.get("context").is_some() || val.get("candidates").is_some() {
+            // Last, so every arm above keeps its precedence: `context` and
+            // `candidates` alone are still fields ask reads.
             Ok(Self::Ask)
+        } else {
+            let fields: Vec<&str> = val
+                .as_object()
+                .map(|o| o.keys().map(String::as_str).collect())
+                .unwrap_or_default();
+            Err(ServiceError::InvalidVerb(format!(
+                "unknown action: no `action` and no field that selects a verb (got {fields:?})"
+            )))
         }
     }
 }
@@ -811,6 +882,16 @@ pub struct ZeroEngineConfig {
     pub qwen_model: Option<PathBuf>,
     /// `tokenizer.json` for `qwen_model`; defaults to the one beside the weights.
     pub qwen_tokenizer: Option<PathBuf>,
+    /// Trained tri-teacher adapter for the QA verification band.
+    pub tri_teacher_adapter: Option<PathBuf>,
+    /// SQLite path for durable refusal storage (Phase 1 of the self-evolving
+    /// training pipeline). When set, `qa_gate` records every stage 2 trigger
+    /// or decision flip here for later arbitration.
+    pub refusal_db_path: Option<PathBuf>,
+    /// Canary thresholds for the deployed patch. Only used when
+    /// `refusal_db_path` is set: the deployed patch, its canary rows and its
+    /// rollback all live in that database.
+    pub canary: CanaryConfig,
 }
 
 impl ZeroEngineConfig {
@@ -837,6 +918,9 @@ impl ZeroEngineConfig {
             graph_geometry,
             qwen_model: path_var("GENZERO_QWEN_MODEL_PATH"),
             qwen_tokenizer: path_var("GENZERO_QWEN_TOKENIZER_PATH"),
+            tri_teacher_adapter: path_var("GENZERO_TRI_TEACHER_ADAPTER"),
+            refusal_db_path: path_var("GENZERO_REFUSAL_DB_PATH"),
+            canary: CanaryConfig::default(),
         })
     }
 
@@ -876,6 +960,16 @@ impl ZeroEngineConfig {
 
     pub fn with_mmr_persist_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.mmr_persist_path = Some(path.into());
+        self
+    }
+
+    pub fn with_refusal_db_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.refusal_db_path = Some(path.into());
+        self
+    }
+
+    pub fn with_canary_config(mut self, canary: CanaryConfig) -> Self {
+        self.canary = canary;
         self
     }
 }
@@ -953,6 +1047,11 @@ pub struct PolymorphicZeroEngine {
     /// Transition model behind the `pipeline` verb.
     world_model: Arc<dyn WorldModelDynamics<Error = CoreError>>,
     semantic: Option<Arc<SemanticBackend>>,
+    qa_verifier: Option<Arc<TriTeacherPairDecider>>,
+    durable_refusal_store: Option<Arc<DurableRefusalStore>>,
+    /// Deployed patch and its canary guard. Present exactly when
+    /// `durable_refusal_store` is.
+    patch_deployment: Option<PatchDeployment>,
     mounts: Arc<AtomicMountRegistry>,
     runtime: Arc<CognitiveRuntime>,
     pub(crate) golden_snapshots: Mutex<GoldenSnapshotManager>,
@@ -990,6 +1089,46 @@ impl PolymorphicZeroEngine {
     /// Construct an engine with explicit durable audit configuration.
     pub fn try_from_config(config: ZeroEngineConfig) -> Result<Self, ServiceError> {
         let semantic = semantic_backend(&config)?;
+        let qa_verifier = match &config.tri_teacher_adapter {
+            Some(adapter) => {
+                let model = config.qwen_model.as_ref().ok_or_else(|| {
+                    ServiceError::Core(
+                        "GENZERO_TRI_TEACHER_ADAPTER requires GENZERO_QWEN_MODEL_PATH".into(),
+                    )
+                })?;
+                Some(Arc::new(
+                    TriTeacherPairDecider::load(
+                        adapter,
+                        model,
+                        config.qwen_tokenizer.as_deref(),
+                        DEFAULT_TRI_TEACHER_THRESHOLD,
+                    )
+                    .map_err(|e| {
+                        ServiceError::Core(format!(
+                            "load tri-teacher verifier {}: {e}",
+                            adapter.display(),
+                        ))
+                    })?,
+                ))
+            }
+            None => None,
+        };
+        let durable_refusal_store = match &config.refusal_db_path {
+            Some(path) => Some(Arc::new(DurableRefusalStore::new(path).map_err(|e| {
+                ServiceError::Core(format!(
+                    "open durable refusal store {}: {e}",
+                    path.display()
+                ))
+            })?)),
+            None => None,
+        };
+        let patch_deployment = match &durable_refusal_store {
+            Some(store) => Some(PatchDeployment::open(
+                Arc::clone(store),
+                config.canary.clone(),
+            )?),
+            None => None,
+        };
         let generated_audit_key = rand::random();
         let (audit_persistence, audit_key, audit_ledger) =
             if let Some(path) = config.mmr_persist_path {
@@ -1030,8 +1169,8 @@ impl PolymorphicZeroEngine {
             restored = false;
             graph_asset = match &config.graph_seed_path {
                 Some(path) => {
-                    let report =
-                        load_seed(graph, path).map_err(gen_zero_lod::LodError::Persistence)?;
+                    let report = load_seed(graph, path, semantic.as_deref())
+                        .map_err(gen_zero_lod::LodError::Persistence)?;
                     tracing::info!(path = %path.display(), nodes = graph.node_count(), "live graph seeded");
                     format!("seed/{}", report["digest"].as_str().unwrap_or_default())
                 }
@@ -1065,8 +1204,14 @@ impl PolymorphicZeroEngine {
             )),
             gate: Arc::new(PolicyGate::default()),
             graph,
-            world_model: Arc::new(LatentDynamicsWorldModel::default()),
+            world_model: Arc::new(MaskedDynamics::new(
+                LatentDynamicsWorldModel::default(),
+                Arc::new(FiniteStateActionMask),
+            )),
             semantic,
+            qa_verifier,
+            durable_refusal_store,
+            patch_deployment,
             mounts: Arc::new(default_mounts(&graph_asset)),
             runtime: Arc::new(CognitiveRuntime::new()),
             golden_snapshots: Mutex::new(GoldenSnapshotManager::new(3, rand::random(), 16)),
@@ -1084,6 +1229,109 @@ impl PolymorphicZeroEngine {
     /// Alias for hosts that use configuration-driven construction without the `try_` naming.
     pub fn from_config(config: ZeroEngineConfig) -> Result<Self, ServiceError> {
         Self::try_from_config(config)
+    }
+
+    /// Durable refusal store, when configured via `refusal_db_path`.
+    pub fn durable_refusal_store(&self) -> Option<Arc<DurableRefusalStore>> {
+        self.durable_refusal_store.clone()
+    }
+
+    /// Hot-reload manager of the deployed patch, when `refusal_db_path` is set.
+    pub fn hot_reload(&self) -> Option<Arc<HotReloadManager>> {
+        self.patch_deployment
+            .as_ref()
+            .map(|d| Arc::clone(&d.manager))
+    }
+}
+
+/// The deployed patch of this engine and the canary that watches it.
+struct PatchDeployment {
+    manager: Arc<HotReloadManager>,
+    guard: CanaryGuard,
+}
+
+impl PatchDeployment {
+    /// Restore the deployed patch from storage. A deployed patch whose file
+    /// no longer verifies stops startup.
+    fn open(store: Arc<DurableRefusalStore>, canary: CanaryConfig) -> Result<Self, ServiceError> {
+        let guard = CanaryGuard::new(Arc::clone(&store), canary)
+            .map_err(|e| ServiceError::Core(e.to_string()))?;
+        let manager = HotReloadManager::restore(store)
+            .map_err(|e| ServiceError::Core(format!("restore deployed patch: {e}")))?;
+        Ok(Self {
+            manager: Arc::new(manager),
+            guard,
+        })
+    }
+
+    /// Record one `qa_gate` outcome against `patch` (the patch that was
+    /// active when the request started) and roll it back if the canary trips.
+    ///
+    /// `is_hard_stop` is defined here as the gateway failing closed: any
+    /// `GateError` other than `InvalidInput`/`InvalidConfig`. Those two are
+    /// caller errors (HTTP 400) and are not recorded at all. `is_refused` is
+    /// a verdict of not answerable, or a hard stop.
+    ///
+    /// Returns the canary meta for the response, or `Err` when the canary
+    /// could not record or act. That fails the request closed, the same way
+    /// a refusal-sink write failure does.
+    fn observe(
+        &self,
+        patch: &CompiledPatch,
+        started: Instant,
+        outcome: Result<&gen_zero_gate::TwoStageGateEvidence, &GateError>,
+    ) -> Result<Option<Value>, GateError> {
+        let (is_fast_pass, is_refused, is_hard_stop) = match outcome {
+            Ok(evidence) => (evidence.fast_pass, !evidence.is_answerable, false),
+            Err(GateError::InvalidInput(_) | GateError::InvalidConfig(_)) => return Ok(None),
+            Err(_) => (false, true, true),
+        };
+        let fail = |e: HotReloadError| GateError::CanaryFailure(e.to_string());
+        let recorded_at_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| GateError::CanaryFailure(format!("system clock before epoch: {e}")))?
+            .as_millis() as i64;
+        let metric = CanaryMetricInput {
+            patch_id: patch.patch_id.clone(),
+            recorded_at_ms,
+            is_fast_pass,
+            is_refused,
+            latency_us: started.elapsed().as_micros() as i64,
+            is_hard_stop,
+        };
+        let id = patch.patch_id.as_str();
+        let rolled_back = match self.guard.record_and_evaluate(metric) {
+            Ok(CanaryDecision::Pass) => false,
+            Ok(CanaryDecision::Trip { reason }) => {
+                tracing::warn!(patch_id = id, %reason, "canary tripped; rolling back");
+                match self.guard.check_and_auto_rollback(id, &self.manager) {
+                    Ok(rolled) => rolled,
+                    // A concurrent request rolled it back first.
+                    Err(HotReloadError::Storage(StorageError::PatchAlreadyRolledBack(_))) => {
+                        self.manager.reconcile_external_rollback(id);
+                        true
+                    }
+                    Err(e) => return Err(fail(e)),
+                }
+            }
+            // Rolled back in storage before this sample landed: by another
+            // process (CLI `rollback`) or by a concurrent request's trip.
+            Err(HotReloadError::Storage(StorageError::PatchNotActive { .. })) => {
+                self.manager.reconcile_external_rollback(id);
+                return Ok(Some(json!({
+                    "patch_id": id,
+                    "recorded": false,
+                    "patch_no_longer_active": true,
+                })));
+            }
+            Err(e) => return Err(fail(e)),
+        };
+        Ok(Some(json!({
+            "patch_id": id,
+            "recorded": true,
+            "is_hard_stop": is_hard_stop,
+            "auto_rolled_back": rolled_back,
+        })))
     }
 }
 
@@ -1755,6 +2003,53 @@ impl RiskCheck {
     }
 }
 
+/// Adapter wiring [`DurableRefusalStore`] into [`RefusalTraceSink`]: every
+/// stage 2 trigger or decision flip the gateway hands it is durably recorded
+/// for later arbitration. A write failure surfaces as `Err`, which the
+/// gateway turns into `GateError::RefusalSinkFailure` and fails the qa_gate
+/// decision closed rather than silently losing the trace.
+struct DurableRefusalSink {
+    store: Arc<DurableRefusalStore>,
+}
+
+impl RefusalTraceSink for DurableRefusalSink {
+    fn record_refusal(&self, event: RefusalTraceEvent) -> Result<(), String> {
+        let created_at_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| format!("system clock before epoch: {e}"))?
+            .as_millis() as i64;
+        let mut hasher = blake3::Hasher::new();
+        hasher.update(event.context.as_bytes());
+        hasher.update(event.question.as_bytes());
+        hasher.update(event.candidate.as_bytes());
+        hasher.update(&created_at_ms.to_le_bytes());
+        hasher.update(&rand::random::<u64>().to_le_bytes());
+        let trace_id = hasher.finalize().to_hex().to_string();
+        let verifier_output = serde_json::to_string(&json!({
+            "stage2_triggered": event.stage2_triggered,
+            "decision_flipped": event.decision_flipped,
+            "is_answerable": event.is_answerable,
+            "tri_sim": event.tri_sim,
+            "p_same_meaning": event.p_same_meaning,
+            "verifier_id": event.verifier_id,
+            "verifier_type": event.verifier_type.as_str(),
+        }))
+        .map_err(|e| format!("serialize verifier_output: {e}"))?;
+        let input = RefusalTraceInput {
+            trace_id,
+            created_at_ms,
+            context: event.context,
+            question: event.question,
+            candidate: event.candidate,
+            best_span_score: event.best_span_score,
+            null_score: event.null_score,
+            score_diff: event.score_diff,
+            verifier_output: Some(verifier_output),
+        };
+        self.store.record_refusal(&input).map_err(|e| e.to_string())
+    }
+}
+
 impl PolymorphicZeroEngine {
     /// Reject overload without creating an unbounded queue. The closure owns the
     /// permit: cancelling the request cannot free capacity while CPU work runs.
@@ -1830,6 +2125,15 @@ impl PolymorphicZeroEngine {
         world_model: Arc<dyn WorldModelDynamics<Error = CoreError>>,
     ) -> Self {
         self.world_model = world_model;
+        self
+    }
+
+    /// Install a custom state-action precondition mask on the default world model.
+    pub fn with_state_action_mask(mut self, mask: Arc<dyn StateActionMask>) -> Self {
+        self.world_model = Arc::new(MaskedDynamics::new(
+            LatentDynamicsWorldModel::default(),
+            mask,
+        ));
         self
     }
 
@@ -1959,6 +2263,16 @@ impl PolymorphicZeroEngine {
             return Ok(ZeroToolOutcome::rejected(verb, rej, meta));
         }
 
+        // Only causal_plan reads `causal_plan`; elsewhere it would be dropped silently.
+        if arguments.get("causal_plan").is_some() && verb != ZeroVerb::CausalPlan {
+            let rej = Rejection::invalid(
+                "request",
+                format!("`causal_plan` is only accepted by causal_plan, not {verb:?}"),
+            );
+            let meta = json!({"mount": mount_meta(binding.snapshot())});
+            return Ok(ZeroToolOutcome::rejected(verb, rej, meta));
+        }
+
         // Only the graph verbs read `graph`; elsewhere it would be dropped silently.
         // There is no implicit graph verb: the op must be named.
         if arguments.get("graph").is_some() && verb.graph_op().is_none() {
@@ -1966,8 +2280,8 @@ impl PolymorphicZeroEngine {
                 "request",
                 format!(
                     "`graph` is only accepted by graph_deposit, graph_recall, graph_rag, \
-                     graph_ppr, graph_prune, graph_evolve, graph_coarse_grain and graph_zoom \
-                     (name one in `action`), not {verb:?}"
+                     graph_ppr, graph_prune, graph_evolve, graph_coarse_grain, graph_zoom, \
+                     graph_induce and graph_execute_operator (name one in `action`), not {verb:?}"
                 ),
             );
             let meta = json!({"mount": mount_meta(binding.snapshot())});
@@ -2071,6 +2385,17 @@ impl PolymorphicZeroEngine {
                         .map_err(|e| ServiceError::Core(format!("causal fold task failed: {e}")))?
                 }
             },
+            ZeroVerb::CausalPlan => match Self::parse_causal_plan(arguments) {
+                Err(rejection) => ZeroToolOutcome::rejected(
+                    verb,
+                    rejection,
+                    json!({"engine": ENGINE_CAUSAL_PLAN}),
+                ),
+                Ok(request) => self
+                    .spawn_cpu(move || Self::handle_causal_plan(&request))?
+                    .await
+                    .map_err(|e| ServiceError::Core(format!("causal plan task failed: {e}")))?,
+            },
             ZeroVerb::Pipeline => {
                 let args = arguments.clone();
                 let model = Arc::clone(&self.world_model);
@@ -2087,13 +2412,22 @@ impl PolymorphicZeroEngine {
             | ZeroVerb::GraphPrune
             | ZeroVerb::GraphEvolve
             | ZeroVerb::GraphCoarseGrain
-            | ZeroVerb::GraphZoom => {
+            | ZeroVerb::GraphZoom
+            | ZeroVerb::GraphInduce
+            | ZeroVerb::GraphExecuteOperator => {
                 let op = verb.graph_op().expect("matched a graph verb");
-                let args = arguments.clone();
-                let graph = Arc::clone(&self.graph);
-                self.spawn_cpu(move || Self::handle_graph(verb, op, &graph, &args))?
-                    .await
-                    .map_err(|e| ServiceError::Core(format!("graph task failed: {e}")))?
+                // Qwen vectors are made first, under the scorer's own slots;
+                // the graph verb itself then runs model-free on the CPU pool.
+                match self.graph_vectors(verb, op, arguments).await {
+                    Err(outcome) => outcome,
+                    Ok(qwen) => {
+                        let args = arguments.clone();
+                        let graph = Arc::clone(&self.graph);
+                        self.spawn_cpu(move || Self::handle_graph(verb, op, &graph, &args, &qwen))?
+                            .await
+                            .map_err(|e| ServiceError::Core(format!("graph task failed: {e}")))?
+                    }
+                }
             }
             ZeroVerb::Simulate => {
                 self.run_worldmodel(verb, arguments, worldsim::simulate)
@@ -2104,6 +2438,7 @@ impl PolymorphicZeroEngine {
                     .await?
             }
             ZeroVerb::Audit => self.handle_audit(arguments).await?,
+            ZeroVerb::QaGate => self.handle_qa_gate(arguments).await,
         };
         if !outcome.meta.is_object() {
             outcome.meta = json!({});
@@ -2187,7 +2522,9 @@ impl PolymorphicZeroEngine {
                 .await?;
             outcome.meta["audit_ledger"] = json!({"leaf_index": leaf.index, "leaf_count": leaf.leaf_count, "root": digest_hex(&leaf.root), "proof_window": leaf.window, "persistence": self.audit_persistence_name(), "formal_certificate": "unavailable", "tier": tier_name(tier), "gate_status": gate_status(tier)});
         }
-        if arguments.get("cognitive").is_none() && verb != ZeroVerb::Entail && !verb.is_worldmodel()
+        if arguments.get("cognitive").is_none()
+            && !matches!(verb, ZeroVerb::Entail | ZeroVerb::QaGate)
+            && !verb.is_worldmodel()
         {
             let context = first_text(
                 arguments,
@@ -2365,7 +2702,12 @@ impl PolymorphicZeroEngine {
                 .iter()
                 .map(|name| {
                     self.gate
-                        .evaluate_basic(action_id(name), NormalizedEntropy::ZERO)
+                        .evaluate(
+                            action_id(name),
+                            NormalizedEntropy::ZERO,
+                            Some(self.graph.as_ref()),
+                            None,
+                        )
                         .is_ok_and(|verdict| verdict.tier != PolicyTier::Tier3HardStop)
                 })
                 .collect()
@@ -2468,6 +2810,162 @@ impl PolymorphicZeroEngine {
             content: text_block(text),
             meta,
             rejection: None,
+        }
+    }
+
+    /// Two-stage answerability over caller-supplied reader scores.
+    async fn handle_qa_gate(&self, arguments: &Value) -> ZeroToolOutcome {
+        let started = Instant::now();
+        // The patch attributed to this decision is the one active when it
+        // started, even if a swap lands mid-request.
+        let canary_patch = self
+            .patch_deployment
+            .as_ref()
+            .and_then(|d| d.manager.active().map(|p| (d, p)));
+        let refuse = |error: GateError| {
+            tracing::warn!(%error, "qa_gate rejected");
+            let status = match error {
+                GateError::InvalidConfig(_) | GateError::InvalidInput(_) => 400,
+                _ => 503,
+            };
+            let rejection = Rejection {
+                code: "GateError".into(),
+                stage: "qa_gate".into(),
+                detail: error.to_string(),
+                http_status: status,
+            };
+            ZeroToolOutcome::rejected(
+                ZeroVerb::QaGate,
+                rejection,
+                json!({"gate_error": error.to_string()}),
+            )
+        };
+        let string = |key: &str| -> Result<&str, GateError> {
+            arguments
+                .get(key)
+                .and_then(Value::as_str)
+                .ok_or_else(|| GateError::InvalidInput(format!("{key} must be a string")))
+        };
+        let number = |key: &str, default: Option<f32>| -> Result<f32, GateError> {
+            match arguments.get(key) {
+                None => {
+                    default.ok_or_else(|| GateError::InvalidInput(format!("{key} is required")))
+                }
+                Some(value) => value
+                    .as_f64()
+                    .and_then(|n| {
+                        let x = n as f32;
+                        x.is_finite().then_some(x)
+                    })
+                    .ok_or_else(|| GateError::InvalidInput(format!("{key} must be a finite f32"))),
+            }
+        };
+        let parsed = (|| -> Result<_, GateError> {
+            Ok((
+                string("context")?,
+                string("question")?,
+                arguments
+                    .get("candidate")
+                    .map_or(Ok(""), |_| string("candidate"))?,
+                number("best_span_score", None)?,
+                number("null_score", None)?,
+                number("ambiguity_low", Some(-1.5))?,
+                number("ambiguity_high", Some(0.5))?,
+                number("threshold", Some(DEFAULT_TRI_TEACHER_THRESHOLD as f32))?,
+            ))
+        })();
+        let (context, question, candidate, best, null, low, high, threshold) = match parsed {
+            Ok(values) => values,
+            Err(error) => return refuse(error),
+        };
+        let weights = self
+            .qa_verifier
+            .as_ref()
+            .map_or_else(TeacherWeights::default, |v| {
+                let w = &v.info().weights;
+                TeacherWeights {
+                    w_405b: w.w_405b as f32,
+                    w_q72b: w.w_q72b as f32,
+                    w_llama70b: w.w_llama70b as f32,
+                }
+            });
+        let gateway = match TwoStageDualTrackGateway::new(TwoStageConfig {
+            ambiguity_low: low,
+            ambiguity_high: high,
+            tri_teacher_threshold: threshold,
+            teacher_weights: weights,
+            ..TwoStageConfig::default()
+        }) {
+            Ok(gateway) => gateway,
+            Err(error) => return refuse(error),
+        };
+        let gateway = match self.durable_refusal_store.clone() {
+            Some(store) => gateway
+                .with_refusal_sink(Arc::new(DurableRefusalSink { store })
+                    as Arc<dyn RefusalTraceSink + Send + Sync>),
+            None => gateway,
+        };
+        let verifier: Option<Arc<dyn CausalVerifier + Send + Sync>> = self
+            .qa_verifier
+            .as_ref()
+            .map(|v| v.clone() as Arc<dyn CausalVerifier + Send + Sync>);
+        let context = context.to_owned();
+        let question = question.to_owned();
+        let candidate = candidate.to_owned();
+        let result = if gateway.in_ambiguity_band(null - best) && self.qa_verifier.is_some() {
+            match self.spawn_cpu(move || {
+                gateway.decide_with_optional_verifier(
+                    &context,
+                    &question,
+                    &candidate,
+                    best,
+                    null,
+                    verifier.as_deref().map(|v| v as &dyn CausalVerifier),
+                )
+            }) {
+                Ok(task) => task
+                    .await
+                    .map_err(|e| GateError::VerifierFailure(e.to_string()))
+                    .and_then(|r| r),
+                Err(error) => Err(GateError::VerifierFailure(error.to_string())),
+            }
+        } else {
+            gateway.decide_with_optional_verifier(
+                &context,
+                &question,
+                &candidate,
+                best,
+                null,
+                verifier.as_deref().map(|v| v as &dyn CausalVerifier),
+            )
+        };
+        let canary = match &canary_patch {
+            Some((deployment, patch)) => deployment.observe(patch, started, result.as_ref()),
+            None => Ok(None),
+        };
+        match (result, canary) {
+            (Ok(evidence), Ok(canary)) => {
+                let mut meta = json!({"evidence": evidence});
+                if let Some(canary) = canary {
+                    meta["canary"] = canary;
+                }
+                ZeroToolOutcome {
+                    verb: ZeroVerb::QaGate,
+                    is_error: false,
+                    content: text_block(
+                        serde_json::to_string(&evidence).expect("serializable evidence"),
+                    ),
+                    meta,
+                    rejection: None,
+                }
+            }
+            (Ok(_), Err(canary_error)) => refuse(canary_error),
+            (Err(error), canary) => {
+                if let Err(canary_error) = canary {
+                    tracing::error!(%canary_error, "canary failed on an already failing qa_gate");
+                }
+                refuse(error)
+            }
         }
     }
 
@@ -3786,7 +4284,7 @@ impl PolymorphicZeroEngine {
             let name = &candidates[step.action];
             let verdict = self
                 .gate
-                .evaluate_basic(action_id(name), step.entropy)
+                .evaluate(action_id(name), step.entropy, Some(self.graph.as_ref()), None)
                 .map_err(|e| ServiceError::Core(e.to_string()))?;
             if verdict.tier > worst {
                 worst = verdict.tier;
@@ -4038,20 +4536,21 @@ impl PolymorphicZeroEngine {
     /// never picks among survivors. `meta.causal_fold.conflict_keys` counts
     /// the conflict keys in the table so a caller can see one was present.
     /// Graph verbs: `graph_deposit`, `graph_recall`, `graph_rag`, `graph_ppr`,
-    /// `graph_prune`, `graph_evolve`, `graph_coarse_grain`, `graph_zoom` on this engine's live
-    /// graph. See [`crate::graph_verb`].
+    /// `graph_prune`, `graph_evolve`, `graph_coarse_grain`, `graph_zoom`, `graph_induce`, `graph_execute_operator` on this
+    /// engine's live graph. See [`crate::graph_verb`].
     fn handle_graph(
         verb: ZeroVerb,
         op: GraphOp,
         graph: &LodGraph,
         arguments: &Value,
+        qwen: &QwenVectors,
     ) -> ZeroToolOutcome {
         let meta = json!({"engine": "lod_graph"});
         let Some(block) = arguments.get("graph") else {
             let rej = Rejection::invalid("graph", format!("{} needs a `graph` object", op.name()));
             return ZeroToolOutcome::rejected(verb, rej, meta);
         };
-        match execute_graph(graph, op, block) {
+        match execute_graph(graph, op, block, qwen) {
             Ok((summary, result)) => {
                 let mut meta = meta;
                 meta["graph_op"] = result;
@@ -4065,6 +4564,23 @@ impl PolymorphicZeroEngine {
             }
             Err(rej) => ZeroToolOutcome::rejected(verb, rej, meta),
         }
+    }
+
+    /// The Qwen vectors a graph verb uses ([`embed_graph_request`]) from this
+    /// engine's semantic backend. A refusal is the verb's outcome.
+    async fn graph_vectors(
+        &self,
+        verb: ZeroVerb,
+        op: GraphOp,
+        arguments: &Value,
+    ) -> Result<QwenVectors, ZeroToolOutcome> {
+        let Some(block) = arguments.get("graph") else {
+            // `handle_graph` refuses the missing block.
+            return Ok(QwenVectors::default());
+        };
+        embed_graph_request(&self.graph, op, block, self.semantic())
+            .await
+            .map_err(|rej| ZeroToolOutcome::rejected(verb, rej, json!({"engine": "lod_graph"})))
     }
 
     /// Verb 9: `pipeline`. Runs the planner's `ProductionPipeline` on this engine's
@@ -4122,6 +4638,72 @@ impl PolymorphicZeroEngine {
             Err(rej) => {
                 tracing::warn!(code = %rej.code, "pipeline refused: {}", rej.detail);
                 ZeroToolOutcome::rejected(ZeroVerb::Pipeline, rej, meta)
+            }
+        }
+    }
+
+    /// Read the `causal_plan` block. Unknown fields, wrong types and a
+    /// missing block are `InvalidParams`, never defaulted.
+    fn parse_causal_plan(arguments: &Value) -> Result<CausalDagRequest, Rejection> {
+        let block = arguments.get("causal_plan").ok_or_else(|| {
+            Rejection::invalid(
+                "causal_plan",
+                "causal_plan needs a `causal_plan` object {nodes, target, initial_completed?, budget}",
+            )
+        })?;
+        serde_json::from_value(block.clone())
+            .map_err(|e| Rejection::invalid("causal_plan", format!("invalid causal_plan: {e}")))
+    }
+
+    /// Run the exact planner. Every planner refusal keeps its own code:
+    /// malformed input is 400, a valid problem with no plan is 422.
+    fn handle_causal_plan(request: &CausalDagRequest) -> ZeroToolOutcome {
+        let meta = json!({"engine": ENGINE_CAUSAL_PLAN});
+        match exact_causal_plan(request) {
+            Ok(plan) => {
+                let summary = format!(
+                    "causal_plan: {} step(s) to target {}, total cost {} (budget {}), {} state(s) expanded over a {}-node goal cone",
+                    plan.path.len(),
+                    request.target,
+                    plan.total_cost,
+                    request.budget,
+                    plan.expanded_states,
+                    plan.cone_nodes
+                );
+                let mut meta = meta;
+                meta["causal_plan"] = json!(plan);
+                ZeroToolOutcome {
+                    verb: ZeroVerb::CausalPlan,
+                    is_error: false,
+                    content: text_block(summary),
+                    meta,
+                    rejection: None,
+                }
+            }
+            Err(e) => {
+                let code = match &e {
+                    CausalDagError::InvalidInput(_) => {
+                        return ZeroToolOutcome::rejected(
+                            ZeroVerb::CausalPlan,
+                            Rejection::invalid("causal_plan", e.to_string()),
+                            meta,
+                        )
+                    }
+                    CausalDagError::TargetTooComplex { .. } => "TargetTooComplex",
+                    CausalDagError::UnreachableGoal { .. } => "UnreachableGoal",
+                    CausalDagError::BudgetExceeded { .. } => "BudgetExceeded",
+                    CausalDagError::StateLimitExceeded { .. } => "StateLimitExceeded",
+                    // Enforced inside the planner: `spawn_blocking` cannot be cancelled,
+                    // so a timeout around the await would not free the CPU slot.
+                    CausalDagError::DeadlineExceeded { .. } => "DeadlineExceeded",
+                };
+                let rejection = Rejection {
+                    code: code.to_string(),
+                    stage: "causal_plan".to_string(),
+                    detail: e.to_string(),
+                    http_status: 422,
+                };
+                ZeroToolOutcome::rejected(ZeroVerb::CausalPlan, rejection, meta)
             }
         }
     }
@@ -5124,6 +5706,93 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(out.meta["chosen_action"], "safe");
+    }
+
+    /// imagine must apply graph revocations to every plan step even when the
+    /// caller disables the formal solver. The revoked action is the oracle's
+    /// strong favourite, so it is the plan head: before the fix the plan loop
+    /// evaluated it without the graph and the outcome was Proceed.
+    #[tokio::test]
+    async fn imagine_plan_enforces_graph_revocations_without_cpsat() {
+        use axum::{routing::post, Json, Router};
+        let mut engine = PolymorphicZeroEngine::new().with_semantic(None);
+        engine
+            .graph
+            .revoke_entity(action_id("revoked").0 as u64)
+            .unwrap();
+        // Same distribution at every node: entropy ~0.08, below the 0.65
+        // default escalation threshold, so the only possible stop is the graph.
+        let app = Router::new()
+            .route(
+                "/v1/semantic_ask",
+                post(|| async {
+                    Json(json!({
+                        "chosen":"revoked", "chosen_index":0, "entropy":0.08,
+                        "candidates":[
+                            {"name":"revoked", "log_likelihood":-0.01, "baseline_log_likelihood":-1.0, "pmi":0.99, "probability":0.99},
+                            {"name":"safe", "log_likelihood":-4.6, "baseline_log_likelihood":-1.0, "pmi":-3.6, "probability":0.01}
+                        ],
+                        "scorer":{"id":"stub"}, "embedding_dim":896, "timing_ms":1.0
+                    }))
+                }),
+            )
+            .route(
+                "/v1/semantic_risk",
+                post(|| async {
+                    Json(json!({
+                        "p_dangerous":0.0, "log_odds":-10.0, "windows":1,
+                        "thresholds":{"escalate":0.5,"hard_stop":0.9}, "classifier":{}, "forward_ms":1.0
+                    }))
+                }),
+            );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let endpoint = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        engine = engine.with_semantic(Some(Arc::new(SemanticBackend::Remote(
+            SemanticBridgeClient::new(BridgeConfig::new(endpoint)).unwrap(),
+        ))));
+
+        let out = engine
+            .execute(&json!({
+                "action": "imagine",
+                "scenario": "choose the next step",
+                "candidate_actions": ["revoked", "safe"],
+                "enforce_cpsat": false,
+                "horizon": 2,
+                "simulations": 16,
+                "seed": 7
+            }))
+            .await
+            .unwrap();
+
+        assert_eq!(out.meta["semantic_scoring"], true, "{}", out.meta);
+        assert_eq!(out.meta["formal_checked"], false, "{}", out.meta);
+        assert_eq!(out.meta["formally_infeasible"], json!(["revoked"]), "{}", out.meta);
+        assert_eq!(out.meta["best_action"], "safe", "{}", out.meta);
+
+        // When all candidate actions are revoked, imagine must fail closed.
+        engine
+            .graph
+            .revoke_entity(action_id("also_revoked").0 as u64)
+            .unwrap();
+        let out_revoked = engine
+            .execute(&json!({
+                "action": "imagine",
+                "scenario": "choose the next step",
+                "candidate_actions": ["revoked", "also_revoked"],
+                "enforce_cpsat": false,
+                "horizon": 2,
+                "simulations": 16,
+                "seed": 7
+            }))
+            .await
+            .unwrap();
+        server.abort();
+
+        assert!(out_revoked.is_error, "all revoked actions must be stopped: {}", out_revoked.meta);
+        assert_eq!(out_revoked.meta["engine"], "formal_filter", "{}", out_revoked.meta);
+        assert_eq!(out_revoked.meta["fallback_reason"], "every candidate action is formally infeasible", "{}", out_revoked.meta);
+        assert_eq!(out_revoked.meta["formally_infeasible"], json!(["revoked", "also_revoked"]), "{}", out_revoked.meta);
     }
 
     #[tokio::test]

@@ -23170,6 +23170,10 @@
     },
     {
       "from": "crates/gen-zero-lod/src/lib.rs",
+      "to": "crates/gen-zero-lod/src/causal_lod.rs"
+    },
+    {
+      "from": "crates/gen-zero-lod/src/lib.rs",
       "to": "crates/gen-zero-lod/src/error.rs"
     },
     {
@@ -23250,6 +23254,10 @@
     },
     {
       "from": "crates/gen-zero-planner/src/lib.rs",
+      "to": "crates/gen-zero-planner/src/causal_dag.rs"
+    },
+    {
+      "from": "crates/gen-zero-planner/src/lib.rs",
       "to": "crates/gen-zero-planner/src/config.rs"
     },
     {
@@ -23266,11 +23274,39 @@
     },
     {
       "from": "crates/gen-zero-planner/src/lib.rs",
+      "to": "crates/gen-zero-planner/src/masked_dynamics.rs"
+    },
+    {
+      "from": "crates/gen-zero-planner/src/lib.rs",
       "to": "crates/gen-zero-planner/src/pipeline.rs"
     },
     {
       "from": "crates/gen-zero-planner/src/lib.rs",
       "to": "crates/gen-zero-planner/src/router.rs"
+    },
+    {
+      "from": "crates/gen-zero-planner/src/lib.rs",
+      "to": "crates/gen-zero-planner/src/triad/mod.rs"
+    },
+    {
+      "from": "crates/gen-zero-planner/src/triad/mod.rs",
+      "to": "crates/gen-zero-planner/src/triad/dag.rs"
+    },
+    {
+      "from": "crates/gen-zero-planner/src/triad/mod.rs",
+      "to": "crates/gen-zero-planner/src/triad/gate.rs"
+    },
+    {
+      "from": "crates/gen-zero-planner/src/triad/mod.rs",
+      "to": "crates/gen-zero-planner/src/triad/pruner.rs"
+    },
+    {
+      "from": "crates/gen-zero-planner/src/triad/mod.rs",
+      "to": "crates/gen-zero-planner/src/triad/sampler.rs"
+    },
+    {
+      "from": "crates/gen-zero-planner/src/triad/mod.rs",
+      "to": "crates/gen-zero-planner/src/triad/tournament.rs"
     },
     {
       "from": "crates/gen-zero-provenance/src/lib.rs",
@@ -23430,6 +23466,7 @@
     "crates/gen-zero-gate/src/policy.rs",
     "crates/gen-zero-gate/src/risk.rs",
     "crates/gen-zero-gate/src/sheaf_gate.rs",
+    "crates/gen-zero-lod/src/causal_lod.rs",
     "crates/gen-zero-lod/src/error.rs",
     "crates/gen-zero-lod/src/graph.rs",
     "crates/gen-zero-lod/src/graph/persistence.rs",
@@ -23454,13 +23491,21 @@
     "crates/gen-zero-nanocore/src/lib.rs",
     "crates/gen-zero-nanocore/src/mov.rs",
     "crates/gen-zero-nanocore/src/scheduler.rs",
+    "crates/gen-zero-planner/src/causal_dag.rs",
     "crates/gen-zero-planner/src/config.rs",
     "crates/gen-zero-planner/src/engine.rs",
     "crates/gen-zero-planner/src/error.rs",
     "crates/gen-zero-planner/src/game.rs",
     "crates/gen-zero-planner/src/lib.rs",
+    "crates/gen-zero-planner/src/masked_dynamics.rs",
     "crates/gen-zero-planner/src/pipeline.rs",
     "crates/gen-zero-planner/src/router.rs",
+    "crates/gen-zero-planner/src/triad/dag.rs",
+    "crates/gen-zero-planner/src/triad/gate.rs",
+    "crates/gen-zero-planner/src/triad/mod.rs",
+    "crates/gen-zero-planner/src/triad/pruner.rs",
+    "crates/gen-zero-planner/src/triad/sampler.rs",
+    "crates/gen-zero-planner/src/triad/tournament.rs",
     "crates/gen-zero-provenance/src/arbiter.rs",
     "crates/gen-zero-provenance/src/entry.rs",
     "crates/gen-zero-provenance/src/error.rs",
@@ -23600,6 +23645,11 @@
       "public_symbols": 26
     },
     {
+      "file": "crates/gen-zero-lod/src/causal_lod.rs",
+      "declared_modules": [],
+      "public_symbols": 30
+    },
+    {
       "file": "crates/gen-zero-lod/src/error.rs",
       "declared_modules": [],
       "public_symbols": 1
@@ -23614,11 +23664,12 @@
       "declared_modules": [
         "persistence"
       ],
-      "public_symbols": 61
+      "public_symbols": 63
     },
     {
       "file": "crates/gen-zero-lod/src/lib.rs",
       "declared_modules": [
+        "causal_lod",
         "error",
         "graph",
         "manifold",
@@ -23745,6 +23796,11 @@
       "public_symbols": 8
     },
     {
+      "file": "crates/gen-zero-planner/src/causal_dag.rs",
+      "declared_modules": [],
+      "public_symbols": 5
+    },
+    {
       "file": "crates/gen-zero-planner/src/config.rs",
       "declared_modules": [],
       "public_symbols": 3
@@ -23752,7 +23808,7 @@
     {
       "file": "crates/gen-zero-planner/src/engine.rs",
       "declared_modules": [],
-      "public_symbols": 29
+      "public_symbols": 33
     },
     {
       "file": "crates/gen-zero-planner/src/error.rs",
@@ -23767,24 +23823,68 @@
     {
       "file": "crates/gen-zero-planner/src/lib.rs",
       "declared_modules": [
+        "causal_dag",
         "config",
         "engine",
         "error",
         "game",
+        "masked_dynamics",
         "pipeline",
-        "router"
+        "router",
+        "triad"
       ],
       "public_symbols": 0
     },
     {
+      "file": "crates/gen-zero-planner/src/masked_dynamics.rs",
+      "declared_modules": [],
+      "public_symbols": 4
+    },
+    {
       "file": "crates/gen-zero-planner/src/pipeline.rs",
       "declared_modules": [],
-      "public_symbols": 28
+      "public_symbols": 29
     },
     {
       "file": "crates/gen-zero-planner/src/router.rs",
       "declared_modules": [],
       "public_symbols": 8
+    },
+    {
+      "file": "crates/gen-zero-planner/src/triad/dag.rs",
+      "declared_modules": [],
+      "public_symbols": 19
+    },
+    {
+      "file": "crates/gen-zero-planner/src/triad/gate.rs",
+      "declared_modules": [],
+      "public_symbols": 15
+    },
+    {
+      "file": "crates/gen-zero-planner/src/triad/mod.rs",
+      "declared_modules": [
+        "dag",
+        "gate",
+        "pruner",
+        "sampler",
+        "tournament"
+      ],
+      "public_symbols": 2
+    },
+    {
+      "file": "crates/gen-zero-planner/src/triad/pruner.rs",
+      "declared_modules": [],
+      "public_symbols": 7
+    },
+    {
+      "file": "crates/gen-zero-planner/src/triad/sampler.rs",
+      "declared_modules": [],
+      "public_symbols": 8
+    },
+    {
+      "file": "crates/gen-zero-planner/src/triad/tournament.rs",
+      "declared_modules": [],
+      "public_symbols": 19
     },
     {
       "file": "crates/gen-zero-provenance/src/arbiter.rs",
@@ -23923,7 +24023,7 @@
     {
       "file": "crates/gen-zero-service/src/zero.rs",
       "declared_modules": [],
-      "public_symbols": 37
+      "public_symbols": 38
     },
     {
       "file": "crates/gen-zero-storage/src/error.rs",

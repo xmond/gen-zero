@@ -82,8 +82,8 @@ class GoalVerifier:
         crit_lower = criterion.lower()
 
         # Invariant 1: If criterion requires tests passing and tests failed or exit_code != 0
-        test_related = any(k in crit_lower for k in ("test", "单测", "测试", "regression", "回归", "unittest", "pytest"))
-        pass_related = any(k in crit_lower for k in ("pass", "通过", "100%", "成功", "all green", "全绿"))
+        test_related = any(k in crit_lower for k in ("test", "tests", "regression", "unittest", "pytest"))
+        pass_related = any(k in crit_lower for k in ("pass", "passing", "passed", "100%", "success", "successful", "all green"))
 
         if test_related and pass_related:
             if not evidence_obj.is_success or evidence_obj.failed_tests > 0 or evidence_obj.error_tests > 0 or evidence_obj.exit_code != 0:
@@ -92,7 +92,7 @@ class GoalVerifier:
                 return 1.0
 
         # Invariant 2: If criterion requires zero exceptions / zero errors
-        no_err_related = any(k in crit_lower for k in ("no exception", "无异常", "无新增未捕获异常", "no error", "0 error"))
+        no_err_related = any(k in crit_lower for k in ("no exception", "zero exception", "no error", "0 error"))
         if no_err_related:
             if evidence_obj.detected_exceptions or evidence_obj.error_tests > 0 or evidence_obj.exit_code != 0:
                 return 0.0
@@ -100,10 +100,10 @@ class GoalVerifier:
                 return 1.0
 
         # Invariant 3: If exit code must be 0 / clean status
-        if any(k in crit_lower for k in ("exit code must be 0", "exit code 0", "退出码 0", "returncode 0")):
+        if any(k in crit_lower for k in ("exit code must be 0", "exit code 0", "exit 0", "returncode 0")):
             return 1.0 if evidence_obj.exit_code == 0 else 0.0
 
-        if evidence_obj.exit_code != 0 and any(k in crit_lower for k in ("success", "成功", "exit 0", "退出码 0")):
+        if evidence_obj.exit_code != 0 and any(k in crit_lower for k in ("success", "successful", "exit 0")):
             return 0.0
 
         return None

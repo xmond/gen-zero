@@ -1,8 +1,9 @@
 # gen-zero-service
 
 The Gen-Zero MCP server: a dual-transport server (stdio and SSE/HTTP REST), a
-single polymorphic `zero` tool router with 20 cognitive verbs (core decision,
-world-model pipeline, and LodGraph memory verbs), a high-performance
+single polymorphic `zero` tool router with 24 cognitive verbs (core decision,
+world-model pipeline, exact causal-DAG planning, LodGraph memory verbs,
+Text-to-Graph induction, and the two-stage QA gate), a high-performance
 simd-json protocol loop, the semantic bridge to the Python scorer, and the
 Spec 25 cognitive runtime (mount snapshots, tangent SSM, geometry gate).
 
@@ -46,12 +47,32 @@ Spec 25 cognitive runtime (mount snapshots, tangent SSM, geometry gate).
   the contact manifold; `damping` sets the rate `gamma >= 0`, `gamma = 0` is the
   symplectic flow, `gamma > 0` contracts each `(q_i, p_i)` pair by
   `exp(-2 gamma dt)` per step).
-- `zero`: the single polymorphic `zero` tool router, exposing 20 cognitive
+- `zero`: the single polymorphic `zero` tool router, exposing 24 cognitive
   verbs (`ask`/`decide`, `route`, `imagine`, `stream`, `grep`, `compact`,
-  `entail`, `causal_fold`, `pipeline`, `simulate`, `what_if`, `audit`, and 8
-  `graph_*` verbs for LodGraph memory operations). Every request captures one
-  immutable mount snapshot; `ask`/`route`/`imagine` run request text through
-  the semantic risk classifier before scoring.
+  `entail`, `causal_fold`, `causal_plan`, `pipeline`, `simulate`, `what_if`,
+  `audit`, and 10 `graph_*` verbs: 8 LodGraph memory operations,
+  `graph_induce`, and `graph_execute_operator`, and `qa_gate`). Every request
+  captures one immutable mount snapshot; `ask`/`route`/`imagine` run request
+  text through the semantic risk classifier before scoring. An unknown or
+  non-string `action`, or a request with no `action` and no verb-selecting
+  field, is refused with HTTP 400 `InvalidParams`; it is never answered as
+  `ask`. `causal_plan` is also served at `POST /v1/causal_plan` and by
+  `gen-zero causal-plan --input <file|->`.
+- `text_to_graph`: `graph_induce` (RFC-20261002 Phase 1). A deterministic
+  lexical rule parser, not a neural model: an answerability gate (fixed
+  injection blocklist, heuristic confidence, refused below the threshold),
+  then a causal action DAG in the planner's `CausalDagSpec` form, optionally
+  deposited into the LodGraph as `depends_on` edges.
+- `qa_gate` (alias `qa_verify`): the two-stage answerability gate
+  (`gen_zero_gate::TwoStageDualTrackGateway`) over caller-supplied reader
+  scores (`context`, `question`, `candidate`, `best_span_score`,
+  `null_score`). Outside the ambiguity band stage 1 decides alone. Inside it,
+  the tri-teacher verifier (`gen_zero_model::TriTeacherPairDecider`, Qwen2.5
+  with the LoRA merged in) must be configured with
+  `GENZERO_TRI_TEACHER_ADAPTER` plus `GENZERO_QWEN_MODEL_PATH`; without it the
+  request is refused (HTTP 503, `GateError`), never answered from stage 1.
+  The trained adapter is not shipped in this repository. Also served by
+  `gen-zero qa-gate`.
 
 ## Key exports
 
@@ -86,3 +107,53 @@ A* (including Auto tiers that invoke A*) requires an explicit `astar_goal`:
 The target uses Euclidean latent distance. Missing goals fail closed; no goal
 is inferred from `done`, reward, or the first candidate. `active_context` is
 preserved in both ordinary and budgeted decisions.
+
+
+## Operator closed loop
+
+`zero` exposes these actions through MCP `tools/call` and HTTP `POST /message`.
+First induce and deposit a DAG:
+
+```json
+{"action":"graph_induce","graph":{"text":"fetch data then clean it and save to db","auto_deposit":true}}
+```
+
+Each action carries the full `builtin:dcm_executor` signature (version `1`,
+`operator_kind: hard_dcm`, `pure: false`, `embedder_space: null`). Use a returned
+`deposited_node_ids` value, **not** its entity/action id, to execute:
+
+```json
+{"action":"graph_execute_operator","graph":{"node_id":0,"nonce":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef","input":{"reason":"record this action"}}}
+```
+
+HardDcm writes the action and input into the graph runtime's bounded execution
+audit and verifies that actual record against input, output and the node state.
+It does **not** fetch, clean, save, run a shell, or interpret the action label as
+a command. The returned `output.state_delta` identifies `effect: audit_append`
+and `durability: process_local`; the graph does not apply arbitrary state deltas.
+Nonces are exactly 32 bytes encoded as 64 hex characters; reuse is rejected,
+including a different hex casing. Once the nonce gate accepts a nonce, later precondition or transit failures
+still consume it. Target/signature checks happen before that gate. **Audit and nonce history do not survive restart**, including when node
+storage is persistent; this is not durable exactly-once execution.
+
+To use SoftPcm, `graph_deposit` a node with:
+
+```json
+{"name":"builtin:pcm_evaluator","operator_kind":"soft_pcm","embedder_space":null,"version":"1","pure":true}
+```
+
+as its `operator`, then call `graph_execute_operator` with its node id and input,
+omitting nonce. It returns a deterministic node-state summary and audit count,
+without writing state or audit records. A supplied nonce is rejected. This is a
+state evaluator, not a trained cognitive model.
+
+`graph_prune` revocations and falsified nodes block execution with typed errors.
+The graph rechecks after preconditions and holds a read lock through transit, so
+revocation cannot commit between that check and the side effect. Implementations
+must not call graph mutations from transit. Postconditions receive output,
+input and the node at completion. Dependencies remain graph evidence; this verb
+executes one selected node and does not automatically schedule an entire DAG or
+enforce completion of its ancestors.
+
+The induction engine remains `lexical_rule_parser_v1`: tests demonstrate grammar
+handling and production wiring, not trained intent extraction or causal reasoning.

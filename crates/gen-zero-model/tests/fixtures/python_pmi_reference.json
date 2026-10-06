@@ -99,11 +99,11 @@
   },
   {
    "kind": "ask",
-   "context": "服务器磁盘快满了，需要清理空间",
+   "context": "The server disk is almost full, so we need to clean up space.",
    "candidates": [
-    "删除旧日志文件",
-    "格式化系统盘",
-    "购买新的显示器"
+    "delete the old log files",
+    "reinstall the operating system",
+    "buy a new monitor"
    ],
    "history": [],
    "state": {
@@ -113,25 +113,25 @@
    "frame": "The first action to take is:",
    "python": [
     {
-     "name": "删除旧日志文件",
-     "log_likelihood": -17.004970926092938,
-     "baseline_log_likelihood": -28.401506289839745,
-     "pmi": 11.396535363746807,
-     "probability": 0.9977272711766196
+     "name": "delete the old log files",
+     "log_likelihood": -15.034909427165985,
+     "baseline_log_likelihood": -22.366829872131348,
+     "pmi": 7.3319204449653625,
+     "probability": 0.9064858012492004
     },
     {
-     "name": "格式化系统盘",
-     "log_likelihood": -25.873168844729662,
-     "baseline_log_likelihood": -30.25814723968506,
-     "pmi": 4.384978394955397,
-     "probability": 0.0008993553903671158
+     "name": "reinstall the operating system",
+     "log_likelihood": -13.241553287953138,
+     "baseline_log_likelihood": -18.27551775239408,
+     "pmi": 5.033964464440942,
+     "probability": 0.09106917533773576
     },
     {
-     "name": "购买新的显示器",
-     "log_likelihood": -25.759109374135733,
-     "baseline_log_likelihood": -30.56743484735489,
-     "pmi": 4.808325473219156,
-     "probability": 0.0013733734330133335
+     "name": "buy a new monitor",
+     "log_likelihood": -17.020581305027008,
+     "baseline_log_likelihood": -18.436981081962585,
+     "pmi": 1.4163997769355774,
+     "probability": 0.0024450234130639482
     }
    ]
   },

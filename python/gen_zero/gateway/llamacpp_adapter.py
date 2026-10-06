@@ -1,7 +1,7 @@
 """llama.cpp (GGUF) High-Performance Non-Autoregressive Scoring Adapter.
 
 Implements Milestone 2 of Issue #16:
-- Minimal non-autoregressive discrete scoring against llama-server on ai-server (or local).
+- Minimal non-autoregressive discrete scoring against a generic llama-server (remote or local).
 - Thought Tag Folding (</think>\n) to truncate reasoning traces and project deep representations immediately to logits.
 - 1-Token Logprobs Extraction & Sequence Log-Likelihood Evaluation.
 - Closed-form confidence calculation: c = (p_max - 1/K) / (1 - 1/K).
@@ -64,7 +64,7 @@ def compute_closed_form_confidence(probs: Union[Dict[str, float], Sequence[float
 class LlamaCppScoreAdapter:
     """High-performance scoring adapter interfacing with llama.cpp (GGUF) server.
 
-    Connects to llama-server (e.g. on ai-server:8080 or 127.0.0.1:8080) for 0-token
+    Connects to llama-server (e.g. on 127.0.0.1:8080) for 0-token
     prefill logprobs evaluation and sequence log-likelihood computation.
     Fail-closed: raises LlamaCppUnavailableError when llama-server is unreachable.
     """
@@ -80,7 +80,8 @@ class LlamaCppScoreAdapter:
         self.base_url = (
             base_url
             or os.environ.get("LLAMACPP_BASE_URL")
-            or "http://ai-server:8080"
+            or os.environ.get("LLAMA_SERVER_ENDPOINT")
+            or "http://127.0.0.1:8080"
         ).rstrip("/")
         self.timeout = float(timeout)
         self.model_name = model_name

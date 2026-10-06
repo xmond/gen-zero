@@ -70,13 +70,19 @@ class GenZeroConfig:
     results_dir: str = "results/gen_zero"
 
     def __post_init__(self) -> None:
-        for key in ("dual_head_checkpoint", "neural_dynamics_checkpoint", "adaptive_gating_artifact"):
-            value = getattr(self, key)
-            if value is not None:
-                path = Path(value).expanduser()
-                if not path.is_absolute():
-                    raise ValueError(f"{key} must be an absolute path: {value!r}")
-                setattr(self, key, str(path.resolve(strict=False)))
+        def _absolute(key: str, value: Optional[str]) -> Optional[str]:
+            if value is None:
+                return None
+            path = Path(value).expanduser()
+            if not path.is_absolute():
+                raise ValueError(f"{key} must be an absolute path: {value!r}")
+            return str(path.resolve(strict=False))
+
+        self.dual_head_checkpoint = _absolute("dual_head_checkpoint", self.dual_head_checkpoint)
+        self.neural_dynamics_checkpoint = _absolute(
+            "neural_dynamics_checkpoint", self.neural_dynamics_checkpoint)
+        self.adaptive_gating_artifact = _absolute(
+            "adaptive_gating_artifact", self.adaptive_gating_artifact)
         valid_pools = {"log_linear", "arithmetic"}
         if self.adaptive_gating_pool_type not in valid_pools:
             raise ValueError(

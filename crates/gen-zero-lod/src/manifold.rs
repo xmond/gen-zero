@@ -25,6 +25,110 @@
 //! graph's `GeometryParams` and equals `ProductGeometry::distance` on the
 //! points `MixedCurvatureCoord::to_point` gives.
 
+/// Smallest fatigue fraction accepted, and the step of the decimal grid
+/// [`ClockPhase::onset_tick`] computes in exact integers. With budget at least
+/// 1 it keeps `fraction * budget` far above that function's machine-precision
+/// band, so the onset is never tick 0.
+pub const FATIGUE_FRAC_QUANTUM: f64 = 1e-9;
+
+/// Parts per unit of the decimal grid; `1 / FATIGUE_FRAC_QUANTUM`.
+const FATIGUE_FRAC_PARTS: u64 = 1_000_000_000;
+const _: () = assert!(FATIGUE_FRAC_QUANTUM * FATIGUE_FRAC_PARTS as f64 == 1.0);
+
+/// The one validity rule for a fatigue fraction: finite and in
+/// `[FATIGUE_FRAC_QUANTUM, 1]`. Shared by [`ClockPhase::new`] and the planner's
+/// disturbance model so the two never disagree.
+pub fn valid_fatigue_frac(fraction: f64) -> bool {
+    fraction.is_finite() && (FATIGUE_FRAC_QUANTUM..=1.0).contains(&fraction)
+}
+
+/// Execution clock drawn on a great circle of S^3, for the robust report only.
+///
+/// No planner decision reads `theta_clock`, `spherical` or `theta_fatigue`:
+/// the robust scorer and the `fatigued` flag both use the integer
+/// [`ClockPhase::onset_tick`], never an angle. The angles are telemetry the
+/// service echoes as `clock_phase`. `theta_clock` is kept unwrapped (it grows
+/// past `2 pi` once `time_used > budget`) because the embedding alone maps an
+/// empty and an exhausted budget to the same point.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct ClockPhase {
+    pub theta_clock: f64,
+    pub spherical: [f64; 4],
+    pub theta_fatigue: Option<f64>,
+    pub fatigued: bool,
+}
+
+impl ClockPhase {
+    pub fn new(
+        time_used: u64,
+        budget: u32,
+        fatigue_frac: Option<f64>,
+    ) -> std::result::Result<Self, LodError> {
+        if budget == 0 || fatigue_frac.is_some_and(|f| !valid_fatigue_frac(f)) {
+            return Err(LodError::Geometry(Reject::DomainViolation));
+        }
+        let theta_clock = std::f64::consts::TAU * (time_used as f64 / f64::from(budget));
+        let theta_fatigue = fatigue_frac.map(|f| std::f64::consts::TAU * f);
+        // Decided on the integer onset tick, not by comparing the two angles.
+        let fatigued = match fatigue_frac {
+            Some(f) => time_used >= Self::onset_tick(budget, f)?,
+            None => false,
+        };
+        let (sin, cos) = theta_clock.sin_cos();
+        Ok(Self {
+            theta_clock,
+            spherical: [cos, sin, 0.0, 0.0],
+            theta_fatigue,
+            fatigued,
+        })
+    }
+
+    /// First clock tick at or after `fraction * budget`, for a fraction that
+    /// passes [`valid_fatigue_frac`].
+    ///
+    /// A raw `f64` ceil is wrong at integers: `0.07 * 100.0` is
+    /// `7.000000000000001`, and its `ceil` is 8. Two paths avoid that:
+    ///
+    /// - Decimal grid. If `fraction` is exactly the `f64` nearest to `q / 1e9`
+    ///   for an integer `q` (true of every literal with at most 9 decimals),
+    ///   the onset is `ceil(q * budget / 1e9)` in `u64`, with no rounding at
+    ///   any budget. `q * budget <= 1e9 * u32::MAX` cannot overflow.
+    /// - Anything else (`2/3`, `0.0700000001`). A product within
+    ///   `4 * EPSILON * prod` above an integer `k` is taken as `k`, which
+    ///   absorbs the rounding of the stored fraction and of the multiply, so
+    ///   `2/3 * 3` is 2 and `1/6 * 6` is 1. There is no absolute floor, so
+    ///   `0.070000000000005 * 100` is 8. Gotcha: a genuine excess below
+    ///   `4 * EPSILON * prod` is still read as `k`; that is under one part in
+    ///   `1e15` of the budget.
+    ///
+    /// An invalid fraction or a zero budget returns a domain violation.
+    pub fn onset_tick(budget: u32, fraction: f64) -> std::result::Result<u64, LodError> {
+        if budget == 0 || !valid_fatigue_frac(fraction) {
+            return Err(LodError::Geometry(Reject::DomainViolation));
+        }
+        let q = (fraction * FATIGUE_FRAC_PARTS as f64).round() as u64;
+        if q as f64 / FATIGUE_FRAC_PARTS as f64 == fraction {
+            return Ok((q * u64::from(budget)).div_ceil(FATIGUE_FRAC_PARTS));
+        }
+        let prod = fraction * f64::from(budget);
+        let floor_k = prod.floor();
+        if prod - floor_k <= prod * f64::EPSILON * 4.0 {
+            Ok(floor_k as u64)
+        } else {
+            Ok(prod.ceil() as u64)
+        }
+    }
+}
+
+/// Dedicated statistical chart; does not overwrite a graph node's existing R^8
+/// semantic coordinates. None is an explicitly infinite Dirichlet strength.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+pub struct DisturbanceMoments {
+    pub mean: f64,
+    pub variance: f64,
+    pub kappa: Option<f64>,
+}
+
 use crate::error::LodError;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::PI;
@@ -2764,5 +2868,111 @@ mod tests {
         let layout = TopologyPreset::Compact64d.layout();
         let other = ProductManifold::new(layout, p, epochs_for(layout, p)).unwrap();
         assert!(origin.to_point(&other).is_err());
+    }
+}
+
+#[cfg(test)]
+mod fatigue_phase_tests {
+    use super::{ClockPhase, FATIGUE_FRAC_PARTS, FATIGUE_FRAC_QUANTUM};
+    #[test]
+    fn clock_unwraps_and_crosses_fractional_tick_without_resetting_at_budget() {
+        let before = ClockPhase::new(3, 10, Some(0.35)).unwrap();
+        let after = ClockPhase::new(4, 10, Some(0.35)).unwrap();
+        assert!(!before.fatigued);
+        assert!(after.fatigued);
+        for tick in [0, 4, 10, 20] {
+            let phase = ClockPhase::new(tick, 10, Some(0.35)).unwrap();
+            assert!((phase.theta_clock - std::f64::consts::TAU * tick as f64 / 10.0).abs() < 1e-14);
+            assert!((phase.spherical.iter().map(|v| v * v).sum::<f64>() - 1.0).abs() < 1e-14);
+            assert_eq!(phase.fatigued, tick >= 4);
+        }
+        assert!(!ClockPhase::new(20, 10, None).unwrap().fatigued);
+    }
+    #[test]
+    fn invalid_clock_parameters_are_refused() {
+        assert!(ClockPhase::new(0, 0, None).is_err());
+        for f in [0.0, -0.1, 1.1, 1e-10, f64::NAN, f64::INFINITY] {
+            assert!(ClockPhase::new(1, 10, Some(f)).is_err());
+        }
+        assert!(ClockPhase::new(10, 10, Some(1.0)).unwrap().fatigued);
+    }
+    #[test]
+    fn onset_tick_rejects_invalid_inputs_fail_closed() {
+        assert!(ClockPhase::onset_tick(0, 0.07).is_err());
+        assert!(ClockPhase::onset_tick(100, 0.0).is_err());
+        assert!(ClockPhase::onset_tick(100, -0.07).is_err());
+        assert!(ClockPhase::onset_tick(100, 1.01).is_err());
+        assert!(ClockPhase::onset_tick(100, f64::NAN).is_err());
+        assert!(ClockPhase::onset_tick(100, f64::INFINITY).is_err());
+    }
+    #[test]
+    fn onset_tick_is_exact_for_decimal_fractions() {
+        // 0.07 * 100.0 == 7.000000000000001 in f64; a raw ceil() gives 8.
+        assert_eq!(ClockPhase::onset_tick(100, 0.07).unwrap(), 7);
+        // A real excess past the 9th decimal is not rounded away.
+        assert_eq!(ClockPhase::onset_tick(100, 0.0700000001).unwrap(), 8);
+        for k in 1..=99_u64 {
+            assert_eq!(ClockPhase::onset_tick(100, k as f64 / 100.0).unwrap(), k, "k = {k}");
+        }
+        assert_eq!(ClockPhase::onset_tick(10, 0.35).unwrap(), 4);
+        assert_eq!(ClockPhase::onset_tick(7, 0.42).unwrap(), 3);
+        assert_eq!(ClockPhase::onset_tick(u32::MAX, 1.0).unwrap(), u64::from(u32::MAX));
+        assert_eq!(ClockPhase::onset_tick(1, FATIGUE_FRAC_QUANTUM).unwrap(), 1);
+        assert!(!ClockPhase::new(6, 100, Some(0.07)).unwrap().fatigued);
+        assert!(ClockPhase::new(7, 100, Some(0.07)).unwrap().fatigued);
+    }
+    #[test]
+    fn onset_tick_is_exact_for_decimal_fractions_at_large_budgets() {
+        // A relative rounding band widens with the budget; past 600_000 it
+        // swallowed a whole real excess of 1e-9 * b and fired one tick early.
+        assert_eq!(ClockPhase::onset_tick(600_001, 0.999400001).unwrap(), 599_642);
+        assert_eq!(ClockPhase::onset_tick(1_437_833, 0.515309497).unwrap(), 740_930);
+    }
+    #[test]
+    fn onset_tick_keeps_tiny_real_excess() {
+        // Off the 1e-9 grid: an absolute floor on the band would read these as 7.
+        assert_eq!(ClockPhase::onset_tick(100, 0.0700000001).unwrap(), 8);
+        assert_eq!(ClockPhase::onset_tick(100, 0.070000000000005).unwrap(), 8);
+        assert_eq!(ClockPhase::onset_tick(100, 0.07 + 5e-16).unwrap(), 8);
+    }
+    #[test]
+    fn onset_tick_matches_exact_integers_across_budgets() {
+        // Budgets up to the planner's MAX_TRIAD_BUDGET (1 << 24) and past it.
+        let budgets = [1_u32, 7, 599_999, 600_001, 1_437_833, 1 << 24, u32::MAX];
+        let mut q = 1_u64;
+        while q <= FATIGUE_FRAC_PARTS {
+            let f = q as f64 / FATIGUE_FRAC_PARTS as f64;
+            for b in budgets {
+                let exact = (q * u64::from(b)).div_ceil(FATIGUE_FRAC_PARTS);
+                assert_eq!(ClockPhase::onset_tick(b, f).unwrap(), exact, "q = {q}, b = {b}");
+            }
+            q += 999_983;
+        }
+        // Off the grid: k / b * b is k at large budgets too.
+        for b in [7_u32, 999_983, (1 << 24) - 3, u32::MAX] {
+            for k in [u64::from(b) / 3, 2 * u64::from(b) / 7, u64::from(b) - 1] {
+                let f = k as f64 / f64::from(b);
+                assert_eq!(ClockPhase::onset_tick(b, f).unwrap(), k, "{k}/{b}");
+            }
+        }
+    }
+    #[test]
+    fn onset_tick_is_exact_for_non_decimal_fractions() {
+        // Off the 1e-9 grid, so these take the machine-precision path.
+        assert_eq!(ClockPhase::onset_tick(3, 2.0 / 3.0).unwrap(), 2);
+        assert_eq!(ClockPhase::onset_tick(6, 1.0 / 6.0).unwrap(), 1);
+        assert_eq!(ClockPhase::onset_tick(3, 1.0 / 3.0).unwrap(), 1);
+        // k / b * b is exactly k, so the onset is k; any (k + 0.5) / b lies
+        // strictly between k and k + 1, so the onset is k + 1.
+        for b in [3_u32, 6, 7, 10, 12, 100] {
+            for k in 1..=u64::from(b) {
+                let f = k as f64 / f64::from(b);
+                assert_eq!(ClockPhase::onset_tick(b, f).unwrap(), k, "{k}/{b}");
+                if k < u64::from(b) {
+                    let half = (k as f64 + 0.5) / f64::from(b);
+                    assert_eq!(ClockPhase::onset_tick(b, half).unwrap(), k + 1, "{k}.5/{b}");
+                }
+            }
+        }
     }
 }

@@ -41,7 +41,7 @@ TEXTS = [
     "Premise: The president advised the doctor.\nHypothesis: The doctor advised the president.\n"
     "Determine whether the premise entails the hypothesis.",
     "Frage: Wie spät ist es?",
-    "質問: 今日は何曜日ですか？",
+    "Question: What day of the week is today?",
 ]
 
 

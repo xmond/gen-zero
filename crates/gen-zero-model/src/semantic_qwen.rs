@@ -65,6 +65,33 @@ const RISK_ORDERS: [[usize; 16]; 3] = [
     [3, 7, 13, 11, 6, 5, 0, 10, 14, 8, 4, 15, 1, 12, 2, 9],
 ];
 
+/// How token hidden states become one dense embedding
+/// ([`QwenSemanticScorer::embed_with_pooling`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PoolingMode {
+    /// Length-normalized mean of every token's final hidden state, then
+    /// scaled to unit L2 norm. Every token of the text contributes equally,
+    /// so a long and a short paraphrase of the same meaning still land close:
+    /// the production choice for document and payload retrieval
+    /// (`graph_deposit` / `graph_rag` dense track).
+    Mean,
+    /// The final hidden state of the last token only, unit L2 normalized. An
+    /// autoregressive decoder's last-token state already summarizes the
+    /// prefix that produced it, so this pools a chain-of-thought prefix
+    /// without averaging its intermediate reasoning tokens into the vector.
+    LastToken,
+}
+
+impl PoolingMode {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Mean => "mean",
+            Self::LastToken => "last_token",
+        }
+    }
+}
+
 /// Continuation text for one candidate. Same rule for every language.
 pub fn candidate_text(name: &str) -> String {
     format!(" {}", name.replace('_', " ").trim())
@@ -505,6 +532,96 @@ impl QwenSemanticScorer {
         Ok(enc.get_ids().to_vec())
     }
 
+    /// Id of the text embedding [`Self::embed`] returns.
+    pub fn embedder_id(&self) -> String {
+        self.embedder_id_for(PoolingMode::Mean)
+    }
+
+    /// [`Self::embedder_id`] for a given [`PoolingMode`], e.g.
+    /// `qwen2-native:.../final-norm-mean-pool-l2` or
+    /// `.../final-norm-last_token-pool-l2`.
+    pub fn embedder_id_for(&self, pooling: PoolingMode) -> String {
+        format!(
+            "{}/final-norm-{}-pool-l2",
+            self.backbone_id(),
+            pooling.as_str()
+        )
+    }
+
+    /// [`Self::embed_with_pooling`] with [`PoolingMode::Mean`], the pooling
+    /// every production dense-track caller uses today.
+    pub fn embed(&self, text: &str) -> Result<Vec<f32>, ModelError> {
+        self.embed_with_pooling(text, PoolingMode::Mean)
+    }
+
+    /// Dense embedding of `text` under `pooling` (`hidden_size` wide, 896 for
+    /// Qwen2.5-0.5B), scaled to unit L2 norm. Refused: text that tokenizes to
+    /// nothing, and a pooled vector that is not finite or has norm 0.
+    pub fn embed_with_pooling(
+        &self,
+        text: &str,
+        pooling: PoolingMode,
+    ) -> Result<Vec<f32>, ModelError> {
+        self.embed_ids_with_pooling(&self.encode(text)?, pooling)
+    }
+
+    /// [`Self::embed`] of text already tokenized with [`Self::encode`].
+    pub fn embed_ids(&self, ids: &[u32]) -> Result<Vec<f32>, ModelError> {
+        self.embed_ids_with_pooling(ids, PoolingMode::Mean)
+    }
+
+    /// [`Self::embed_with_pooling`] of text already tokenized with [`Self::encode`].
+    ///
+    /// [`PoolingMode::Mean`]: a text longer than [`MAX_SEQ_LEN`] tokens runs as
+    /// consecutive windows of at most that many tokens, each with no context
+    /// from the one before, and every token of every window counts once in the
+    /// mean: nothing is cut.
+    ///
+    /// [`PoolingMode::LastToken`]: only the final hidden state of the last
+    /// token is pooled; a text longer than [`MAX_SEQ_LEN`] tokens is truncated
+    /// to its last [`MAX_SEQ_LEN`] tokens first, so the pooled state's context
+    /// is the most recent window, not the whole text.
+    pub fn embed_ids_with_pooling(
+        &self,
+        ids: &[u32],
+        pooling: PoolingMode,
+    ) -> Result<Vec<f32>, ModelError> {
+        if ids.is_empty() {
+            return Err(ModelError::QwenInput(
+                "text to embed tokenized to nothing".into(),
+            ));
+        }
+        let err = candle_err("text embedding");
+        match pooling {
+            PoolingMode::Mean => {
+                let mut sum = Tensor::zeros(
+                    self.info.hidden_size,
+                    candle_core::DType::F32,
+                    self.model.device(),
+                )
+                .map_err(&err)?;
+                for window in ids.chunks(MAX_SEQ_LEN) {
+                    let (hidden, _) = self.model.forward(&[window.to_vec()], None)?;
+                    let window_sum = hidden.i(0).and_then(|h| h.sum(0)).map_err(&err)?;
+                    sum = (sum + window_sum).map_err(&err)?;
+                }
+                let pooled = sum.to_vec1::<f32>().map_err(&err)?;
+                mean_l2_normalize(pooled, ids.len())
+            }
+            PoolingMode::LastToken => {
+                let window: Vec<u32> = ids
+                    .len()
+                    .checked_sub(MAX_SEQ_LEN)
+                    .map(|start| ids[start..].to_vec())
+                    .unwrap_or_else(|| ids.to_vec());
+                let (hidden, _) = self.model.forward(std::slice::from_ref(&window), None)?;
+                let last = hidden.i((0, window.len() - 1)).map_err(&err)?;
+                let pooled = last.to_vec1::<f32>().map_err(&err)?;
+                mean_l2_normalize(pooled, 1)
+            }
+        }
+    }
+
     fn single_token(&self, text: &str) -> Result<u32, ModelError> {
         match self.encode(text)?.as_slice() {
             [id] => Ok(*id),
@@ -869,6 +986,27 @@ fn validate_candidates(names: &[String]) -> Result<(), ModelError> {
     Ok(())
 }
 
+/// Divide a token sum by `tokens` and scale it to unit L2 norm. A value that
+/// is not finite or a norm of 0 is refused, never returned as a vector.
+fn mean_l2_normalize(sum: Vec<f32>, tokens: usize) -> Result<Vec<f32>, ModelError> {
+    if tokens == 0 {
+        return Err(ModelError::QwenInput("no token to pool".into()));
+    }
+    let mean: Vec<f64> = sum.iter().map(|&v| f64::from(v) / tokens as f64).collect();
+    if let Some(i) = mean.iter().position(|v| !v.is_finite()) {
+        return Err(ModelError::NumericalInstability(format!(
+            "pooled hidden state [{i}] is not finite"
+        )));
+    }
+    let norm = mean.iter().map(|v| v * v).sum::<f64>().sqrt();
+    if !(norm.is_finite() && norm > 0.0) {
+        return Err(ModelError::NumericalInstability(format!(
+            "pooled hidden state has norm {norm}"
+        )));
+    }
+    Ok(mean.iter().map(|v| (v / norm) as f32).collect())
+}
+
 /// A GGUF carries its own vocabulary. Refuse a tokenizer.json whose tokens
 /// differ from it: every score would be computed on the wrong ids.
 fn check_gguf_vocab(path: &Path, tok: &Tokenizer) -> Result<(), ModelError> {
@@ -971,6 +1109,21 @@ mod tests {
     }
 
     #[test]
+    fn pooling_mode_names_are_explicit_and_distinct() {
+        assert_eq!(PoolingMode::Mean.as_str(), "mean");
+        assert_eq!(PoolingMode::LastToken.as_str(), "last_token");
+        assert_ne!(PoolingMode::Mean.as_str(), PoolingMode::LastToken.as_str());
+        assert_eq!(
+            serde_json::to_string(&PoolingMode::Mean).unwrap(),
+            "\"mean\""
+        );
+        assert_eq!(
+            serde_json::to_string(&PoolingMode::LastToken).unwrap(),
+            "\"last_token\""
+        );
+    }
+
+    #[test]
     fn softmax_and_entropy() {
         let p = softmax(&[0.0, 0.0]).unwrap();
         assert_eq!(p, vec![0.5, 0.5]);
@@ -1013,6 +1166,28 @@ mod tests {
         assert!(validate_candidates(&c(&["a", "a"])).is_err());
         assert!(validate_candidates(&c(&["a", " "])).is_err());
         assert!(validate_candidates(&c(&["a", "b"])).is_ok());
+    }
+
+    #[test]
+    fn mean_pooling_is_unit_norm_and_refuses_degenerate_sums() {
+        let v = mean_l2_normalize(vec![3.0, 4.0, 0.0], 2).unwrap();
+        assert_eq!(v, vec![0.6, 0.8, 0.0]);
+        let n: f32 = v.iter().map(|x| x * x).sum();
+        assert!((n - 1.0).abs() < 1e-6);
+        assert!(matches!(
+            mean_l2_normalize(vec![0.0; 896], 3),
+            Err(ModelError::NumericalInstability(_))
+        ));
+        assert!(matches!(
+            mean_l2_normalize(vec![1.0, f32::NAN], 1),
+            Err(ModelError::NumericalInstability(_))
+        ));
+        // f32::MAX squared overflows f32; the f64 sum does not.
+        assert!(mean_l2_normalize(vec![f32::MAX, f32::MAX], 1).is_ok());
+        assert!(matches!(
+            mean_l2_normalize(vec![1.0], 0),
+            Err(ModelError::QwenInput(_))
+        ));
     }
 
     #[test]

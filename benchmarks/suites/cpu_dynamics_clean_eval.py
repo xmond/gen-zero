@@ -373,56 +373,56 @@ def main() -> int:
 
 def render_md(rep: Dict[str, Any]) -> str:
     L: List[str] = []
-    L.append("# CPU 零 Token 干净评测：校准反事实漂移动力学 vs 冻结零标签 9B 头（%s）" % rep["generated_at_utc"][:10])
+    L.append("# CPU zero-token clean evaluation: calibrated counterfactual-drift dynamics vs frozen zero-label 9B head (%s)" % rep["generated_at_utc"][:10])
     L.append("")
-    L.append("> **本次比较的是什么。** 同一批冻结的 Qwen3.5-9B 隐状态（A100 2026-09-22 抽取，每任务 30 条 id），")
-    L.append("> 零标签 ar_loglik/manifold 头（A100 产物）对 校准 CPU 动力学头（本次，重复分层 5 折）。")
-    L.append("> 本机无 GPU、无 9B 权重：**没有新的 9B 前向，PAWS-400 未评测**（只有 30 条有冻结特征）。")
-    L.append("> 校准头用了校准折的标签（从不用测试折），**不是零标签方法**；与 56.73% 并列只是参照，不是同信息量对比。")
-    L.append("> `1.png` 在仓库中不存在；Nimble/Jev 官方数字取自 Track C 哈希绑定的 PUBLIC_BENCHMARKS.md 副本。")
+    L.append("> **What is being compared.** The same frozen Qwen3.5-9B hidden states (extracted on an A100 on 2026-09-22, 30 ids per task),")
+    L.append("> zero-label ar_loglik/manifold head (A100 artifact) versus the calibrated CPU dynamics head (this run, repeated stratified 5-fold).")
+    L.append("> This host has no GPU or 9B weights: **no new 9B forward pass; PAWS-400 was not evaluated** (only 30 rows have frozen features).")
+    L.append("> The calibration head used labels from calibration folds (never test folds), **so it is not a zero-label method**; it is shown alongside 56.73% only as a reference, not an equal-information comparison.")
+    L.append("> `1.png` is not present in the repository; official Nimble/Jev numbers come from Track C's hash-bound copy of PUBLIC_BENCHMARKS.md.")
     L.append("")
-    L.append("命令：`%s`  HEAD：`%s`  特征 SHA-256：`%s`" % (rep["command"], rep["git_head"], rep["inputs"]["features_sha256"]))
+    L.append("Command: `%s`  HEAD: `%s`  Feature SHA-256: `%s`" % (rep["command"], rep["git_head"], rep["inputs"]["features_sha256"]))
     L.append("")
     for task, t in rep["tasks"].items():
-        L.append("## %s（n=%d，%d 候选，多数类 %.2f%%）" % (task, t["n"], t["k_candidates"], t["majority_baseline_pct_all30"]))
+        L.append("## %s (n=%d, %d candidates, majority class %.2f%%)" % (task, t["n"], t["k_candidates"], t["majority_baseline_pct_all30"]))
         L.append("")
-        L.append("反事实向量 c：%s" % t["counterfactual_definition"])
+        L.append("Counterfactual vector c: %s" % t["counterfactual_definition"])
         L.append("")
-        L.append("| 配置 | 标签用途 | 均值准确率 %% (%d 次重复) | 重复间 std | 最小/最大 | repeat0 Wilson95 |" % t["protocol"]["repeats"])
+        L.append("| Configuration | Label use | Mean accuracy %% (%d repeats) | Std. across repeats | Min/max | repeat0 Wilson95 |" % t["protocol"]["repeats"])
         L.append("|---|---|---:|---:|---|---|")
         z = t["reference_zero_label_paired_30_ids"]
-        L.append("| 零标签 9B 头（A100 产物，同 30 id） | 无 | %.2f | – | – | %s |" % (z["accuracy_pct"], z["wilson95_pct"]))
+        L.append("| Zero-label 9B head (A100 artifact, same 30 ids) | None | %.2f | – | – | %s |" % (z["accuracy_pct"], z["wilson95_pct"]))
         zf = t["reference_zero_label_full"]
-        L.append("| 零标签 9B 头（全量 n=%d，参照） | 无 | %.2f | – | – | %s |" % (zf["n"], zf["accuracy_pct"], zf["wilson95_pct"]))
+        L.append("| Zero-label 9B head (full n=%d, reference) | None | %.2f | – | – | %s |" % (zf["n"], zf["accuracy_pct"], zf["wilson95_pct"]))
         for name, r in t["results"].items():
-            use = "校准折标签" if name not in ("calibration_fold_majority",) else "校准折标签（仅多数类）"
+            use = "Calibration-fold labels" if name not in ("calibration_fold_majority",) else "Calibration-fold labels (majority class only)"
             L.append("| %s | %s | %.2f | %.2f | %.2f / %.2f | %s |" % (
                 name, use, r["mean_accuracy_pct"], r["std_over_repeats_pct"], r["min_pct"], r["max_pct"], r["repeat0_wilson95_pct"]))
         o = t["reference_official"]
-        L.append("| 官方 Nimble-9B（%s, n=%d） | 微调 | %.1f | – | – | – |" % (o["subset"], o["n"], o["nimble_9b_pct"]))
-        L.append("| 官方 Jev 1.13.0（%s, n=%d） | 微调 | %.1f | – | – | – |" % (o["subset"], o["n"], o["jev_1_13_0_pct"]))
+        L.append("| Official Nimble-9B (%s, n=%d) | Fine-tuned | %.1f | – | – | – |" % (o["subset"], o["n"], o["nimble_9b_pct"]))
+        L.append("| Official Jev 1.13.0 (%s, n=%d) | Fine-tuned | %.1f | – | – | – |" % (o["subset"], o["n"], o["jev_1_13_0_pct"]))
         L.append("")
         d = t["diagnostics"]
-        L.append("诊断：Langevin 收敛比例 %.3f；专家把真候选剪掉的比例 %.3f；松弛残差最大 %.2e；ridge λ 直方图 %s" % (
+        L.append("Diagnostics: Langevin convergence fraction %.3f; fraction where the expert pruned the true candidate %.3f; max relaxation residual %.2e; ridge λ histogram %s" % (
             d["langevin_converged_fraction"], d["expert_pruned_true_candidate_fraction"], d["relaxation_residual_max"], d["ridge_lambda_histogram"]))
         L.append("")
         lat = t["latency_cpu_ms_post_feature"]
-        L.append("| 时延/吞吐 | P50 ms | P90 ms | 吞吐 样本/s | 说明 |")
+        L.append("| Latency/throughput | P50 ms | P90 ms | Throughput samples/s | Notes |")
         L.append("|---|---:|---:|---:|---|")
-        L.append("| CPU 全配置（特征之后） | %.3f | %.3f | %.1f | 不含 9B 前向 |" % (lat["full_calibrated_dynamics"]["p50"], lat["full_calibrated_dynamics"]["p90"], lat["full_calibrated_dynamics"]["throughput_samples_per_s"]))
-        L.append("| CPU 仅读出（特征之后） | %.3f | %.3f | %.1f | 不含 9B 前向 |" % (lat["readout_only"]["p50"], lat["readout_only"]["p90"], lat["readout_only"]["throughput_samples_per_s"]))
-        L.append("| A100 零标签 e2e（同 30 id） | %.2f | %.2f | – | 含 9B 前向 + ar 打分，不可直接比 |" % (z["a100_e2e_ms_p50"], z["a100_e2e_ms_p90"]))
+        L.append("| CPU full configuration (post-feature) | %.3f | %.3f | %.1f | Excludes 9B forward pass |" % (lat["full_calibrated_dynamics"]["p50"], lat["full_calibrated_dynamics"]["p90"], lat["full_calibrated_dynamics"]["throughput_samples_per_s"]))
+        L.append("| CPU readout-only (post-feature) | %.3f | %.3f | %.1f | Excludes 9B forward pass |" % (lat["readout_only"]["p50"], lat["readout_only"]["p90"], lat["readout_only"]["throughput_samples_per_s"]))
+        L.append("| A100 zero-label e2e (same 30 ids) | %.2f | %.2f | – | Includes 9B forward + ar scoring; not directly comparable |" % (z["a100_e2e_ms_p50"], z["a100_e2e_ms_p90"]))
         L.append("")
         m = t["memory"]
-        L.append("内存：全配置 30 样本 tracemalloc 峰值 %d 字节；工件工作集 %d 字节；GPU 显存 0。" % (
+        L.append("Memory: full configuration, 30 samples, tracemalloc peak %d bytes; artifact working set %d bytes; GPU memory 0." % (
             m["tracemalloc_peak_bytes_full_config_30_samples"], m["artifact_working_set_bytes"]))
         L.append("")
-    L.append("## 11 任务宏平均参照（Track C，不可在此复现）")
+    L.append("## 11-task macro-average reference (Track C; not reproducible here)")
     L.append("")
     for k2, v in rep["comparison_frame"]["shared11_macro_reference"].items():
         L.append("- %s: %s" % (k2, v))
     L.append("")
-    L.append("## 限制")
+    L.append("## Limitations")
     L.append("")
     for lim in rep["limitations"]:
         L.append("- " + lim)

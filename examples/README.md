@@ -74,6 +74,26 @@ learned world model or useful real-world control. No checkpoint is mounted
 in this state, so `GenZero()` logs degraded-mode warnings to stderr; stdout
 stays a single valid JSON object.
 
+## 4. Qwen2.5-1.5B contrastive decoding (CAD) on CPU
+
+`quickstart_qwen15b_cad.py` runs the public Qwen2.5-1.5B-Instruct Q4_K_M GGUF
+through the pure-inference CAD engine (`delta = cond - alpha * prior`, yes / no /
+maybe verbalizer logits, last-position logits only). No weights ship in this repo.
+
+```sh
+pip install -e "./python[gguf]"
+python3 -m gen_zero.scripts.setup_qwen15b_models      # ~1.1 GB, size + sha256 verified
+python3 examples/quickstart_qwen15b_cad.py
+gen-zero cad --gguf models/qwen2.5-1.5b-instruct-gguf/qwen2.5-1.5b-instruct-q4_k_m.gguf \
+    --question "Is the bridge open?" --context "The bridge was closed after inspectors found cracks."
+```
+
+With no calibration head the output is UNCALIBRATED: `alpha`, `temperature` and
+`maybe_bias` are untuned defaults and the six demo cases are an illustration,
+not a benchmark. On those six cases the CAD argmax equals the context-only
+argmax, so the demo shows no CAD gain. `--workers N [--numa-pin]` fans a JSONL
+batch out over a pinned multi-process GGUF pool (Linux).
+
 ## Running the tests
 
 ```sh

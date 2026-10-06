@@ -45,7 +45,35 @@ from .latent_bridge import (
     retract_to_manifold,
 )
 
+from .cad_engine import (
+    CADEngine,
+    CADResult,
+    CalibrationHead,
+    PromptTemplate,
+    extract_causal_features,
+)
+from .numa_affinity import NumaTopology, WorkerPlacement, plan_placements, read_topology
+from .verbalizer_extractor import (
+    HFVerbalizerExtractor,
+    LlamaCppVerbalizerExtractor,
+    VerbalizerSpec,
+    candidate_groups,
+)
+
 __all__ = [
+    "CADEngine",
+    "CADResult",
+    "CalibrationHead",
+    "PromptTemplate",
+    "extract_causal_features",
+    "NumaTopology",
+    "WorkerPlacement",
+    "plan_placements",
+    "read_topology",
+    "HFVerbalizerExtractor",
+    "LlamaCppVerbalizerExtractor",
+    "VerbalizerSpec",
+    "candidate_groups",
     "ManifoldAnchorDistiller",
     "NanocoreAnchorBridge",
     "ShuffledStateBenchmark",

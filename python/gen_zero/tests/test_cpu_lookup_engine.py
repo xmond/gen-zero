@@ -535,7 +535,7 @@ class TestHardenedRemediationVerifications:
             ("5%", "5"),
             ("–5", "5"),
             ("3.14", "314"),
-            ("剂量1.5毫克", "剂量15毫克"),
+            ("dose 1.5mg", "dose 15mg"),
             ("أسعار ٥٪", "أسعار ٥"),
         ]
         for a, b in pairs:

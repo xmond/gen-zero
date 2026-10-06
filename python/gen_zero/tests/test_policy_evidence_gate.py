@@ -8,7 +8,7 @@ from gen_zero.gate.safety_gate import (
 )
 
 
-@pytest.mark.parametrize("prompt,choice", [("", ""), ("请求", "动作"), ("طلب", "إجراء"), ("requête", "action")])
+@pytest.mark.parametrize("prompt,choice", [("", ""), ("req_safe", "act_safe"), ("طلب", "إجراء"), ("requête", "action")])
 def test_policy_is_language_independent(prompt, choice):
     gate = TwoTierPolicyGate()
     evidence = PolicyAssessment(prompt, choice, 0.01, 0.02)
@@ -63,10 +63,10 @@ def test_missing_and_mismatched_evidence_never_passes():
 
 def test_integration_and_prompt_evidence():
     gate = SafetyGate()
-    evidence = PolicyAssessment("请求", "", 0, 0)
-    assert gate.evaluate_prompt_safety("请求", confidence=0.9, assessment=evidence).passed
-    assert gate.evaluate_decision("请求", "", 0.9, assessment=evidence).passed
-    assert not gate.evaluate_prompt_safety("请求", confidence=0.9).passed
+    evidence = PolicyAssessment("req_safe", "", 0, 0)
+    assert gate.evaluate_prompt_safety("req_safe", confidence=0.9, assessment=evidence).passed
+    assert gate.evaluate_decision("req_safe", "", 0.9, assessment=evidence).passed
+    assert not gate.evaluate_prompt_safety("req_safe", confidence=0.9).passed
 
 
 @pytest.mark.parametrize("options", [

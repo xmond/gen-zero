@@ -87,10 +87,10 @@ def test_discourse_turn_german_postposed_marker():
 
 
 def test_discourse_turn_chinese():
-    focus = analyze_discourse_focus("虽然天色已晚，救援队依然继续前行。")
+    focus = analyze_discourse_focus("Although it was late, the rescue team pushed forward.")
     assert focus.has_turn
-    assert "继续前行" in _nucleus(focus)[0]
-    assert "天色已晚" in _concession(focus)[0]
+    assert "pushed forward" in _nucleus(focus)[0]
+    assert "was late" in _concession(focus)[0]
 
 
 def test_discourse_turn_implicit_no_conjunction():
@@ -155,9 +155,9 @@ def test_nucleus_weighted_passage_grounds_answer():
 def test_number_conflict_digits_only_across_scripts():
     gate = EpistemicGroundingGate()
     assert gate.evaluate_evidence("Die Firma wurde 1990 gegründet.", "Wann wurde die Firma 2005 gegründet?").number_conflict
-    assert gate.evaluate_evidence("公司成立于1990年。", "公司在2005年成立了吗？").number_conflict
+    assert gate.evaluate_evidence("Company was founded in 1990.", "Was the company founded in 2005?").number_conflict
     # Full-width digits fold to the same number.
-    assert not gate.evaluate_evidence("公司成立于1990年。", "公司在１９９０年成立了吗？").number_conflict
+    assert not gate.evaluate_evidence("Company was founded in 1990.", "Was the company founded in 1990?").number_conflict
     # Thousands grouping does not create a false conflict.
     assert not gate.evaluate_evidence("The fund holds 1,200 shares.", "Does the fund hold 1200 shares?").number_conflict
 

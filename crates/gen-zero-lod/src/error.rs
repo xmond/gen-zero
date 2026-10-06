@@ -80,6 +80,25 @@ pub enum LodError {
     PayloadTooLarge { len: usize, max: usize },
     #[error("Invalid payload: {0}")]
     InvalidPayload(String),
+    #[error("Operator node {0} is revoked")]
+    OperatorNodeRevoked(u32),
+    #[error("Operator node {0} is falsified")]
+    OperatorNodeFalsified(u32),
+    #[error("Invalid operator: {0}")]
+    InvalidOperator(String),
+    #[error("Operator `{0}` is not registered in this LodGraph")]
+    OperatorNotFound(String),
+    #[error("Operator `{operator}` refused its nonce: {detail}")]
+    OperatorNonceRejected { operator: String, detail: String },
+    #[error("Operator `{operator}` precondition failed: {detail}")]
+    OperatorPreconditionFailed { operator: String, detail: String },
+    #[error("Operator `{operator}` transit failed: {detail}")]
+    OperatorTransitFailed { operator: String, detail: String },
+    #[error("Operator `{operator}` postcondition failed: {violations:?}")]
+    OperatorPostconditionFailed {
+        operator: String,
+        violations: Vec<String>,
+    },
     #[error("Core error: {0}")]
     Core(#[from] gen_zero_core::CoreError),
 }

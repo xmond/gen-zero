@@ -32,4 +32,10 @@ pub enum ModelError {
     QwenInput(String),
     #[error("Qwen inference failed: {0}")]
     Inference(String),
+    #[error("Tri-teacher adapter invalid: {0}")]
+    TriTeacherArtifact(String),
+    #[error("Tri-teacher input rejected: {0}")]
+    TriTeacherInput(String),
+    #[error("Tri-teacher decider has no student encoder: {0}")]
+    TriTeacherEncoderMissing(String),
 }

@@ -286,7 +286,7 @@ class TestCpSatFormalEngine(unittest.TestCase):
             "query_log": "READ_ONLY", "quarantine": "READ_ONLY",
         })
 
-        state = {"text": "status: unauthorized access detected 已授权=no"}
+        state = {"text": "status: unauthorized access detected authorized=no"}
         candidates = ["approve", "execute", "query_log", "quarantine"]
 
         res = engine.verify_and_prune(state, candidates)

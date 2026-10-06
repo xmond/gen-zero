@@ -64,6 +64,7 @@ fn decide_req<'a>(state: &'a FullLatent, mode: DecideMode) -> DecideRequest<'a> 
         entropy: NormalizedEntropy(0.5),
         return_trajectory: false,
         horizon: 4,
+        causal_triad: None,
     }
 }
 
@@ -202,6 +203,7 @@ fn zero_uncertainty_weight_picks_the_higher_reward_despite_displacement() {
             entropy: NormalizedEntropy(0.5),
             return_trajectory: false,
             horizon: 4,
+            causal_triad: None,
         })
         .unwrap();
     assert_eq!(decision.action, ActionId(2));
@@ -236,6 +238,7 @@ fn high_uncertainty_weight_picks_the_calmer_lower_reward_action() {
             entropy: NormalizedEntropy(0.5),
             return_trajectory: false,
             horizon: 4,
+            causal_triad: None,
         })
         .unwrap();
     assert_eq!(decision.action, ActionId(1));

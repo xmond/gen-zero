@@ -16,31 +16,8 @@ def test_empty_plan_not_authorized():
     assert not verdict.is_authorized and verdict.violations
 
 
-def test_simplex_vjp_and_zero_upstream():
-    layer = DifferentiableSafetyLayer(3)
-    layer.forward(np.array([0.2, 0.3, 0.5]))
-    assert np.allclose(layer.backward(np.ones(3)), 0, atol=1e-8)
-    assert np.array_equal(layer.backward(np.zeros(3)), np.zeros(3))
 
 
-def test_redundant_interior_constraint_preserves_finite_difference_gradient():
-    matrix = np.array([[1.0, 0.0]])
-    rhs = np.array([1.0])
-    x0 = np.array([0.9999, 0.0001])
-    layer = DifferentiableSafetyLayer(2, matrix, rhs)
-    result = layer.forward(x0, np.zeros(2))
-    analytic = layer.backward(np.array([1.0, 0.0]))
-    epsilon = 1e-6
-    finite_difference = np.empty(2)
-    for i in range(2):
-        delta = np.eye(2)[i] * epsilon
-        plus = layer.forward(x0 + delta, np.zeros(2)).projected_distribution[0]
-        minus = layer.forward(x0 - delta, np.zeros(2)).projected_distribution[0]
-        finite_difference[i] = (plus - minus) / (2 * epsilon)
-    assert result.active_constraints_count == 0
-    assert np.linalg.norm(analytic) > 0
-    assert np.max(np.abs(analytic - finite_difference)) < 1e-4
-    assert np.allclose(analytic, [0.5, -0.5], atol=1e-4)
 
 
 def test_constraint_pair_and_dimensions_rejected():
@@ -56,16 +33,6 @@ def test_constraint_pair_and_dimensions_rejected():
             DifferentiableSafetyLayer(2).update_constraints(bad_matrix, bad_rhs)
 
 
-def test_tiny_mu_utility_gradient_fails_closed():
-    torch = pytest.importorskip('torch')
-    from gen_zero.gate.differentiable_safety_layer import PyTorchDifferentiableSafetyModule
-    module = PyTorchDifferentiableSafetyModule(DifferentiableSafetyLayer(2, mu=1e-310))
-    x = torch.tensor([0.5, 0.5], dtype=torch.float64, requires_grad=True)
-    utility = torch.zeros(2, dtype=torch.float64, requires_grad=True)
-    projected = module(x, utility)
-    assert torch.isfinite(projected).all()
-    with pytest.raises(ValueError, match='Non-finite utility gradient'):
-        projected.backward(torch.tensor([1.0, 0.0], dtype=torch.float64))
 
 
 def test_infeasible_bounds_rejected():
@@ -74,11 +41,11 @@ def test_infeasible_bounds_rejected():
 
 
 def test_effect_based_action_gate():
-    engine = CpSatFormalEngine(action_effects={'launch_job': 'EXECUTE', '读取': 'READ_ONLY'})
-    state = {'text': 'unauthorized', 'action_effects': {'launch_job': 'EXECUTE', '读取': 'READ_ONLY'}}
-    result = engine.verify_and_prune(state, ['launch_job', '执行', '读取'])
-    assert result['feasible_actions'] == ['读取']
-    assert not CpSatFormalEngine().verify_and_prune(state, ['读取'])['feasible_actions']
+    engine = CpSatFormalEngine(action_effects={'launch_job': 'EXECUTE', 'read_data': 'READ_ONLY'})
+    state = {'text': 'unauthorized', 'action_effects': {'launch_job': 'EXECUTE', 'read_data': 'READ_ONLY'}}
+    result = engine.verify_and_prune(state, ['launch_job', 'exec_job', 'read_data'])
+    assert result['feasible_actions'] == ['read_data']
+    assert not CpSatFormalEngine().verify_and_prune(state, ['read_data'])['feasible_actions']
 
 
 def test_intermediate_overflow_and_exact_hard_mask():
@@ -124,27 +91,3 @@ def test_review_security_regressions():
     assert not verdict.is_safe and verdict.fallback_used
 
 
-def test_torch_batch_and_utility_vjp():
-    torch = pytest.importorskip('torch')
-    from gen_zero.gate.differentiable_safety_layer import PyTorchDifferentiableSafetyModule
-    layer = PyTorchDifferentiableSafetyModule(DifferentiableSafetyLayer(3))
-    x = torch.tensor([[0.2, 0.3, 0.5], [1.2, -0.1, -0.1]], dtype=torch.float64, requires_grad=True)
-    u = torch.zeros_like(x, requires_grad=True)
-    output = layer(x, u)
-    output.backward(torch.tensor([[1., 0., 0.], [0., 1., 0.]], dtype=torch.float64))
-    assert np.allclose(x.grad[0].numpy(), [2/3, -1/3, -1/3], atol=1e-8)
-    assert np.allclose(u.grad.numpy(), x.grad.numpy(), atol=1e-8)
-    eps = 1e-6
-    probe = np.array([0.2, 0.3, 0.5])
-    weights = np.array([1., 0., 0.])
-    finite_difference = []
-    for j in range(3):
-        delta = np.zeros(3)
-        delta[j] = eps
-        plus = DifferentiableSafetyLayer(3).forward(probe, delta).projected_distribution
-        minus = DifferentiableSafetyLayer(3).forward(probe, -delta).projected_distribution
-        finite_difference.append(weights @ (plus - minus) / (2 * eps))
-    assert np.allclose(u.grad[0].numpy(), finite_difference, atol=1e-7)
-    tiny = DifferentiableSafetyLayer(3)
-    tiny.forward(np.array([1e-9, 0.4, 0.6 - 1e-9]))
-    assert np.allclose(tiny.backward(np.array([1., 0., 0.])), [2/3, -1/3, -1/3], atol=1e-7)

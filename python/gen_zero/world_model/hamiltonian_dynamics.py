@@ -363,7 +363,7 @@ class HamiltonianWorldModel:
 
 if HAS_TORCH:
     class PyTorchHamiltonianNeuralODE(nn.Module):
-        """Differentiable Hamiltonian Neural ODE with autograd symplectic vector fields."""
+        """Differentiable Hamiltonian Neural ODE with closed-form symplectic vector fields."""
 
         def __init__(
             self,
@@ -399,6 +399,15 @@ if HAS_TORCH:
             v_energy = self.v_net(q)
             return t_energy + v_energy
 
+        def _grad_potential(self, q: torch.Tensor) -> torch.Tensor:
+            """Closed-form dV/dq for V = w3 . tanh(W2 tanh(W1 q + b1) + b2)."""
+            lin1, lin2, lin3 = self.v_net[0], self.v_net[2], self.v_net[4]
+            h1 = torch.tanh(lin1(q))
+            h2 = torch.tanh(lin2(h1))
+            g2 = (1.0 - h2 * h2) * lin3.weight[0]
+            g1 = (1.0 - h1 * h1) * (g2 @ lin2.weight)
+            return g1 @ lin1.weight
+
         def forward_symplectic_step(
             self,
             z: torch.Tensor,
@@ -411,11 +420,8 @@ if HAS_TORCH:
 
             f_ext = self.action_encoder(action) if action is not None else 0.0
 
-            # 1. dV/dq at q_t
-            with torch.enable_grad():
-                q_req = q.clone().detach().requires_grad_(True)
-                v_q = self.v_net(q_req)
-                grad_v_q = torch.autograd.grad(v_q.sum(), q_req, create_graph=True)[0]
+            # 1. dV/dq at q_t (closed form)
+            grad_v_q = self._grad_potential(q)
 
             # 2. Half-step p
             p_half = p - 0.5 * dt * grad_v_q + 0.5 * dt * f_ext
@@ -424,11 +430,8 @@ if HAS_TORCH:
             eff_inv_m = torch.abs(self.inv_mass) + 1e-4
             q_next = q + dt * (eff_inv_m * p_half)
 
-            # 4. dV/dq at q_{t+1}
-            with torch.enable_grad():
-                q_next_req = q_next.clone().detach().requires_grad_(True)
-                v_qnext = self.v_net(q_next_req)
-                grad_v_qnext = torch.autograd.grad(v_qnext.sum(), q_next_req, create_graph=True)[0]
+            # 4. dV/dq at q_{t+1} (closed form)
+            grad_v_qnext = self._grad_potential(q_next)
 
             # 5. Half-step p
             p_next = p_half - 0.5 * dt * grad_v_qnext + 0.5 * dt * f_ext

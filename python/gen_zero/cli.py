@@ -709,6 +709,65 @@ def cmd_manifold_fuse(args: argparse.Namespace) -> int:
 # ---------------------------------------------------------------------------
 # Subcommand: status / version
 # ---------------------------------------------------------------------------
+def _load_cad_items(args: argparse.Namespace) -> List[tuple]:
+    if args.input:
+        items = []
+        for n, line in enumerate(Path(args.input).read_text(encoding="utf-8").splitlines(), 1):
+            if line.strip():
+                row = json.loads(line)
+                if not isinstance(row.get("question"), str) or not isinstance(row.get("context"), str):
+                    raise ValueError(f"{args.input}:{n} needs string 'question' and 'context'")
+                items.append((row["question"], row["context"]))
+        if not items:
+            raise ValueError(f"{args.input} has no records")
+        return items
+    if not args.question or not args.context:
+        raise ValueError("give --question and --context, or --input FILE.jsonl")
+    return [(args.question, args.context)]
+
+
+def cmd_cad(args: argparse.Namespace) -> int:
+    """Contrastive-decoding yes/no/maybe inference on a local Qwen GGUF (pure forward, no training)."""
+    c = _colors(args.no_color)
+    try:
+        items = _load_cad_items(args)
+        if bool(args.gguf) == bool(args.hf_model):
+            raise ValueError("give exactly one of --gguf or --hf-model")
+        if args.hf_model:
+            if args.workers > 1:
+                raise ValueError("--workers > 1 needs --gguf (the pool runs GGUF engines)")
+            if args.numa_pin:
+                raise ValueError("--numa-pin requires --gguf (NUMA pinning is only supported for GGUF)")
+            from gen_zero.causal.cad_engine import CADEngine
+            engine = CADEngine.from_hf(args.hf_model, tokenizer_path=args.hf_tokenizer, head_path=args.head, alpha=args.alpha)
+            results = [engine.classify(q, ctx).to_dict() for q, ctx in items]
+        else:
+            if args.hf_tokenizer:
+                raise ValueError("--hf-tokenizer requires --hf-model")
+            if args.workers > 1 or args.numa_pin:
+                from gen_zero.causal.gguf_parallel_pool import GGUFParallelPool
+                with GGUFParallelPool(args.gguf, workers=args.workers, threads_per_worker=args.threads,
+                                      n_ctx=args.n_ctx, head_path=args.head, numa_pin=args.numa_pin,
+                                      use_mmap=not args.numa_pin, alpha=args.alpha) as pool:
+                    results = pool.classify_batch(items)
+            else:
+                from gen_zero.causal.cad_engine import CADEngine
+                engine = CADEngine.from_gguf(args.gguf, head_path=args.head, n_ctx=args.n_ctx,
+                                             n_threads=args.threads, alpha=args.alpha)
+                results = [engine.classify(q, ctx).to_dict() for q, ctx in items]
+    except Exception as e:
+        sys.stderr.write(f"{c['RED']}Error: {type(e).__name__}: {e}{c['RESET']}\n")
+        return 1
+    if args.json:
+        print(json.dumps(results if args.input else results[0], indent=2, ensure_ascii=False))
+        return 0
+    for (question, _), r in zip(items, results):
+        mode = "calibrated" if r["calibrated"] else "UNCALIBRATED (no --head)"
+        probs = " ".join(f"{k}={v:.3f}" for k, v in r["probabilities"].items())
+        print(f"{c['BOLD']}{r['label']}{c['RESET']}  {probs}  margin={r['margin']:.3f}  [{mode}]  {question[:60]}")
+    return 0
+
+
 def cmd_status(args: argparse.Namespace) -> int:
     c = _colors(args.no_color)
     endpoint = resolve_endpoint()
@@ -939,6 +998,22 @@ Examples:
     p_harness_setup.add_argument("--json", action="store_true", help="Output raw JSON summary")
 
     # status
+    # cad
+    p_cad = subparsers.add_parser("cad", help="Contrastive-decoding yes/no/maybe inference on a local Qwen2.5-1.5B GGUF")
+    p_cad.add_argument("--gguf", help="Path to the Qwen2.5-1.5B-Instruct Q4_K_M GGUF (see gen_zero.scripts.setup_qwen15b_models)")
+    p_cad.add_argument("--hf-tokenizer", help="Tokenizer directory for --hf-model (default: the model directory)")
+    p_cad.add_argument("--hf-model", help="Local transformers causal-LM directory instead of --gguf (single process)")
+    p_cad.add_argument("--question", default="", help="Question to answer")
+    p_cad.add_argument("--context", default="", help="Context passage the answer must rest on")
+    p_cad.add_argument("--input", help="JSONL file of {question, context} records (batch mode)")
+    p_cad.add_argument("--head", help="User-supplied calibration head JSON (gen_zero.cad_head.v1); omit for uncalibrated scores")
+    p_cad.add_argument("--alpha", type=float, default=0.5, help="Prior weight in delta = cond - alpha*prior (uncalibrated mode; default 0.5)")
+    p_cad.add_argument("--workers", type=int, default=1, help="Worker processes (>1 uses the parallel GGUF pool)")
+    p_cad.add_argument("--threads", type=int, default=max(1, (os.cpu_count() or 2) // 2), help="Compute threads per worker")
+    p_cad.add_argument("--n-ctx", type=int, default=2048, help="Context window in tokens")
+    p_cad.add_argument("--numa-pin", action="store_true", help="Pin each worker to exclusive cores of one NUMA node (Linux)")
+    p_cad.add_argument("--json", action="store_true", help="Output raw JSON result")
+
     subparsers.add_parser("status", help="Check engine connectivity, model status, and latency")
 
     return parser
@@ -987,6 +1062,8 @@ def main(argv: Optional[List[str]] = None) -> int:
         return cmd_manifold_fuse(args)
     elif args.subcommand == "harness":
         return cmd_harness(args)
+    elif args.subcommand == "cad":
+        return cmd_cad(args)
     elif args.subcommand == "status":
         return cmd_status(args)
     else:

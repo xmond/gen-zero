@@ -113,29 +113,24 @@ class StreamIntentGate:
         re.compile(r"(hello|hi|hey|good\s+morning|good\s+afternoon|good\s+evening|how\s+are\s+you|nice\s+to\s+meet)", re.I),
         re.compile(r"(thanks|thank\s+you|bye|see\s+you|have\s+a\s+good\s+day|cheers)", re.I),
         re.compile(r"^(yeah|yep|uh-huh|okay|sure|right|got\s+it|cool|great|sounds\s+good|haha|um+|ah+)$", re.I),
-        re.compile(r"(你好|早上好|下午好|晚上好|谢谢|再见|拜拜|哈哈|好的|收到|明白|对的|确实|辛苦了|欢迎)", re.I),
-        re.compile(r"(今天天气|吃了吗|周末去哪|听得见|能听到|声音有点|稍微等|稍等|接个电话|喂喂)", re.I),
+        re.compile(r"(nice\s+weather|can\s+you\s+hear\s+me|hold\s+on|wait\s+a\s+sec|incoming\s+call)", re.I),
     ]
 
     # Action indicator patterns
     _ADD_PATTERNS = [
-        re.compile(r"(需要|新增|增加|创建|下一步|首先|然后|接着|进行|发起|执行|提交|申请|审核|审批|签署|归档|生成|安排|部署)", re.I),
         re.compile(r"\b(need\s+to|add|create|next\s+step|first|then|proceed|submit|review|approve|sign|deploy|execute)\b", re.I),
     ]
 
     _MODIFY_PATTERNS = [
-        re.compile(r"(修改|调整|改成|变更为|更新|修订|如果.*则|前置条件|由.*负责|交接给)", re.I),
         re.compile(r"\b(modify|adjust|change\s+to|update|revise|if.*then|prerequisite|assigned\s+to)\b", re.I),
     ]
 
     _DELETE_PATTERNS = [
-        re.compile(r"(取消|废弃|不需要|跳过|删除|去除|终止|撤回)", re.I),
         re.compile(r"\b(cancel|deprecate|not\s+needed|skip|delete|remove|terminate|rollback)\b", re.I),
     ]
 
     # Hedging / speculation indicators triggering pending draft queue
     _HEDGE_PATTERNS = [
-        re.compile(r"(可能|也许|不确定|先看下|待定|讨论一下|后续再说|或许|暂定)", re.I),
         re.compile(r"\b(maybe|perhaps|not\s+sure|tentative|pending|might|could\s+be|to\s+be\s+discussed)\b", re.I),
     ]
 

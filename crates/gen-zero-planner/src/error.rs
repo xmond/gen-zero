@@ -4,6 +4,8 @@ use thiserror::Error;
 
 #[derive(Error, Debug, Clone, PartialEq)]
 pub enum PlannerError {
+    #[error("Search encountered a masked dead end; use plan_report or a dead-end observer")]
+    DeadEndRequiresReport,
     #[error("A* requires an explicit search goal")]
     MissingSearchGoal,
     #[error("A* goal is unreachable in the candidate-action graph")]
@@ -30,12 +32,16 @@ pub enum PlannerError {
     EmptyOperatorTable,
     #[error("Horizon {horizon} outside 1..={max}")]
     InvalidHorizon { horizon: usize, max: usize },
+    #[error("Causal gate passed 0 of {sampled} sampled plans (reasons {reasons})")]
+    CausalGateEmpty { sampled: usize, reasons: String },
+    #[error("Causal plan infeasible before sampling: {0}")]
+    CausalInfeasible(String),
     #[error("Divergent state refused: {0}")]
     DivergentState(String),
     #[error("Invalid input: {0}")]
     InvalidInput(String),
     #[error(
-        "Unknown decide mode {0:?}; expected auto, mcts, mpc_cem, astar, manifold_gflownet, cfr_nash or reflex"
+        "Unknown decide mode {0:?}; expected auto, mcts, mpc_cem, astar, manifold_gflownet, cfr_nash, reflex, causal_triad or tournament_triad"
     )]
     UnknownMode(String),
     #[error(

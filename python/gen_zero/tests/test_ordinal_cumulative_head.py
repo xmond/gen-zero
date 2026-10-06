@@ -9,6 +9,7 @@ Validates the Proportional Odds model on SummEval continuous ordinal manifolds:
 6. Entropy explosion elimination: prevents false 1.56 bit categorical entropy and 27/30 STOP gate trigger.
 7. PyTorch module execution and differentiability (when available).
 """
+# anti-leakage: allow-mock-tensor
 
 import unittest
 import numpy as np
@@ -200,7 +201,8 @@ class TestMonotonicProportionalOddsHead(unittest.TestCase):
         for name in ("nll_loss", "loss"):
             self.head.zero_grad()
             x.grad = None
-            getattr(self.head, name)(x, y).backward()
+            loss_fn = self.head.nll_loss if name == "nll_loss" else self.head.loss
+            loss_fn(x, y).backward()
             self.assertIsNotNone(x.grad)
             for pname, p in self.head.named_parameters():
                 self.assertIsNotNone(p.grad, f"{name}: no grad for {pname}")

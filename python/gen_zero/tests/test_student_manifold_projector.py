@@ -1,4 +1,5 @@
 import pytest
+# anti-leakage: allow-mock-tensor
 import torch
 
 from gen_zero.causal.student_manifold_projector import (

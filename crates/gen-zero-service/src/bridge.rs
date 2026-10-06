@@ -61,6 +61,12 @@ pub enum BridgeError {
     /// The in-process Qwen scorer refused the input or failed to compute.
     #[error("native Qwen scorer failed: {0}")]
     Native(String),
+    /// The backend offers no text embedding (the Python bridge).
+    #[error("semantic backend has no text embedder: {0}")]
+    NoEmbedder(String),
+    /// Texts to embed in one call hold more tokens than the budget allows.
+    #[error("{tokens} tokens to embed exceed the per-request budget of {max}; split the payloads")]
+    EmbedBudget { tokens: usize, max: usize },
     /// Every in-process scorer slot stayed busy for the whole queue timeout.
     #[error("native Qwen scorer overloaded: no free slot after {waited_ms} ms")]
     Overloaded { waited_ms: u64 },

@@ -32,4 +32,4 @@
 ## 3. Conclusion and deployment recommendation
 
 - **The in-house decision base clears the delivery gate**: without external-model soft-label annotation, using only minimal contrastive counterfactual perturbation and tone desensitization, overall decision accuracy exceeds 90%+.
-- **Hardware and service alignment**: after GGUF `q4_k_m` quantization it needs only 5.6GB VRAM, fully meeting Issue #16's `/v1/score` end-to-end < 100ms throughput requirement on `ai-server`.
+- **Hardware and service alignment**: after GGUF `q4_k_m` quantization it needs only 5.6GB VRAM, fully meeting Issue #16's `/v1/score` end-to-end < 100ms throughput requirement on the inference server.

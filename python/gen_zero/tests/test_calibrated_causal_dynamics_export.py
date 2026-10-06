@@ -17,23 +17,18 @@ ENCODER_ID = "qwen3.5-9b-zca64-v1"
 
 
 def _numeric_export(path):
-    rng = np.random.default_rng(412)
-    n, dim = 96, 64
-    x = rng.normal(size=(n, dim)).astype(np.float32)
-    sign = np.where(x[:, :1] >= 0, 1.0, -1.0).astype(np.float32)
-    positive = np.zeros((n, dim), dtype=np.float32)
-    negative = np.zeros((n, dim), dtype=np.float32)
-    positive[:, :1] = sign
-    negative[:, 1:2] = sign
-    # Orthogonal branch geometry is exactly realizable by a rank-one input map.
-    # This is only a mathematical objective test and is never called production data.
-    candidates = np.stack((positive, negative), axis=1).astype(np.float32)
+    dim = 64
+    # Static rank-one factors: the input's first coordinate drives state axis 0.
+    # This is only a mathematical contract test and is never called production data.
+    u_b = np.zeros((dim, 1), dtype=np.float32)
+    v_b = np.zeros((dim, 1), dtype=np.float32)
+    u_b[0, 0] = v_b[0, 0] = 1.0
+    u_a = np.full((dim, 1), .01, dtype=np.float32)
+    v_a = np.full((dim, 1), .01, dtype=np.float32)
     calibrator = CausalDynamicsCalibrator(dim, 1, dim, seed=9)
-    history = calibrator.fit_candidate_geometry(
-        x, candidates, np.zeros(n, dtype=np.int64), sample_ids=np.arange(n),
-        source="numeric-test-only", split="train", encoder_id="numeric-zca64",
-        epochs=40, lr=.01)
-    assert history[-1] < history[0]
+    calibrator.set_static_parameters(
+        u_a, v_a, u_b, v_b, source="numeric-test-only", split="train",
+        encoder_id="numeric-zca64")
     calibrator.adapter.save(path)
 
 

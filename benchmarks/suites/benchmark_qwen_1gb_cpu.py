@@ -55,7 +55,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--model", type=Path, default=REPO / "benchmarks/results/gen_zero_qwen_1gb.pt")
     parser.add_argument("--tokenizer", type=Path)
-    parser.add_argument("--prompt", default="在证据不足时，应该如何做出稳健决策？")
+    parser.add_argument("--prompt", default="How should one make a robust decision when evidence is insufficient?")
     parser.add_argument("--max-length", type=int, default=128)
     parser.add_argument("--warmup", type=int, default=1)
     parser.add_argument("--iterations", type=int, default=5)

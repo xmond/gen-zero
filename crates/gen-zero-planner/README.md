@@ -6,6 +6,15 @@ that picks how much deliberation a state gets.
 
 ## Architecture
 
+- `causal_dag`: exact cost-optimal plan on a symbolic AND/OR causal DAG
+  (`exact_causal_plan`), behind the service's `causal_plan` verb. A monotone
+  closure (one O(V+E) worklist pass) decides reachability first
+  (`UnreachableGoal`), the goal cone keeps
+  only reachable, not yet complete ancestors of the target (at most 32, else
+  `TargetTooComplex`), then Dijkstra over completion sets finds the cheapest
+  order within `budget` (`BudgetExceeded`; `StateLimitExceeded` after 200,000
+  expanded states; `DeadlineExceeded` after 500 ms of search). It never
+  returns an approximate plan.
 - `config`: caller-tunable hyperparameters for `ProductionPipeline`'s search
   engines; only knobs with a measured effect on search or scoring are exposed.
 - `engine`: the 6 orthogonal planning engines: `MctsEngine` (finite-horizon PUCT tree +
@@ -29,6 +38,9 @@ tree/arena search nodes were removed: no production path called them.
 
 ## Key exports
 
+- `exact_causal_plan`, `CausalNode`, `CausalDagRequest`, `CausalDagPlan`,
+  `CausalDagError`, `MAX_CONE_NODES`, `MAX_DAG_NODES`, `MAX_EXPANDED_STATES`,
+  `PLAN_DEADLINE`: the exact causal-DAG planner.
 - `PlannerConfig`: engine hyperparameters.
 - `AStarEngine`, `CfrNashEngine`, `CpSatFormalEngine`, `ManifoldGFlowNetEngine`,
   `MctsEngine`, `MpcCemEngine`, `PlanningEngine`: the planning engines and

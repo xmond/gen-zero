@@ -28,6 +28,11 @@ use crate::engine::{
 };
 use crate::error::PlannerError;
 use crate::router::{DynamicKMoERouter, RoutingTier};
+use crate::triad::{
+    CausalDag, CausalTriadRequest, RobustSlackSelector, TournamentTriadPipeline, TriadProblem,
+    TriadReport, DEFAULT_ENERGY_ALPHA, DEFAULT_TOURNAMENT_SAMPLES, DEFAULT_TOURNAMENT_SHARDS,
+    DEFAULT_TOURNAMENT_TOP_P, DEFAULT_TRIAD_SAMPLES,
+};
 use arc_swap::ArcSwapOption;
 use gen_zero_core::{
     ActionId, CoreError, FullLatent, LocalActionFrame, NormalizedEntropy, WorldModelDynamics,
@@ -48,6 +53,14 @@ struct HazardCheckedDynamics<'a>(&'a dyn WorldModelDynamics<Error = CoreError>);
 
 impl WorldModelDynamics for HazardCheckedDynamics<'_> {
     type Error = CoreError;
+
+    fn allowed_actions(
+        &self,
+        state: &FullLatent,
+        candidates: &[ActionId],
+    ) -> Result<Vec<ActionId>, CoreError> {
+        self.0.allowed_actions(state, candidates)
+    }
 
     fn step(
         &self,
@@ -160,11 +173,21 @@ impl Rollout {
     }
 }
 
-/// An action removed by policy or a predicted terminal hazard.
+/// Source of pruning; model constraints are not policy verdicts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PruneSource {
+    PolicyGate,
+    StateActionMask,
+    ModelHazard,
+}
+
+/// An action removed by policy, a state mask, or a predicted terminal hazard.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PrunedAction {
     pub action: ActionId,
-    pub tier: PolicyTier,
+    pub source: PruneSource,
+    pub tier: Option<PolicyTier>,
     pub violated_rules: Vec<u32>,
     pub reason: String,
 }
@@ -240,6 +263,13 @@ pub enum DecideMode {
     CfrNash,
     /// Gated one-step best reward (`CpSatFormalEngine`). Never the ungated first action.
     Reflex,
+    /// Causal triad over a request causal DAG: geodesic-flow plan sampling plus a
+    /// deterministic causal gate, one shard on the calling thread. Needs
+    /// `DecideRequest::causal_triad`; never chosen by `Auto`.
+    CausalTriad,
+    /// Same triad, as a sharded two-tier tournament on parallel OS threads.
+    /// Picks the same plan a flat gate pass over the same samples would.
+    TournamentTriad,
 }
 
 impl DecideMode {
@@ -252,6 +282,8 @@ impl DecideMode {
             Self::ManifoldGFlowNet => "manifold_gflownet",
             Self::CfrNash => "cfr_nash",
             Self::Reflex => "reflex",
+            Self::CausalTriad => "causal_triad",
+            Self::TournamentTriad => "tournament_triad",
         }
     }
 }
@@ -268,6 +300,8 @@ impl FromStr for DecideMode {
             "manifold_gflownet" | "gflownet" => Ok(Self::ManifoldGFlowNet),
             "cfr_nash" | "cfr" => Ok(Self::CfrNash),
             "reflex" => Ok(Self::Reflex),
+            "causal_triad" | "triad" => Ok(Self::CausalTriad),
+            "tournament_triad" => Ok(Self::TournamentTriad),
             other => Err(PlannerError::UnknownMode(other.to_string())),
         }
     }
@@ -288,6 +322,8 @@ pub struct DecideRequest<'a> {
     pub return_trajectory: bool,
     /// Rollout length when `return_trajectory` is set.
     pub horizon: usize,
+    /// Causal DAG and run options. Required by the triad modes, refused by all others.
+    pub causal_triad: Option<CausalTriadRequest>,
 }
 
 /// PPR restart probability, iteration cap, L1 tolerance and fact count used for
@@ -330,6 +366,8 @@ pub enum GraphContext {
 
 #[derive(Clone, Debug)]
 pub struct Decision {
+    /// Search observed at least one masked dead end, even if another branch won.
+    pub has_dead_end: bool,
     /// Search was cut short; entropy is conservatively unknown (ONE), and no
     /// optional trajectory is claimed complete. Gate certification is not a
     /// calibrated guarantee of real-world safety.
@@ -353,6 +391,8 @@ pub struct Decision {
     pub trajectory: Option<Rollout>,
     /// Graph neighborhood and hierarchical prior of `action`; see [`GraphContext`].
     pub graph_context: GraphContext,
+    /// Triad modes only: the committed plan and how it was chosen.
+    pub triad: Option<TriadReport>,
 }
 
 /// Unified simulate / what-if / audit / decide entry for Rust production callers.
@@ -704,7 +744,12 @@ impl ProductionPipeline {
             (a, b) => a.or(b),
         };
         let Some(deadline) = deadline else {
-            return self.decide_inner(req, &SearchBudget::default(), None);
+            let dead_end = AtomicBool::new(false);
+            return self.decide_inner(
+                req,
+                &SearchBudget::default().with_dead_end_marker(&dead_end),
+                None,
+            );
         };
         let timeout = || PlannerError::TimeoutExceeded(start.elapsed().as_secs_f64() * 1000.0);
         if Instant::now() >= deadline {
@@ -725,10 +770,13 @@ impl ProductionPipeline {
         let state = req.state.clone();
         let candidates = req.candidates.to_vec();
         let active_context = req.active_context.clone();
+        let causal_triad = req.causal_triad.clone();
         let (mode, entropy, return_trajectory, horizon) =
             (req.mode, req.entropy, req.return_trajectory, req.horizon);
         let incumbent = Arc::new(ArcSwapOption::empty());
         let worker_incumbent = incumbent.clone();
+        let dead_end = Arc::new(AtomicBool::new(false));
+        let worker_dead_end = dead_end.clone();
         let (tx, rx) = mpsc::channel();
         let worker = self.deadline_worker.as_ref().ok_or_else(|| {
             PlannerError::ConvergenceFailure("deadline worker unavailable".into())
@@ -746,11 +794,13 @@ impl ProductionPipeline {
                     horizon,
                     deadline: Some(deadline),
                     budget_ms: None,
+                    causal_triad,
                 };
                 let budget = SearchBudget {
                     deadline: Some(deadline),
                     started: start,
                     publish: None,
+                    dead_end: Some(&worker_dead_end),
                 };
                 let result = pipeline.decide_inner(&request, &budget, Some(&worker_incumbent));
                 let finished = Instant::now();
@@ -810,9 +860,14 @@ impl ProductionPipeline {
                 {
                     return Err(PlannerError::NoFeasibleAction);
                 }
-                Arc::try_unwrap(decision).map_err(|_| {
-                    PlannerError::ConvergenceFailure("incumbent unexpectedly shared".into())
-                })
+                Arc::try_unwrap(decision)
+                    .map(|mut decision| {
+                        decision.has_dead_end |= dead_end.load(Ordering::Acquire);
+                        decision
+                    })
+                    .map_err(|_| {
+                        PlannerError::ConvergenceFailure("incumbent unexpectedly shared".into())
+                    })
             }
             None => Err(timeout()),
         }
@@ -847,14 +902,49 @@ impl ProductionPipeline {
         if req.return_trajectory {
             validate_horizon(req.horizon)?;
         }
+        let is_triad = matches!(
+            req.mode,
+            DecideMode::CausalTriad | DecideMode::TournamentTriad
+        );
+        match (is_triad, req.causal_triad.is_some()) {
+            (true, false) => {
+                return Err(PlannerError::InvalidInput(format!(
+                    "mode {} requires a causal_triad request (causal DAG); there is no fallback",
+                    req.mode.as_str()
+                )))
+            }
+            (false, true) => {
+                return Err(PlannerError::InvalidInput(format!(
+                    "a causal_triad request is only read by causal_triad and tournament_triad, \
+                     not by mode {}",
+                    req.mode.as_str()
+                )))
+            }
+            _ => {}
+        }
 
         let (allowed, mut pruned) =
             self.prune_with_context(req.candidates, &req.active_context, req.entropy);
         // A terminal transition is a hazard regardless of its reward. Screen all
-        // candidates before dispatch so every engine receives the same safe frame.
+        // root-legal candidates before dispatch; deeper states are screened in search.
+        let root_allowed = self.world_model.allowed_actions(req.state, &allowed)?;
+        if root_allowed.is_empty() {
+            return Err(PlannerError::NoFeasibleAction);
+        }
+        let search_candidates = allowed.clone();
         let mut feasible = Vec::with_capacity(allowed.len());
         let mut hazardous_actions = Vec::new();
         for action in allowed {
+            if !root_allowed.contains(&action) {
+                pruned.push(PrunedAction {
+                    action,
+                    source: PruneSource::StateActionMask,
+                    tier: None,
+                    violated_rules: Vec::new(),
+                    reason: "state action mask rejected root action".into(),
+                });
+                continue;
+            }
             budget.check()?;
             let (next, reward, done) = self.world_model.step(req.state, action)?;
             budget.check()?;
@@ -869,7 +959,8 @@ impl ProductionPipeline {
                 hazardous_actions.push(action);
                 pruned.push(PrunedAction {
                     action,
-                    tier: PolicyTier::Tier3HardStop,
+                    source: PruneSource::ModelHazard,
+                    tier: None,
                     violated_rules: Vec::new(),
                     reason: "model predicted terminal hazard".into(),
                 });
@@ -880,12 +971,21 @@ impl ProductionPipeline {
         if feasible.is_empty() {
             return Err(PlannerError::NoFeasibleAction);
         }
-        let names: Vec<String> = feasible.iter().map(|a| format!("action_{}", a.0)).collect();
+        // Root preconditions need not hold at successors: preserve candidates for
+        // per-state enumeration while excluding globally screened hazards.
+        let search_candidates: Vec<_> = search_candidates
+            .into_iter()
+            .filter(|a| !hazardous_actions.contains(a))
+            .collect();
+        let names: Vec<String> = search_candidates
+            .iter()
+            .map(|a| format!("action_{}", a.0))
+            .collect();
         let name_refs: Vec<&str> = names.iter().map(String::as_str).collect();
-        let frame = LocalActionFrame::new(&name_refs, &feasible).ok_or_else(|| {
+        let frame = LocalActionFrame::new(&name_refs, &search_candidates).ok_or_else(|| {
             PlannerError::InvalidInput(format!(
-                "{} feasible actions exceed the frame capacity {MAX_DECIDE_CANDIDATES}",
-                feasible.len()
+                "{} candidate actions exceed the frame capacity {MAX_DECIDE_CANDIDATES}",
+                search_candidates.len()
             ))
         })?;
 
@@ -912,6 +1012,7 @@ impl ProductionPipeline {
             }
             if let Some(slot) = incumbent {
                 let decision = Decision {
+                    has_dead_end: budget.has_dead_end(),
                     timed_out: true,
                     hazard_detected: !hazardous_actions.is_empty(),
                     hazardous_actions: hazardous_actions.clone(),
@@ -931,6 +1032,7 @@ impl ProductionPipeline {
                     graph_context: GraphContext::Unavailable {
                         reason: "timed-out incumbent: graph context not computed".into(),
                     },
+                    triad: None,
                 };
                 let decision = Arc::new(decision);
                 if budget.check().is_ok() {
@@ -942,10 +1044,12 @@ impl ProductionPipeline {
             deadline: budget.deadline,
             started: budget.started,
             publish: Some(&publish),
+            dead_end: budget.dead_end,
         };
         let checked_model = HazardCheckedDynamics(self.world_model.as_ref());
         let wm = &checked_model;
         let gate = self.gate.as_ref();
+        let mut triad = None;
         let (action, entropy, engine, routing_tier) = match req.mode {
             DecideMode::Auto => {
                 let (a, e, tier) = self.router.dispatch_until(
@@ -971,6 +1075,20 @@ impl ProductionPipeline {
             )?,
             DecideMode::CfrNash => run(&self.cfr_nash, req.state, &frame, wm, gate, &search)?,
             DecideMode::Reflex => run(&self.cpsat, req.state, &frame, wm, gate, &search)?,
+            DecideMode::CausalTriad | DecideMode::TournamentTriad => {
+                let report = self.plan_triad(req, &pruned, budget)?;
+                let first = *report.chosen_path.first().ok_or_else(|| {
+                    PlannerError::ConvergenceFailure("triad committed an empty plan".into())
+                })?;
+                let out = (
+                    first,
+                    NormalizedEntropy(report.decision_entropy as f32),
+                    report.engine,
+                    None,
+                );
+                triad = Some(report);
+                out
+            }
         };
         if !feasible.contains(&action) {
             return Err(PlannerError::ConvergenceFailure(format!(
@@ -1002,11 +1120,21 @@ impl ProductionPipeline {
 
         publish(action, engine);
 
-        let trajectory = if req.return_trajectory {
+        let trajectory = if let (true, Some(report)) = (req.return_trajectory, &triad) {
+            // Replay the committed causal plan on the world model, not a greedy
+            // continuation: this is the trajectory the triad actually proposes.
+            let plan = &report.chosen_path;
+            let horizon = plan.len().min(req.horizon);
+            Some(
+                self.rollout(req.state, horizon, POLICY_FIXED_PLAN, budget, |i, _| {
+                    Ok(plan[i - 1])
+                })?,
+            )
+        } else if req.return_trajectory {
             Some(self.greedy_rollout(
                 req.state,
                 action,
-                &feasible,
+                &search_candidates,
                 req.horizon,
                 POLICY_GREEDY,
                 budget,
@@ -1025,6 +1153,7 @@ impl ProductionPipeline {
         }
         budget.check()?;
         Ok(Decision {
+            has_dead_end: budget.has_dead_end(),
             timed_out: false,
             action,
             entropy,
@@ -1042,7 +1171,74 @@ impl ProductionPipeline {
             pruned,
             trajectory,
             graph_context,
+            triad,
         })
+    }
+
+    /// Build the DAG over the request candidates and run the triad. Policy hard
+    /// stops are blocked at every plan step. Root state-mask rejections and
+    /// immediate world-model hazards are blocked as the first step only: both
+    /// were screened from the current state alone, and the DAG's nominal model
+    /// does not predict later states.
+    fn plan_triad(
+        &self,
+        req: &DecideRequest<'_>,
+        pruned: &[PrunedAction],
+        budget: &SearchBudget<'_>,
+    ) -> Result<TriadReport, PlannerError> {
+        let spec = req.causal_triad.as_ref().ok_or_else(|| {
+            PlannerError::InvalidInput("triad mode without a causal_triad request".into())
+        })?;
+        let dag = CausalDag::from_spec(req.candidates, &spec.dag)?;
+        let opts = &spec.options;
+        let by_source = |first_only: bool| -> Vec<ActionId> {
+            pruned
+                .iter()
+                .filter(|p| (p.source != PruneSource::PolicyGate) == first_only)
+                .map(|p| p.action)
+                .collect()
+        };
+        let done: Vec<ActionId> = opts.done.iter().map(|&a| ActionId(a)).collect();
+        let problem = TriadProblem {
+            dag: &dag,
+            done: dag.mask_of(&done)?,
+            time_used: opts.time_used,
+            blocked: dag.mask_of(&by_source(false))?,
+            blocked_first: dag.mask_of(&by_source(true))?,
+        };
+        let (engine, n_samples) = match req.mode {
+            DecideMode::CausalTriad => {
+                if opts.shards.is_some() || opts.top_p.is_some() {
+                    return Err(PlannerError::InvalidInput(
+                        "causal_triad runs one shard; shards/top_p belong to tournament_triad"
+                            .into(),
+                    ));
+                }
+                (
+                    TournamentTriadPipeline::new(1, 1)?,
+                    opts.n_samples.unwrap_or(DEFAULT_TRIAD_SAMPLES),
+                )
+            }
+            _ => (
+                TournamentTriadPipeline::new(
+                    opts.shards.unwrap_or(DEFAULT_TOURNAMENT_SHARDS),
+                    opts.top_p.unwrap_or(DEFAULT_TOURNAMENT_TOP_P),
+                )?,
+                opts.n_samples.unwrap_or(DEFAULT_TOURNAMENT_SAMPLES),
+            ),
+        };
+        // A malformed robust spec or a contradicting residual is refused here;
+        // there is no nominal fallback for a caller who asked for robust ranking.
+        let robust = opts
+            .robust
+            .as_ref()
+            .map(|r| RobustSlackSelector::from_spec(r, dag.budget()))
+            .transpose()?;
+        let engine = engine
+            .with_energy_alpha(opts.energy_alpha.unwrap_or(DEFAULT_ENERGY_ALPHA))?
+            .with_robust(robust);
+        budget.check()?;
+        engine.plan(&problem, n_samples, opts.seed, budget.deadline)
     }
 
     /// PPR over the live graph from the chosen action's entity node (entity id ==
@@ -1193,7 +1389,8 @@ impl ProductionPipeline {
             if tier == PolicyTier::Tier3HardStop {
                 pruned.push(PrunedAction {
                     action: a,
-                    tier,
+                    source: PruneSource::PolicyGate,
+                    tier: Some(tier),
                     violated_rules,
                     reason,
                 });
@@ -1221,7 +1418,7 @@ impl ProductionPipeline {
                 return Ok(first);
             }
             let mut best: Option<(ActionId, (bool, f32, f32))> = None;
-            for &a in set {
+            for a in self.world_model.allowed_actions(current, set)? {
                 if self.gate_check(a).0 == PolicyTier::Tier3HardStop {
                     continue;
                 }

@@ -22,8 +22,10 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicBool;
 
-/// 2: metadata without the derived entity and alias indexes.
-const VERSION: u32 = 2;
+/// 4: adds `operator` to every node (3: `embedder_space` in the metadata
+/// block; 2: metadata without the derived entity and alias indexes). Node
+/// blocks are positional bincode, so an older snapshot is refused, not guessed.
+const VERSION: u32 = 4;
 const CURRENT: &str = "CURRENT.sha256";
 
 pub(super) struct Persistence {
@@ -67,6 +69,7 @@ struct MetaOut<'a> {
     privileges: &'a HashMap<u64, Vec<u32>>,
     validated_deps: &'a HashSet<(u64, u64)>,
     embedding_dim: Option<usize>,
+    embedder_space: &'a Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -77,6 +80,7 @@ struct MetaIn {
     privileges: HashMap<u64, Vec<u32>>,
     validated_deps: HashSet<(u64, u64)>,
     embedding_dim: Option<usize>,
+    embedder_space: Option<String>,
 }
 
 fn fail(e: impl std::fmt::Display) -> LodError {
@@ -269,6 +273,7 @@ impl Persistence {
                 privileges: &st.privileges,
                 validated_deps: &st.validated_deps,
                 embedding_dim: st.embedding_dim,
+                embedder_space: &st.embedder_space,
             };
             let state = c.put(dir, &encode(&meta)?, &mut fresh, &mut attempted)?;
             let manifest = Manifest {
@@ -404,6 +409,7 @@ impl LodGraph {
                     .embedding
                     .as_ref()
                     .is_some_and(|e| meta.embedding_dim != Some(e.len()))
+                || node.embedder_space.is_some() && node.embedder_space != meta.embedder_space
             {
                 return Err(fail(format!("invalid restored node {id}")));
             }
@@ -422,6 +428,13 @@ impl LodGraph {
         }
         if meta.embedding_dim.is_some() && !nodes.iter().any(|n| n.embedding.is_some()) {
             return Err(fail("embedding dimension without an embedding"));
+        }
+        if meta.embedder_space.is_some()
+            && !nodes
+                .iter()
+                .any(|n| n.embedder_space == meta.embedder_space)
+        {
+            return Err(fail("embedder space without a node declaring it"));
         }
         let mut previous = 0;
         for edge in &meta.edge_buffer {
@@ -470,6 +483,7 @@ impl LodGraph {
             validated_deps: meta.validated_deps,
             alias_index: Arc::new(alias_index),
             embedding_dim: meta.embedding_dim,
+            embedder_space: meta.embedder_space,
             generation: 0,
             discarded: Vec::new(),
         };
@@ -603,6 +617,7 @@ mod tests {
         assert_eq!(x.privileges, y.privileges);
         assert_eq!(x.validated_deps, y.validated_deps);
         assert_eq!(x.embedding_dim, y.embedding_dim);
+        assert_eq!(x.embedder_space, y.embedder_space);
         assert_eq!(
             a.ticket_counter.load(Ordering::Relaxed),
             b.ticket_counter.load(Ordering::Relaxed)
@@ -705,6 +720,30 @@ mod tests {
         assert_eq!(restored.node_count(), 1024);
     }
 
+    /// A node's operator signature survives a commit and a reopen; the
+    /// registered implementation does not, by design.
+    #[test]
+    fn operator_signature_round_trips() {
+        use crate::operator::{OperatorKind, OperatorSignature};
+        let dir = tempfile::tempdir().unwrap();
+        let graph = LodGraph::open_persistent(dir.path(), GeometryParams::UNIT).unwrap();
+        let hard = OperatorSignature::new("fs.write", OperatorKind::HardDcm, "1");
+        let soft =
+            OperatorSignature::new("pcm.sum", OperatorKind::SoftPcm, "2").with_embedder_space("q");
+        graph.add_node(node(1).with_operator(hard.clone())).unwrap();
+        graph.add_node(node(2).with_operator(soft.clone())).unwrap();
+        graph.add_node(node(3)).unwrap();
+        drop(graph);
+        let restored = LodGraph::open_persistent(dir.path(), GeometryParams::UNIT).unwrap();
+        assert_eq!(restored.get_node(0).unwrap().operator, Some(hard.clone()));
+        assert_eq!(restored.get_node(1).unwrap().operator, Some(soft));
+        assert_eq!(restored.get_node(2).unwrap().operator, None);
+        assert_eq!(
+            restored.operator(&hard).err().unwrap(),
+            LodError::OperatorNotFound("fs.write".into())
+        );
+    }
+
     /// The write cost of a one-node transaction follows the change, not the
     /// graph: run with `--ignored --nocapture` in release for the 100k figure.
     #[test]
@@ -785,7 +824,8 @@ mod tests {
         .unwrap();
         assert!(LodGraph::load_from_dir(dir.path(), GeometryParams::UNIT).is_err());
         let mut m: Manifest = decode(&bytes).unwrap();
-        for version in [1, VERSION + 1] {
+        // 3 is the layout before nodes carried `operator`.
+        for version in [1, 3, VERSION + 1] {
             m.version = version;
             let bad = encode(&m).unwrap();
             fs::write(

@@ -107,7 +107,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--model-cache", type=Path, default=Path.home() / ".cache/huggingface/hub/models--Qwen--Qwen2.5-0.5B")
     parser.add_argument("--precision", choices=("bf16", "fp32", "int8", "int4"), default="bf16")
-    parser.add_argument("--prompt", default="给出一个稳健决策前应检查哪些证据？")
+    parser.add_argument("--prompt", default="What evidence should be checked before making a robust decision?")
     parser.add_argument("--max-length", type=int, default=128)
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--iterations", type=int, default=10)

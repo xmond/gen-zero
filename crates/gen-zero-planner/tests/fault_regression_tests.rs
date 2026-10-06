@@ -120,6 +120,7 @@ fn request<'a>(
         entropy: NormalizedEntropy(0.5),
         return_trajectory: false,
         horizon: 2,
+        causal_triad: None,
     }
 }
 fn blocked_gate() -> PolicyGate {
@@ -303,10 +304,9 @@ fn f06_decide_excludes_high_reward_terminal_hazard_in_every_mode() {
             .unwrap();
         assert_eq!(decision.action, GOOD, "{mode:?}");
         assert_eq!(decision.feasible, vec![GOOD]);
-        assert!(decision
-            .pruned
-            .iter()
-            .any(|p| p.action == BAD && p.tier == PolicyTier::Tier3HardStop));
+        assert!(decision.pruned.iter().any(|p| p.action == BAD
+            && p.source == gen_zero_planner::PruneSource::ModelHazard
+            && p.tier.is_none()));
         assert_eq!(
             pipeline
                 .decide(&request(&FullLatent::zeros(), &[BAD], mode))

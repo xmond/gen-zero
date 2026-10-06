@@ -1,5 +1,5 @@
 """Spec 20 P1: partition anchor pooling (docs/zero/20-triad-deep-enhancement-multi-dimensional-analysis-spec.md
-S2.3 "路径A：完整编码 + 分区anchor pooling", S7.1 P1).
+S2.3 "Path A: full encoding + partitioned anchor pooling", S7.1 P1).
 
 Uniform mean pooling dilutes a discriminative signal that lives in m << T tokens down to
 m*v/T (S2.3). This module implements the fixed-width three-region readout instead:

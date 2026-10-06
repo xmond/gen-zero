@@ -113,12 +113,15 @@ pub enum Commands {
     },
     /// Alias for MCP server command
     Mcp {
-        /// Run MCP over the process stdio stream.
-        #[arg(long, conflicts_with = "sse")]
+        /// Run MCP over the process stdio stream. Without it, MCP serves SSE/HTTP.
+        #[arg(long)]
         stdio: bool,
-        /// Run MCP over the SSE/HTTP server (the default when neither flag is set).
+        /// IP address to bind in SSE / HTTP mode.
+        #[arg(long, default_value = "127.0.0.1")]
+        host: IpAddr,
+        /// Run length-prefixed MCP JSON-RPC on a Unix domain socket.
         #[arg(long, conflicts_with = "stdio")]
-        sse: bool,
+        uds_path: Option<PathBuf>,
         #[arg(long, default_value_t = gen_zero_service::server::DEFAULT_MCP_SSE_PORT)]
         port: u16,
         #[arg(long, env = "GENZERO_API_KEY")]
@@ -154,6 +157,117 @@ pub enum Commands {
         tokenizer: Option<PathBuf>,
         #[command(subcommand)]
         action: QwenAction,
+    },
+    /// Two-stage answerability gate: stage 1 scores from an extractive reader
+    /// decide alone outside the ambiguity band; inside it the native
+    /// tri-teacher Qwen verifier confirms the candidate or flips it to No-Answer.
+    /// Any stage 2 fault exits 1; nothing falls back to stage 1.
+    QaGate {
+        /// Qwen2.5-0.5B directory with config.json + model.safetensors.
+        #[arg(long, env = "GENZERO_QWEN_MODEL_PATH")]
+        model: PathBuf,
+        /// tokenizer.json (default: inside --model).
+        #[arg(long, env = "GENZERO_QWEN_TOKENIZER_PATH")]
+        tokenizer: Option<PathBuf>,
+        /// Tri-teacher LoRA adapter (`gen_zero.tri_teacher_lora.v1` safetensors).
+        #[arg(long, env = "GENZERO_TRI_TEACHER_ADAPTER")]
+        adapter: PathBuf,
+        #[arg(long)]
+        context: String,
+        #[arg(long)]
+        question: String,
+        /// Stage 1's best span text (may be empty only for a confident No-Answer).
+        #[arg(long, default_value = "")]
+        candidate: String,
+        #[arg(long, allow_negative_numbers = true)]
+        best_span_score: f32,
+        #[arg(long, allow_negative_numbers = true)]
+        null_score: f32,
+        #[arg(long, allow_negative_numbers = true, default_value_t = -1.5)]
+        ambiguity_low: f32,
+        #[arg(long, allow_negative_numbers = true, default_value_t = 0.5)]
+        ambiguity_high: f32,
+        /// Decision threshold on tri_sim.
+        #[arg(long, default_value_t = gen_zero_model::DEFAULT_TRI_TEACHER_THRESHOLD as f32)]
+        threshold: f32,
+    },
+    /// Drain PENDING durable-refusal traces and ask an LLM to arbitrate each
+    /// one, with fail-closed evidence-span validation against hallucination.
+    /// Without --once, runs as a background poller until Ctrl-C.
+    Arbitrate {
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long, env = "GENZERO_ARBITRATOR_API_KEY")]
+        api_key: Option<String>,
+        #[arg(long, default_value = "https://api.openai.com/v1/chat/completions")]
+        endpoint: String,
+        #[arg(long, default_value = "gpt-4o")]
+        model: String,
+        #[arg(long, default_value_t = 10)]
+        batch_size: usize,
+        #[arg(long, default_value_t = 30)]
+        poll_interval_secs: u64,
+        #[arg(long, default_value_t = 5)]
+        max_retries: u32,
+        #[arg(long, default_value_t = 30)]
+        request_timeout_secs: u64,
+        /// Run exactly one batch and exit, instead of polling forever.
+        #[arg(long)]
+        once: bool,
+    },
+    /// Compile ARBITRATED, unconsumed durable-refusal traces into a
+    /// sha256-addressed training-sample patch file, then record the patch and
+    /// mark its traces consumed in one transaction. This writes training data
+    /// only; it does not train or deploy a model. Without --once, runs as a
+    /// background poller until Ctrl-C.
+    PatchBuild {
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        output_dir: PathBuf,
+        #[arg(long, default_value_t = gen_zero_service::patch_builder::DEFAULT_BATCH_SIZE)]
+        batch_size: usize,
+        #[arg(long, default_value = gen_zero_service::patch_builder::DEFAULT_BASE_MODEL_HASH)]
+        base_model_hash: String,
+        #[arg(long, default_value_t = gen_zero_service::patch_builder::DEFAULT_POLL_INTERVAL_SECS)]
+        poll_interval_secs: u64,
+        /// Build at most one patch and exit, instead of polling forever.
+        #[arg(long)]
+        once: bool,
+    },
+    /// Verify a compiled patch (file SHA-256 and row agreement) and mark it
+    /// deployed. A running server picks the deployment up on its next
+    /// restart; it does not watch the database.
+    PatchApply {
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        patch_id: String,
+    },
+    /// Roll a patch back: mark it ROLLED_BACK and revoke every trace it
+    /// consumed, in one transaction. A running server drops the patch from
+    /// memory on its next qa_gate canary write.
+    Rollback {
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        patch_id: String,
+        #[arg(long)]
+        reason: String,
+    },
+    /// Show a patch's row, its canary window statistics and the canary
+    /// guard's verdict on them. Read-only.
+    CanaryStatus {
+        #[arg(long)]
+        db: PathBuf,
+        #[arg(long)]
+        patch_id: String,
+        /// Window: the latest N canary samples.
+        #[arg(long, default_value_t = gen_zero_service::hot_reload::DEFAULT_CANARY_WINDOW)]
+        limit: usize,
+        /// Samples needed before the guard gives a verdict. Must be <= --limit.
+        #[arg(long, default_value_t = gen_zero_service::hot_reload::DEFAULT_CANARY_MIN_SAMPLES)]
+        min_samples: usize,
     },
     /// Generate a cryptographically secure Gen-Zero connection token
     Keygen {
@@ -348,6 +462,14 @@ pub enum Commands {
         /// Strategy: weighted_tropical, weighted_logprob, "chart" (S3), "tiered" (default with weights), "left" (S1)
         #[arg(long)]
         strategy: Option<String>,
+    },
+    /// Exact cheapest completion order on a symbolic AND/OR causal DAG
+    #[command(name = "causal-plan")]
+    CausalPlan {
+        /// JSON file `{nodes: [{id, cost, and_parents?, or_parents?}], target,
+        /// initial_completed?, budget}`; `-` reads standard input.
+        #[arg(long)]
+        input: String,
     },
     /// SQLite reflex feedback trace counts: unlabeled, unconsumed, trained
     #[command(name = "reflex-feedback-status")]
@@ -666,7 +788,8 @@ async fn main() -> anyhow::Result<()> {
         }
         Commands::Mcp {
             stdio,
-            sse: _,
+            host,
+            uds_path,
             port,
             token,
             mount_assets,
@@ -680,8 +803,10 @@ async fn main() -> anyhow::Result<()> {
             }
             if stdio {
                 server.run_stdio().await?;
+            } else if let Some(path) = uds_path {
+                std::sync::Arc::new(server).run_uds(path).await?;
             } else {
-                let addr: SocketAddr = format!("0.0.0.0:{}", port).parse()?;
+                let addr = SocketAddr::new(host, port);
                 if token.is_some() {
                     println!(
                         "🔒 Gen-Zero MCP SSE service running with Token Authorization on {}",
@@ -733,6 +858,221 @@ async fn main() -> anyhow::Result<()> {
             out["model"] = serde_json::to_value(scorer.info())?;
             out["load_ms"] = serde_json::json!(load_ms);
             out["elapsed_ms"] = serde_json::json!(started.elapsed().as_secs_f64() * 1e3);
+            println!("{}", serde_json::to_string_pretty(&out)?);
+        }
+        Commands::QaGate {
+            model,
+            tokenizer,
+            adapter,
+            context,
+            question,
+            candidate,
+            best_span_score,
+            null_score,
+            ambiguity_low,
+            ambiguity_high,
+            threshold,
+        } => {
+            let started = std::time::Instant::now();
+            let verifier = gen_zero_model::TriTeacherPairDecider::load(
+                &adapter,
+                &model,
+                tokenizer.as_deref(),
+                f64::from(threshold),
+            )
+            .with_context(|| {
+                format!(
+                    "load tri-teacher verifier {} on {}",
+                    adapter.display(),
+                    model.display()
+                )
+            })?;
+            let load_ms = started.elapsed().as_secs_f64() * 1e3;
+            let info = verifier.info();
+            // Mix the teachers with the weights the adapter was trained with.
+            let config = gen_zero_gate::TwoStageConfig {
+                ambiguity_low,
+                ambiguity_high,
+                tri_teacher_threshold: threshold,
+                teacher_weights: gen_zero_gate::TeacherWeights {
+                    w_405b: info.weights.w_405b as f32,
+                    w_q72b: info.weights.w_q72b as f32,
+                    w_llama70b: info.weights.w_llama70b as f32,
+                },
+                ..gen_zero_gate::TwoStageConfig::default()
+            };
+            let gateway = gen_zero_gate::TwoStageDualTrackGateway::new(config)?;
+            let started = std::time::Instant::now();
+            let evidence = gateway.decide_with_scores(
+                &context,
+                &question,
+                &candidate,
+                best_span_score,
+                null_score,
+                &verifier,
+            )?;
+            let out = serde_json::json!({
+                "evidence": evidence,
+                "config": gateway.config(),
+                "verifier": info,
+                "load_ms": load_ms,
+                "elapsed_ms": started.elapsed().as_secs_f64() * 1e3,
+            });
+            println!("{}", serde_json::to_string_pretty(&out)?);
+        }
+        Commands::Arbitrate {
+            db,
+            api_key,
+            endpoint,
+            model,
+            batch_size,
+            poll_interval_secs,
+            max_retries,
+            request_timeout_secs,
+            once,
+        } => {
+            let store = gen_zero_storage::DurableRefusalStore::new(&db)
+                .with_context(|| format!("open durable refusal store {}", db.display()))?;
+            let api_key = api_key.or_else(|| std::env::var("OPENAI_API_KEY").ok());
+            let config = gen_zero_service::LlmArbitratorConfig {
+                api_endpoint: endpoint,
+                api_key,
+                model,
+                batch_size,
+                poll_interval_secs,
+                max_retries,
+                request_timeout_secs,
+            };
+            if once {
+                let report = gen_zero_service::run_once(&config, &store).await?;
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+                let handle = gen_zero_service::spawn_arbitrator_daemon(
+                    config,
+                    std::sync::Arc::new(store),
+                    shutdown_rx,
+                );
+                tokio::signal::ctrl_c().await?;
+                let _ = shutdown_tx.send(true);
+                handle.await?;
+            }
+        }
+        Commands::PatchBuild {
+            db,
+            output_dir,
+            batch_size,
+            base_model_hash,
+            poll_interval_secs,
+            once,
+        } => {
+            let config = gen_zero_service::PatchBuildConfig {
+                db_path: db,
+                output_dir,
+                batch_size,
+                base_model_hash,
+                poll_interval_secs,
+            };
+            let builder =
+                gen_zero_service::PatchBuilder::open(config.clone()).with_context(|| {
+                    format!("open durable refusal store {}", config.db_path.display())
+                })?;
+            if once {
+                let out = match builder.run_once()? {
+                    Some(patch) => serde_json::json!({
+                        "built": true,
+                        "patch_id": patch.patch_id,
+                        "sha256": patch.sha256,
+                        "samples_count": patch.samples_count,
+                        "patch_file_path": patch.patch_file_path,
+                        "base_model_hash": patch.base_model_hash,
+                    }),
+                    None => serde_json::json!({ "built": false }),
+                };
+                println!("{}", serde_json::to_string_pretty(&out)?);
+            } else {
+                let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(false);
+                let handle = gen_zero_service::spawn_patch_builder_daemon(builder, shutdown_rx);
+                tokio::signal::ctrl_c().await?;
+                let _ = shutdown_tx.send(true);
+                handle.await?;
+            }
+        }
+        Commands::PatchApply { db, patch_id } => {
+            let manager = gen_zero_service::HotReloadManager::new(open_durable_store(&db)?);
+            let patch = manager.apply_patch(&patch_id)?;
+            let row = manager
+                .store()
+                .get_patch(&patch_id)?
+                .with_context(|| format!("patch {patch_id} vanished after apply"))?;
+            let out = serde_json::json!({
+                "applied": true,
+                "patch_id": patch.patch_id,
+                "sha256": patch.sha256,
+                "samples_count": patch.samples_count,
+                "patch_file_path": patch.patch_file_path,
+                "deployed_at_ms": row.deployed_at_ms,
+            });
+            println!("{}", serde_json::to_string_pretty(&out)?);
+        }
+        Commands::Rollback {
+            db,
+            patch_id,
+            reason,
+        } => {
+            let manager = gen_zero_service::HotReloadManager::new(open_durable_store(&db)?);
+            let report = manager.rollback(&patch_id, &reason)?;
+            let row = manager
+                .store()
+                .get_patch(&patch_id)?
+                .with_context(|| format!("patch {patch_id} vanished after rollback"))?;
+            let out = serde_json::json!({
+                "rolled_back": true,
+                "patch_id": report.patch_id,
+                "status": row.status,
+                "rollback_reason": row.rollback_reason,
+                "rolled_back_at_ms": row.rolled_back_at_ms,
+                "elapsed_us": report.elapsed_us,
+            });
+            println!("{}", serde_json::to_string_pretty(&out)?);
+        }
+        Commands::CanaryStatus {
+            db,
+            patch_id,
+            limit,
+            min_samples,
+        } => {
+            let store = open_durable_store(&db)?;
+            let row = store
+                .get_patch(&patch_id)?
+                .with_context(|| format!("patch {patch_id} not found in {}", db.display()))?;
+            let config = gen_zero_service::CanaryConfig {
+                window: limit,
+                min_samples,
+                ..Default::default()
+            };
+            let guard = gen_zero_service::CanaryGuard::new(store, config)?;
+            let stats = guard.stats(&patch_id)?;
+            let decision = guard.evaluate(&stats);
+            let out = serde_json::json!({
+                "patch_id": row.patch_id,
+                "status": row.status,
+                "deployed_at_ms": row.deployed_at_ms,
+                "rollback_reason": row.rollback_reason,
+                "stats": {
+                    "window": stats.window,
+                    "total_samples": stats.total_samples,
+                    "refused_count": stats.refused_count,
+                    "fast_pass_count": stats.fast_pass_count,
+                    "hard_stop_count": stats.hard_stop_count,
+                    "refusal_rate": stats.refusal_rate,
+                    "fast_pass_rate": stats.fast_pass_rate,
+                    "hard_stop_rate": stats.hard_stop_rate,
+                    "avg_latency_us": stats.avg_latency_us,
+                },
+                "guard": guard.config(),
+                "decision": decision,
+            });
             println!("{}", serde_json::to_string_pretty(&out)?);
         }
         Commands::Keygen { prefix } => {
@@ -1064,6 +1404,31 @@ async fn main() -> anyhow::Result<()> {
                 std::process::exit(1);
             }
         }
+        Commands::CausalPlan { input } => {
+            let text = if input == "-" {
+                let mut text = String::new();
+                std::io::Read::read_to_string(&mut std::io::stdin(), &mut text)
+                    .context("read causal plan from stdin")?;
+                text
+            } else {
+                std::fs::read_to_string(&input).with_context(|| format!("read {input}"))?
+            };
+            let body: serde_json::Value =
+                serde_json::from_str(&text).with_context(|| format!("parse {input} as JSON"))?;
+            let server = McpServer::new();
+            let request = serde_json::json!({"action": "causal_plan", "causal_plan": body});
+            let outcome = server.engine.execute(&request).await?;
+            println!("{}", serde_json::to_string_pretty(&outcome)?);
+            if outcome.is_error {
+                let code = outcome
+                    .rejection
+                    .as_ref()
+                    .map_or("error", |r| r.code.as_str());
+                let detail = outcome.rejection.as_ref().map_or("", |r| r.detail.as_str());
+                eprintln!("gen-zero causal-plan: refused ({code}): {detail}");
+                std::process::exit(1);
+            }
+        }
         Commands::ReflexFeedbackStatus {
             db,
             input_dim,
@@ -1133,15 +1498,38 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Open the durable refusal database at `db`. Refuses a path that does not
+/// exist, so a typo cannot silently create an empty database.
+fn open_durable_store(
+    db: &std::path::Path,
+) -> anyhow::Result<std::sync::Arc<gen_zero_storage::DurableRefusalStore>> {
+    if !db.is_file() {
+        anyhow::bail!("durable refusal database {} does not exist", db.display());
+    }
+    let store = gen_zero_storage::DurableRefusalStore::new(db)
+        .with_context(|| format!("open durable refusal store {}", db.display()))?;
+    Ok(std::sync::Arc::new(store))
+}
+
 #[cfg(test)]
 mod cli_parse_tests {
-    use super::Cli;
+    use super::{Cli, Commands};
     use clap::Parser;
+    use std::net::IpAddr;
 
     #[test]
-    fn mcp_rejects_conflicting_transport_flags() {
+    fn mcp_defaults_to_loopback() {
+        let cli = Cli::try_parse_from(["gen-zero", "mcp"]).unwrap();
+        match cli.command {
+            Commands::Mcp { host, .. } => assert_eq!(host, IpAddr::from([127, 0, 0, 1])),
+            other => panic!("expected mcp, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn mcp_rejects_removed_sse_flag() {
         let error = Cli::try_parse_from(["gen-zero", "mcp", "--stdio", "--sse"])
-            .expect_err("stdio and sse must not be accepted together");
-        assert_eq!(error.kind(), clap::error::ErrorKind::ArgumentConflict);
+            .expect_err("sse flag was removed");
+        assert_eq!(error.kind(), clap::error::ErrorKind::UnknownArgument);
     }
 }

@@ -1,16 +1,13 @@
 //! # gen-zero-worldmodel
 //!
-//! Latent dynamics, Contact Hamiltonian integrators with Strang splitting, the
-//! conformal symplectic (contact) world model built on them, and Koopman
-//! spectral jump operators for O(1) lookahead.
+//! Latent dynamics, Contact Hamiltonian integrators with Strang splitting, and
+//! the conformal symplectic (contact) world model built on them.
 
 mod compression;
 pub mod conformal_dynamics;
 pub mod contact;
 pub mod dynamics;
 pub mod error;
-pub mod koopman;
-pub mod koopman_spectral;
 pub mod symplectic;
 pub mod symplectic_dynamics;
 
@@ -22,8 +19,6 @@ pub use contact::{
 };
 pub use dynamics::{LatentDynamicsWorldModel, DONE_NORM, SAFETY_SOURCE_NORM_MARGIN};
 pub use error::WorldModelError;
-pub use koopman::{JordanBlock, KoopmanSpectralJumper};
-pub use koopman_spectral::{expm_pade, expm_taylor, ExpmMethod, KoopmanGenerator};
 pub use symplectic::{
     compress_trajectory_zstd as compress_phase_trajectory_zstd,
     decompress_trajectory_zstd as decompress_phase_trajectory_zstd, PhaseState,

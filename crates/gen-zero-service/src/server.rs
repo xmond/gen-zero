@@ -3,7 +3,7 @@
 //! Adheres strictly to Doc 07:
 //! - simd-json stdio parsing loop with single outer preallocation and SIMD_JSON_PADDING
 //! - Axum 0.7 HTTP/SSE routing with /sse, /message, /v1/decisions, /v1/decisions/stream,
-//!   /v1/causal_fold
+//!   /v1/causal_fold, /v1/causal_plan
 //! - MCP compliant error framing (top-level JSON-RPC error vs result { isError: true, _meta })
 //! - HTTP routes never answer 200 for a refused or failed call: a typed
 //!   refusal carries its own status (400 / 404 / 409 / 422 / 503), other
@@ -409,35 +409,22 @@ impl McpServer {
         self
     }
 
-    /// Process a single JSON-RPC 2.0 frame from an aligned buffer.
+    /// Process a single JSON-RPC 2.0 frame. The buffer may carry trailing
+    /// NUL padding or a line terminator; only the bytes before them are
+    /// parsed. simd-json parses that slice in place (it rewrites escaped
+    /// strings inside the buffer), so the caller must not reuse its contents.
+    /// A parse failure is a -32700 error; there is no second parser.
     pub async fn handle_jsonrpc_frame(&self, aligned_buf: &mut [u8]) -> String {
-        // Strip trailing null padding bytes
         let trimmed_len = aligned_buf
             .iter()
             .rposition(|&b| b != 0 && b != b'\n' && b != b'\r' && b != b' ')
-            .map(|pos| pos + 1)
-            .unwrap_or(aligned_buf.len());
-
-        // Retain uncorrupted byte copy in case in-situ simd_json parsing mutates buffer on failure
-        let fallback_bytes = aligned_buf[..trimmed_len].to_vec();
-
-        // Try ultra-fast simd_json first, fallback to serde_json
-        let req = match simd_json::from_slice::<Value>(aligned_buf) {
+            .map_or(0, |pos| pos + 1);
+        let req = match simd_json::from_slice::<Value>(&mut aligned_buf[..trimmed_len]) {
             Ok(val) => val,
-            Err(_) => match serde_json::from_slice::<Value>(&fallback_bytes) {
-                Ok(val) => val,
-                Err(e) => {
-                    let err_resp = json!({
-                        "jsonrpc": "2.0",
-                        "error": {
-                            "code": -32700,
-                            "message": format!("Parse error: {}", e)
-                        },
-                        "id": Value::Null
-                    });
-                    return err_resp.to_string();
-                }
-            },
+            Err(error) => {
+                return jsonrpc_error(Value::Null, -32700, format!("Parse error: {error}"))
+                    .to_string();
+            }
         };
 
         let Some(req_object) = req.as_object() else {
@@ -496,7 +483,7 @@ impl McpServer {
             }
         }
         // JSON-RPC notifications, including `notifications/initialized`, do
-        // not receive a response. Keep this behavior consistent for stdio;
+        // not receive a response. stdio and UDS write no frame for them;
         // the HTTP handler separately returns 204/202 acknowledgements.
         let notification = !req_object.contains_key("id");
 
@@ -525,15 +512,23 @@ impl McpServer {
             "tools/list" => {
                 let mut zero_tool = json!({
                                 "name": "zero",
-                                "description": "Universal Gen-Zero Polymorphic Decision, Planning & Cognitive Primitive (0-Token Pure-Prefill). Supports 20 cognitive verbs: ask (alias decide), route, imagine, stream, grep, compact, entail, causal_fold, pipeline, simulate, what_if, audit, graph_deposit, graph_recall, graph_rag, graph_ppr, graph_prune, graph_evolve, graph_coarse_grain, graph_zoom.",
+                                "description": "Universal Gen-Zero Polymorphic Decision, Planning & Cognitive Primitive (0-Token Pure-Prefill). Supports 24 cognitive verbs: ask (alias decide), route, imagine, stream, grep, compact, entail, causal_fold, causal_plan, pipeline, simulate, what_if, audit, graph_deposit, graph_recall, graph_rag, graph_ppr, graph_prune, graph_evolve, graph_coarse_grain, graph_zoom, graph_induce, graph_execute_operator, qa_gate. An unknown or non-string action, or a request with no action and no verb-selecting field, is refused with InvalidParams; it is never answered as ask.",
                                 "inputSchema": {
                                     "type": "object",
                                     "properties": {
                                         "action": {
                                             "type": "string",
-                                            "enum": ["ask", "route", "imagine", "stream", "grep", "compact", "entail", "causal_fold", "pipeline", "simulate", "what_if", "audit", "graph_deposit", "graph_recall", "graph_rag", "graph_ppr", "graph_prune", "graph_evolve", "graph_coarse_grain", "graph_zoom"],
-                                            "description": "Optional explicit verb. If omitted, intent is deduced automatically."
+                                            "enum": ["ask", "route", "imagine", "stream", "grep", "compact", "entail", "causal_fold", "causal_plan", "pipeline", "simulate", "what_if", "audit", "graph_deposit", "graph_recall", "graph_rag", "graph_ppr", "graph_prune", "graph_evolve", "graph_coarse_grain", "graph_zoom", "graph_induce", "graph_execute_operator", "qa_gate"],
+                                            "description": "Optional explicit verb. If omitted, intent is deduced from the fields; a request no verb reads is refused."
                                         },
+                                        "context": {"type": "string", "description": "QA passage for qa_gate; also used by ask."},
+                                        "question": {"type": "string", "description": "QA question for qa_gate."},
+                                        "candidate": {"type": "string", "description": "Stage 1 candidate span for qa_gate; empty only for confident No-Answer."},
+                                        "best_span_score": {"type": "number", "description": "Stage 1 best span score for qa_gate."},
+                                        "null_score": {"type": "number", "description": "Stage 1 null score for qa_gate."},
+                                        "ambiguity_low": {"type": "number", "description": "Inclusive lower ambiguity bound; default -1.5."},
+                                        "ambiguity_high": {"type": "number", "description": "Inclusive upper ambiguity bound; default 0.5."},
+                                        "threshold": {"type": "number", "description": "Stage 2 tri_sim threshold; default 0.91."},
                                         "candidates": {
                                             "type": "array",
                                             "items": { "type": "string" },
@@ -574,7 +569,7 @@ impl McpServer {
                                         },
                                         "graph": {
                                             "type": "object",
-                                            "description": "Request for the graph verbs on the engine's live LodGraph (the graph the PolicyGate reads for revocations). Name nodes by entity_id or by action (entity id = the action's id). graph_deposit: {nodes?: [{entity_id | action, label, band?: 0..3 (absent: the band the coordinate implies, from its hyperbolic depth: the origin is band 3, the boundary band 0), status: hypothesized | validated | falsified, coord?: {hyperbolic: [4], spherical: [4], euclidean: [8]}, hdc?: [4 u64], confidence, payload?: knowledge text (<= 64 KiB, BLAKE3 digest stored), source_uri?, timestamp_ns? (default: deposit wall-clock time), aliases?: [<= 16 other names, synonyms or translations, each <= 256 bytes], embedding?: [16..8192 floats from the caller's embedding model, one dimension per graph]}] (give coord and hdc together, or neither: then the payload is projected by the graph's lexical n-gram SimHash projector, or with no payload the embedding by its deterministic dense random-sign/SimHash projection, and band is required; each alias is one more anchor for text queries, and nodes sharing an alias are linked by semantic edges both ways, counted in alias_link_edges), edges?: [{source: {entity_id | action}, target: {...}, type: validates | falsifies | causal_transition | semantic | coarse_grain | depends_on, weight}]}, one transaction, flushed into the CSR snapshot, rolled back whole on any error. graph_recall: {coord, hdc, top_k, crag_margin}. graph_rag: {query_text and/or query_vector | (coord, hdc), top_k: 1..32, crag_margin? (default 0), alpha?, max_iters?}: per track, HDC Hamming prefilter to 4*top_k candidates and product-geodesic rerank to top_k anchors, a node counted by its closest anchor (its own coordinate or an alias for text and coord; its embedding for query_vector, whose dimension must equal the graph's), then each track normalizes anchor distances by its maximum among the recalled top_k anchors (a zero maximum leaves distances at zero) and PPR is seeded with 1/(1+normalized_distance) along every edge in its direction; this candidate-relative normalization is reported as distance_normalization=per_track_max and is not semantic calibration (a single nonzero candidate has normalized distance 1); returns every anchor plus up to top_k diffusion-reached nodes, each with ppr_score, dimensionless anchor_distance (null when reached by diffusion), matched (primary | alias | embedding), matched_alias, aliases, confidence, payload, source_uri, timestamp_ns and payload_digest, and searchable_nodes: the live nodes the query could be compared with. Internal reflection evidence is excluded from general recall, anchors and diffusion hits. The text projector is lexical (shared n-grams), not a semantic embedding: a translation or paraphrase is found only through an alias, an edge, or a query_vector from the caller's embedding model; the engine holds no such model. The dense projection is deterministic fixed random-sign/SimHash plus a 16-row real-valued sketch; it performs no learned manifold alignment or isometry, and its relation to embedding angle is weakly statistical with no cosine, distance or ranking guarantee. graph_ppr: {seeds: [{entity_id | action, weight}], top_k, alpha?, max_iters?, tolerance?}. graph_prune: {entity_id | action, dry_run?, beta?, gamma?, tolerance?, theta_lo?, theta_hi?, max_steps?}: records evidence against the node (confidence pinned to 0, entity revoked), then evolves every confidence to the fixed point of c = (1 - beta) prior + beta max(0, P+ c - gamma P- c), clamped to [0, 1], P+ the row-normalized DependsOn/CausalTransition/CoarseGrain weights into each node (a node without them is supported by its own prior), P- the row-normalized falsifies weights (gamma 0 leaves them out). The dependency graph is split into strongly connected components (Tarjan) solved sources first: a node outside every cycle takes one evaluation, a cycle is iterated alone; a cycle whose Lipschitz bound beta * max row sum of (P+ + gamma P-) inside it is >= 1 is refused with FixedPointNotContractive (beta < 1 / (1 + gamma) always contracts); nodes whose confidence falls below theta_lo are falsified and their entities revoked, which hard-stops those actions at the gate. The effect on a dependent shrinks with its prior, its other dependencies and its distance from the root: it is not a whole-subtree cascade. dry_run reports on a private copy and changes nothing. graph_evolve: {retract?: [{entity_id | action}], dry_run?, beta?, gamma?, tolerance?, theta_lo?, theta_hi?, max_steps?}: withdraws such evidence, then evolves; nodes above theta_hi become validated and lose a revocation the evolution made, nodes between the thresholds keep their status. graph_coarse_grain: {members: [{entity_id | action}], entity_id | action, coord, hdc, dry_run?}: inserts a summary node on the band its coord implies, which must be strictly coarser than every member, links each member to it with a coarse_grain edge (weight 1), makes it the members' parent and flushes; refused (nothing changed) for a falsified, revoked or already-parented member. graph_zoom: {entity_id | action, direction: in | out | to_coord, dry_run?}: moves the node one band, or to the band its coord implies; refused when a member would reach its summary's band or a summary its member's. A coarse_grain edge must go from a finer band to a coarser one. Defaults beta 0.85, gamma 1, tolerance 1e-6, theta_lo 0.2, theta_hi 0.8, max_steps 10000 (uncalibrated presets, echoed). A run that does not converge inside its step bound is refused with FixedPointDiverged and changes nothing. The fixed_point report echoes gamma and the block counts scc_count, trivial_scc_count, cyclic_scc_count, max_scc_size, plus falsification_edges, contraction (largest cycle Lipschitz bound) and node_updates. A deposited node's confidence is its prior. Distances and coordinate domains use the graph geometry {curvature, radius, alpha_h, alpha_e, alpha_s} set at startup by GENZERO_GRAPH_GEOMETRY (unit when unset), echoed as graph.geometry: hyperbolic must satisfy curvature * |x|^2 < 1, spherical is a direction scaled to the radius. Durable when GENZERO_GRAPH_PERSIST_DIR is configured (MicroVM data disk: /var/lib/gen3/lodgraph): commits sync changed blocks and atomically replace a SHA-256-checked manifest; startup refuses corrupt snapshots and snapshots holding a cycle admission would refuse. Without that setting the graph is process-local."
+                                            "description": "Request for the graph verbs on the engine's live LodGraph (the graph the PolicyGate reads for revocations). Name nodes by entity_id or by action (entity id = the action's id). graph_deposit: {nodes?: [{entity_id | action, label, band?: 0..3 (absent: the band the coordinate implies, from its hyperbolic depth: the origin is band 3, the boundary band 0), status: hypothesized | validated | falsified, coord?: {hyperbolic: [4], spherical: [4], euclidean: [8]}, hdc?: [4 u64], confidence, payload?: knowledge text (<= 64 KiB, BLAKE3 digest stored), source_uri?, timestamp_ns? (default: deposit wall-clock time), aliases?: [<= 16 other names, synonyms or translations, each <= 256 bytes], operator?: {name, operator_kind: hard_dcm | soft_pcm, embedder_space?, version, pure}, embedding?: [16..8192 floats from the caller's embedding model, one dimension per graph]}] (give coord and hdc together, or neither: then the payload is projected by the graph's lexical n-gram SimHash projector, or with no payload the embedding by its deterministic dense random-sign/SimHash projection, and band is required; each alias is one more anchor for text queries, and nodes sharing an alias are linked by semantic edges both ways, counted in alias_link_edges), edges?: [{source: {entity_id | action}, target: {...}, type: validates | falsifies | causal_transition | semantic | coarse_grain | depends_on, weight}]}, one transaction, flushed into the CSR snapshot, rolled back whole on any error. graph_recall: {coord, hdc, top_k, crag_margin}. graph_rag: {query_text and/or query_vector | (coord, hdc), top_k: 1..32, crag_margin? (default 0), alpha?, max_iters?, token_budget?}: the lexical/chart track's HDC Hamming prefilter keeps the 4*top_k closest live nodes and reranks them by product-geodesic distance under the graph's geometry to top_k anchors; the vector track (query_vector) instead keeps at least 256 candidates in its Hamming prefilter and reranks that pool by the exact angle between the query vector and each node's embedding (see the dense-projection note below for why the pool is wider and the rerank exact); either way a node is counted by its closest anchor (its own coordinate or an alias for text and coord; its embedding for query_vector, whose dimension must equal the graph's), then each track normalizes anchor distances by its maximum among the recalled top_k anchors (a zero maximum leaves distances at zero) and PPR is seeded with 1/(1+normalized_distance) along every edge in its direction; this candidate-relative normalization is reported as distance_normalization=per_track_max and is not semantic calibration (a single nonzero candidate has normalized distance 1); returns every anchor plus up to top_k diffusion-reached nodes, each with ppr_score, dimensionless anchor_distance (null when reached by diffusion), matched (primary | alias | embedding), matched_alias, aliases, confidence, payload, source_uri, timestamp_ns and payload_digest, and searchable_nodes: the live nodes the query could be compared with. token_budget caps the payload each hit may carry: a hit whose own payload fits the remaining budget keeps it, else it folds to a CoarseGrain summary ancestor's payload (and that fold takes the summary's own entity_id, confidence and status, never a Falsified summary), else the hit is dropped and listed in token_budget_dropped_hits; the response then also carries estimated_tokens_used (a chars/4 estimate, not an exact tokenizer count) and selection_strategy. Internal reflection evidence is excluded from general recall, anchors and diffusion hits. The text projector is lexical (shared n-grams), not a semantic embedding: a translation or paraphrase is found only through an alias, an edge, or a query_vector, or the native Qwen dense track: with the native Qwen backend (GENZERO_QWEN_MODEL_PATH), graph_deposit gives each node with a payload and no caller embedding the unit-norm mean-pooled final hidden state of its payload (896 floats for Qwen2.5-0.5B), and graph_rag embeds a query_text that has no query_vector the same way and searches text+vector (query.vector_source qwen, qwen_embedded true, qwen_embedder names the model, qwen_pooling names the pooling used, \"mean\"). Without that backend, or with the Python bridge (no in-process embedder), the verb runs lexical-only with qwen_embedded false (graph_deposit: qwen_embedded_nodes 0) and names qwen_skip_reason. But once a native Qwen backend is loaded, a graph whose embeddings have another width, or are locked to a different embedder identity (embedder_space: two models can share a width while embedding different semantic spaces), is refused outright, fail-closed, never silently downgraded to a lexical-only success. One request embeds at most 4096 tokens (all its payloads, or its query_text) and more is refused with EmbedBudgetExceeded (413) before any forward pass; any other embedding failure of a loaded model is an EmbedderError or EmbedderOverloaded refusal, never a lexical fallback. The dense projection is deterministic fixed random-sign/SimHash plus a 16-row real-valued sketch; it performs no learned manifold alignment or isometry, and its relation to embedding angle is weakly statistical, so it serves only the vector track's Hamming prefilter (at least 256 candidates); those candidates are reranked by the exact angle between the query vector and each node's embedding (crag_margin in radians on that track), and a node outside the prefilter is never reranked. graph_ppr: {seeds: [{entity_id | action, weight}], top_k, alpha?, max_iters?, tolerance?}. graph_prune: {entity_id | action, dry_run?, beta?, gamma?, tolerance?, theta_lo?, theta_hi?, max_steps?}: records evidence against the node (confidence pinned to 0, entity revoked), then evolves every confidence to the fixed point of c = (1 - beta) prior + beta max(0, P+ c - gamma P- c), clamped to [0, 1], P+ the row-normalized DependsOn/CausalTransition/CoarseGrain weights into each node (a node without them is supported by its own prior), P- the row-normalized falsifies weights (gamma 0 leaves them out). The dependency graph is split into strongly connected components (Tarjan) solved sources first: a node outside every cycle takes one evaluation, a cycle is iterated alone; a cycle whose Lipschitz bound beta * max row sum of (P+ + gamma P-) inside it is >= 1 is refused with FixedPointNotContractive (beta < 1 / (1 + gamma) always contracts); nodes whose confidence falls below theta_lo are falsified and their entities revoked, which hard-stops those actions at the gate. The effect on a dependent shrinks with its prior, its other dependencies and its distance from the root: it is not a whole-subtree cascade. dry_run reports on a private copy and changes nothing. graph_evolve: {retract?: [{entity_id | action}], dry_run?, beta?, gamma?, tolerance?, theta_lo?, theta_hi?, max_steps?}: withdraws such evidence, then evolves; nodes above theta_hi become validated and lose a revocation the evolution made, nodes between the thresholds keep their status. graph_coarse_grain: {members: [{entity_id | action}], entity_id | action, coord, hdc, dry_run?}: inserts a summary node on the band its coord implies, which must be strictly coarser than every member, links each member to it with a coarse_grain edge (weight 1), makes it the members' parent and flushes; refused (nothing changed) for a falsified, revoked or already-parented member. graph_zoom: {entity_id | action, direction: in | out | to_coord, dry_run?}: moves the node one band, or to the band its coord implies; refused when a member would reach its summary's band or a summary its member's. A coarse_grain edge must go from a finer band to a coarser one. Defaults beta 0.85, gamma 1, tolerance 1e-6, theta_lo 0.2, theta_hi 0.8, max_steps 10000 (uncalibrated presets, echoed). A run that does not converge inside its step bound is refused with FixedPointDiverged and changes nothing. The fixed_point report echoes gamma and the block counts scc_count, trivial_scc_count, cyclic_scc_count, max_scc_size, plus falsification_edges, contraction (largest cycle Lipschitz bound) and node_updates. A deposited node's confidence is its prior. Distances and coordinate domains use the graph geometry {curvature, radius, alpha_h, alpha_e, alpha_s} set at startup by GENZERO_GRAPH_GEOMETRY (unit when unset), echoed as graph.geometry: hyperbolic must satisfy curvature * |x|^2 < 1, spherical is a direction scaled to the radius. Durable when GENZERO_GRAPH_PERSIST_DIR is configured (MicroVM data disk: /var/lib/gen3/lodgraph): commits sync changed blocks and atomically replace a SHA-256-checked manifest; startup refuses corrupt snapshots and snapshots holding a cycle admission would refuse. Without that setting the graph is process-local. graph_execute_operator: {node_id (internal graph node id), nonce? (64 hex characters = 32 bytes, required for HardDcm, prohibited for SoftPcm), input (JSON)}. Builtin HardDcm appends a process-local audit record; builtin SoftPcm summarizes node state without mutation. Nonces and audit records live only for the graph runtime, including on persistent graphs; no cross-restart replay guarantee. graph_induce: {text (<= 4096 bytes), context? (<= 4096 bytes), answerability_threshold? (0..1, default 0.8, an uncalibrated preset), auto_deposit? (default false)}: Text-to-Graph by a deterministic lexical rule parser (engine lexical_rule_parser_v1; not a neural model, nothing trained or calibrated). Answerability gate first, fail-closed: blank text, a phrase from a fixed prompt-injection blocklist in text or context, no clause, no clause opening with a lexicon action verb (refused even at threshold 0), more than 16 clauses, a repeated action, two after/before inversions in a row, or a last step with more than one action give answerable false with confidence 0 and a refusal_reason; otherwise confidence = char_validity * word_shape * verb_coverage (share of plain characters, of word-shaped Latin words, of clauses opening with a lexicon action verb), a heuristic score, not a probability, and below the threshold the text is refused. A refused text yields no dag_spec, no actions, and deposits nothing. Grammar: sequence is the default (then, ;, ., ->, and a comma or 'and' followed by a verb start a step that depends on every action of the step before), so 'fetch data then clean it and save to db' is the chain fetch data -> clean it -> save to db; parallel needs an explicit marker (in parallel, at the same time, simultaneously, concurrently, meanwhile) and joins the step before; 'A after B' and 'before B, A' run B first; No coreference: 'it' stays 'it'. Returns {answerable, confidence, dag_spec (the planner CausalDagSpec: AND rules, nominal cost 1 per action, value 1 on the single target, budget = action count; validated by the planner and accepted unchanged as pipeline decide causal_dag), actions: [{action_id (the gate key of the name), name, verb, parents, cost, target}], deposited_node_ids, engine, answerability (the three factors, threshold, clause counts), refusal_reason, elapsed_us, auto_deposit, deposit}. auto_deposit true binds every action to builtin:dcm_executor (hard_dcm, version 1, pure false, no embedder_space) and deposits an answerable result as one graph_deposit transaction (Qwen payload embedding included when that backend is loaded): one band-1 hypothesized node per action named by action, payload = the name (plus 'context: ...'), source_uri graph_induce:<engine>:<blake3 of text>, prior = confidence, and one depends_on edge (weight 1) per parent; an action already in the graph fails the whole request with nothing deposited."
                                         },
                                         "causal_fold": {
                                             "type": "object",
@@ -582,7 +577,7 @@ impl McpServer {
                                         },
                                         "pipeline": {
                                             "type": "object",
-                                            "description": "Request for 'pipeline': {op, state: 1024 numbers, ...} on the latent world model. op=simulate {actions: [ids], horizon?}; what_if {candidates: [ids], horizon? (default 5)}; audit_action {action, horizon? (5), continuation_actions?, warn_risk? (0.3)}; decide {candidates: [ids, at most 16], mode: auto|mcts|mpc_cem|astar|manifold_gflownet|cfr_nash|reflex, entropy: [0,1], return_trajectory?, horizon? (5)}. PolicyGate hard stops are pruned first; no legal action, a divergent state or a model without safety estimates is refused. safe_prob of the default model is an uncalibrated margin to its termination norm."
+                                            "description": "Request for 'pipeline': {op, state: 1024 numbers, ...} on the latent world model. op=simulate {actions: [ids], horizon?}; what_if {candidates: [ids], horizon? (default 5)}; audit_action {action, horizon? (5), continuation_actions?, warn_risk? (0.3)}; decide {candidates: [ids, at most 16], mode: auto|mcts|mpc_cem|astar|manifold_gflownet|cfr_nash|reflex|causal_triad|tournament_triad, entropy: [0,1], return_trajectory?, horizon? (5), causal_dag? and causal_triad? (triad modes only)}. PolicyGate hard stops are pruned first; no legal action, a divergent state or a model without safety estimates is refused. safe_prob of the default model is an uncalibrated margin to its termination norm."
                                         },
                                         "lines": {
                                             "type": "array",
@@ -631,6 +626,7 @@ impl McpServer {
                                 }
                 });
                 add_world_model_properties(&mut zero_tool);
+                add_causal_plan_property(&mut zero_tool);
                 let causal_fold_tool = json!({
                                 "name": "causal_fold",
                                 "description": "Causal relation trace fold on the caller-supplied discrete relation semiring (Spec 24 §8.6.2): fold a chain of relation ids through a learned composition table under S1 (left), tiered dispatch or S3 (chart, default). The axiom table T(r1, r2, gender) is supplied entirely by the caller via `axioms`; a missing table means every composition is the empty set, so any chain of 2 or more edges refuses. A conflict key (two or more results for the same (r1, r2, gender)) makes left refuse; chart carries every candidate forward and concludes only if exactly one relation survives at the root (meta.causal_fold.conflict_keys counts conflict keys in the table), refusing when two or more survive. Strategy soft folds relation distributions built from weights and refuses above the caller's entropy_threshold (no default, uncalibrated), when unclosed mass dominates, or on a tie. Caps: 64 edges, 4096 axioms, 64 distinct result relation ids; above them the request is refused with InvalidParams.",
@@ -726,7 +722,7 @@ impl McpServer {
                 });
                 let pipeline_tool = json!({
                     "name": "pipeline",
-                    "description": "Latent world-model pipeline (Rust ProductionPipeline): simulate a fixed plan, what_if over candidate first moves with trap detection, audit_action (Approved / WarnHazard / RejectLethal with risk_score), or decide in mode auto (K-MoE router), mcts, mpc_cem, astar, manifold_gflownet, cfr_nash or reflex (gated one-step). PolicyGate hard stops are pruned before any engine runs. Same body as the `pipeline` block of `zero`.",
+                    "description": "Latent world-model pipeline (Rust ProductionPipeline): simulate a fixed plan, what_if over candidate first moves with trap detection, audit_action (Approved / WarnHazard / RejectLethal with risk_score), or decide in mode auto (K-MoE router), mcts, mpc_cem, astar, manifold_gflownet, cfr_nash, reflex (gated one-step), causal_triad or tournament_triad (causal DAG plan sampling + deterministic causal gate after a Lod-band feasibility pre-check; the tournament runs parallel shards; both need causal_dag). PolicyGate hard stops are pruned before any engine runs. Same body as the `pipeline` block of `zero`.",
                     "inputSchema": {
                         "type": "object",
                         "properties": {
@@ -739,7 +735,9 @@ impl McpServer {
                             "horizon": { "type": "integer", "minimum": 1, "maximum": 128 },
                             "warn_risk": { "type": "number", "exclusiveMinimum": 0, "maximum": 1 },
                             "auto_reflect": { "type": "boolean", "description": "Opt in to persistent graph quarantine from simulate, what_if or audit_action failure observations; default false." },
-                            "mode": { "type": "string", "enum": ["auto", "mcts", "mpc_cem", "astar", "manifold_gflownet", "cfr_nash", "reflex"] },
+                            "mode": { "type": "string", "enum": ["auto", "mcts", "mpc_cem", "astar", "manifold_gflownet", "cfr_nash", "reflex", "causal_triad", "tournament_triad"] },
+                            "causal_dag": { "type": "object", "description": "Causal DAG over the candidates, keyed by action id: parents {child: [parents]}, is_or {id: bool}, cost|costs {id: int >= 1} (every candidate), value|values {id: number}, target id, budget int >= 1. Required by causal_triad / tournament_triad." },
+                            "causal_triad": { "type": "object", "description": "Triad run options: done, time_used, n_samples, shards, top_p, seed, energy_alpha, robust. robust={model:{extra_pmf,fatigue_frac,fatigue_extra,kappa?,provenance?},objective?,reorder?,probe?,observations?:[{nominal_cost,observed_cost,time_before}]}. Residuals outside support fail closed; reports contain probabilities conditional on this supplied model, not measured success rates." },
                             "entropy": { "type": "number", "minimum": 0, "maximum": 1 },
                             "return_trajectory": { "type": "boolean" }
                         },
@@ -901,7 +899,8 @@ impl McpServer {
         Ok(())
     }
 
-    /// Run zero-allocation Stdio loop using simd-json.
+    /// Run the line-delimited stdio loop. One frame buffer is reused across
+    /// requests; each line is still copied into it.
     pub async fn run_stdio(&self) -> Result<(), ServiceError> {
         self.check_semantic(None).await?;
         let stdin = tokio::io::stdin();
@@ -909,16 +908,14 @@ impl McpServer {
         let mut reader = tokio::io::BufReader::new(stdin);
         let mut line_buf = String::new();
 
-        // Single outer preallocated buffer with 64-byte alignment and SIMDJSON_PADDING
-        let mut aligned_buf: Vec<u8> = Vec::with_capacity(128 * 1024);
+        // One frame buffer reused across lines.
+        let mut frame_buf: Vec<u8> = Vec::with_capacity(128 * 1024);
 
         while read_stdio_frame(&mut reader, &mut line_buf).await? > 0 {
-            aligned_buf.clear();
-            aligned_buf.extend_from_slice(line_buf.as_bytes());
-            // Ensure simd-json SIMD padding bytes at the end
-            aligned_buf.resize(aligned_buf.len() + simd_json::SIMDJSON_PADDING, 0);
+            frame_buf.clear();
+            frame_buf.extend_from_slice(line_buf.as_bytes());
 
-            let mut resp = self.handle_jsonrpc_frame(&mut aligned_buf).await;
+            let mut resp = self.handle_jsonrpc_frame(&mut frame_buf).await;
             if resp.is_empty() {
                 line_buf.clear();
                 continue;
@@ -966,6 +963,8 @@ impl McpServer {
             .route("/audit/ledger", get(audit_ledger_handler))
             .route("/audit/ledger/:index", get(audit_proof_handler))
             .route("/v1/causal_fold", post(causal_fold_handler))
+            .route("/v1/causal_plan", post(causal_plan_handler))
+            .route("/v1/pipeline", post(pipeline_body_handler))
             .route("/v1/pipeline/:op", post(pipeline_handler))
             .route("/v1/simulate", post(simulate_handler))
             .route("/v1/what_if", post(what_if_handler))
@@ -1307,7 +1306,7 @@ async fn readiness_handler(Extension(engine): Extension<Arc<PolymorphicZeroEngin
 }
 
 /// Stop accepting connections, then let Axum drain in-flight requests.
-async fn shutdown_signal() {
+pub(crate) async fn shutdown_signal() {
     let ctrl_c = async {
         if let Err(error) = tokio::signal::ctrl_c().await {
             tracing::error!(%error, "could not install Ctrl-C handler");
@@ -1444,7 +1443,7 @@ fn engine_error_response(e: &ServiceError) -> Response {
     (status, Json(body)).into_response()
 }
 
-fn jsonrpc_error(id: Value, code: i64, message: impl Into<String>) -> Value {
+pub(crate) fn jsonrpc_error(id: Value, code: i64, message: impl Into<String>) -> Value {
     json!({
         "jsonrpc": "2.0",
         "error": {"code": code, "message": message.into()},
@@ -1715,6 +1714,45 @@ async fn causal_fold_handler(
     (status, Json(body)).into_response()
 }
 
+/// `POST /v1/causal_plan`: flat body `{nodes, target, initial_completed?, budget}`,
+/// wrapped as `{"action": "causal_plan", "causal_plan": <body>}` and run
+/// through the same `causal_plan` verb as `zero` and MCP. Same body shape as
+/// [`message_handler`].
+async fn causal_plan_handler(
+    Extension(engine): Extension<Arc<PolymorphicZeroEngine>>,
+    RestJson(payload): RestJson,
+) -> Response {
+    let request = json!({"action": "causal_plan", "causal_plan": payload});
+    let outcome = match engine.execute(&request).await {
+        Ok(o) => o,
+        Err(e) => return engine_error_response(&e),
+    };
+    let status = outcome_status(&outcome);
+    let mut body = json!({"result": outcome});
+    if status != StatusCode::OK {
+        body["error"] = outcome_error(&outcome);
+    }
+    (status, Json(body)).into_response()
+}
+
+/// Flat pipeline endpoint; operation is explicit in the body, shared with MCP.
+async fn pipeline_body_handler(
+    Extension(engine): Extension<Arc<PolymorphicZeroEngine>>,
+    RestJson(payload): RestJson,
+) -> Response {
+    let request = json!({"action": "pipeline", "pipeline": payload});
+    let outcome = match engine.execute(&request).await {
+        Ok(o) => o,
+        Err(e) => return engine_error_response(&e),
+    };
+    let status = outcome_status(&outcome);
+    let mut body = json!({"result": outcome});
+    if status != StatusCode::OK {
+        body["error"] = outcome_error(&outcome);
+    }
+    (status, Json(body)).into_response()
+}
+
 /// `POST /v1/pipeline/{op}`: flat body, `op` taken from the path, run through the
 /// same `pipeline` verb as `zero` and MCP. A body that also names an `op` must agree
 /// with the path. Same body shape as [`message_handler`].
@@ -1889,6 +1927,49 @@ fn add_world_model_properties(zero_tool: &mut Value) {
         (Some(properties), Value::Object(extra)) => properties.extend(extra),
         _ => tracing::error!(
             "zero tool schema has no properties object; world-model verbs are not advertised"
+        ),
+    }
+}
+
+/// Add the `causal_plan` block to the `zero` tool schema. Kept out of the
+/// main `tools/list` literal, which is at the `json!` recursion limit.
+fn add_causal_plan_property(zero_tool: &mut Value) {
+    let schema = json!({
+        "type": "object",
+        "description": "Request for 'causal_plan': the exact cheapest completion order that ends with `target` complete. A node can be completed once every and_parents member and at least one member of each or_parents group is complete; completing it costs `cost`. The goal cone (reachable, not yet complete ancestors of target) is searched by Dijkstra over completion sets, so the plan is optimal, not heuristic. Refusals: InvalidParams (400) for malformed input (unknown field, duplicate id, unknown parent, empty or_parents group, self parent, negative or non-finite cost or budget); 422 UnreachableGoal when no completion order reaches target (a prerequisite cycle nothing can enter); 422 BudgetExceeded when every plan costs more than budget; 422 TargetTooComplex when the goal cone exceeds 32 nodes; 422 StateLimitExceeded after 200000 expanded states; 422 DeadlineExceeded when the exact search runs past its 500 ms wall-clock budget. Never an approximate plan. Result in _meta.causal_plan {path, total_cost, expanded_states, cone_nodes}.",
+        "properties": {
+            "nodes": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 65536,
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "integer", "minimum": 0, "maximum": 4294967295u64},
+                        "cost": {"type": "number", "minimum": 0},
+                        "and_parents": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+                        "or_parents": {"type": "array", "items": {"type": "array", "minItems": 1, "items": {"type": "integer", "minimum": 0}}}
+                    },
+                    "required": ["id", "cost"],
+                    "additionalProperties": false
+                }
+            },
+            "target": {"type": "integer", "minimum": 0},
+            "initial_completed": {"type": "array", "items": {"type": "integer", "minimum": 0}},
+            "budget": {"type": "number", "minimum": 0}
+        },
+        "required": ["nodes", "target", "budget"],
+        "additionalProperties": false
+    });
+    match zero_tool
+        .pointer_mut("/inputSchema/properties")
+        .and_then(Value::as_object_mut)
+    {
+        Some(properties) => {
+            properties.insert("causal_plan".into(), schema);
+        }
+        None => tracing::error!(
+            "zero tool schema has no properties object; causal_plan is not advertised"
         ),
     }
 }
@@ -2914,6 +2995,7 @@ mod transport_regression_tests {
             "/v1/decisions",
             "/v1/plan",
             "/v1/causal_fold",
+            "/v1/causal_plan",
             "/v1/pipeline/test",
             "/v1/mounts",
         ] {

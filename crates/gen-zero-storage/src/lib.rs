@@ -7,12 +7,18 @@
 //! assets and restore them through its validated, versioned publication path.
 //! Replay primitives remain available to training consumers.
 
+pub mod durable_refusal;
 pub mod error;
 pub mod fenwick;
 pub mod reflex_store;
 pub mod replay;
 pub mod snapshot;
 
+pub use durable_refusal::{
+    ArbitrationResult, ArbitrationStatus, CanaryMetricInput, CanaryMetricRow, CanaryStats,
+    DurablePatchRecord, DurablePatchRow, DurableRefusalStore, DurableRefusalTrace,
+    RefusalTraceInput,
+};
 pub use error::StorageError;
 pub use fenwick::FenwickTree;
 pub use reflex_store::{

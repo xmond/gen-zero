@@ -52,8 +52,8 @@ class TestScoreEndpoint(unittest.TestCase):
 
     def test_score_endpoint_success(self):
         payload = {
-            "prompt": "生产环境 CPU 达到 96%，出现连接超时告警",
-            "candidates": ["扩容实例", "重启服务", "忽略日志"],
+            "prompt": "Production CPU reached 96%, connection timeout alert",
+            "candidates": ["scale_instances", "restart_service", "ignore_logs"],
             "model": "typesafe/zero-1.13",
             "temperature": 1.0
         }

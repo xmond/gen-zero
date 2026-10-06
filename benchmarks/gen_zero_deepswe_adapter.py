@@ -9,6 +9,7 @@ Only the disposable Pier repository is committed, for its base..HEAD collector.
 from __future__ import annotations
 
 import argparse
+import ast
 import asyncio
 import hashlib
 import json
@@ -262,7 +263,7 @@ def sandbox_action(action: dict) -> dict:
             if not content or len(content) > MAX_BYTES or content == current:
                 raise ValueError("Empty, oversized or unchanged edit")
             if path.suffix == ".py":
-                compile(content, name, "exec")
+                ast.parse(content, name)
             prepared.append((path, content))
         # All paths, hashes and Python syntax are checked before any write.
         for path, content in prepared:

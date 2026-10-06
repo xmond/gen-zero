@@ -10,9 +10,11 @@ use crate::graph_verb::graph_rejection;
 use gen_zero_core::{ActionId, CoreError, FullLatent, NormalizedEntropy, WorldModelDynamics};
 use gen_zero_gate::PolicyGate;
 use gen_zero_lod::{LodError, LodGraph, ReflectionRevocation};
+use gen_zero_planner::triad::{CausalDagSpec, RobustReport, TriadRunOptions};
 use gen_zero_planner::{
-    AuditReport, DecideMode, DecideRequest, Decision, GraphContext, PlannerConfig, PlannerError,
-    ProductionPipeline, PrunedAction, Rollout, WhatIfReport, DEFAULT_WARN_RISK,
+    AuditReport, CausalTriadRequest, DecideMode, DecideRequest, Decision, GraphContext,
+    PlannerConfig, PlannerError, ProductionPipeline, PruneSource, PrunedAction, Rollout,
+    TriadReport, WhatIfReport, DEFAULT_WARN_RISK,
 };
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
@@ -174,7 +176,7 @@ pub fn execute_pipeline(
                     "graph_reflection": reflect_rollouts(&graph, auto_reflect, op, &state,
                         &report.trajectory.iter().collect::<Vec<_>>(),
                         &if report.gate_tier == gen_zero_gate::PolicyTier::Tier3HardStop {
-                            vec![PrunedAction { action, tier: report.gate_tier, violated_rules: vec![], reason: report.reasons.join("; ") }]
+                            vec![PrunedAction { action, source: PruneSource::PolicyGate, tier: Some(report.gate_tier), violated_rules: vec![], reason: report.reasons.join("; ") }]
                         } else { vec![] })?}),
             ))
         }
@@ -193,6 +195,8 @@ pub fn execute_pipeline(
                     "planner_config",
                     "budget_ms",
                     "astar_goal",
+                    "causal_dag",
+                    "causal_triad",
                 ],
             )?;
             let state = parse_state(obj)?;
@@ -201,7 +205,7 @@ pub fn execute_pipeline(
                 .get("mode")
                 .and_then(Value::as_str)
                 .ok_or_else(|| {
-                    invalid("pipeline.mode is required: auto, mcts, mpc_cem, astar, manifold_gflownet, cfr_nash or reflex")
+                    invalid("pipeline.mode is required: auto, mcts, mpc_cem, astar, manifold_gflownet, cfr_nash, reflex, causal_triad or tournament_triad")
                 })?
                 .parse()
                 .map_err(planner_rejection)?;
@@ -217,6 +221,7 @@ pub fn execute_pipeline(
                     .ok_or_else(|| invalid("pipeline.return_trajectory must be a boolean"))?,
             };
             let horizon = parse_opt_usize(obj, "horizon")?.unwrap_or(DEFAULT_PIPELINE_HORIZON);
+            let causal_triad = parse_causal_triad(obj)?;
             let decision = pipeline
                 .decide(&DecideRequest {
                     active_context: match obj.get("active_context") {
@@ -237,6 +242,7 @@ pub fn execute_pipeline(
                     entropy: NormalizedEntropy(entropy),
                     return_trajectory,
                     horizon,
+                    causal_triad,
                 })
                 .map_err(planner_rejection)?;
             let summary = format!(
@@ -289,7 +295,20 @@ fn reflect_rollouts(
         }
     }
     for action in blocked {
-        let payload = json!({"kind": "policy_hard_stop", "op": op,
+        // A local precondition is not evidence that the action is globally unsafe.
+        // Record it without teaching the graph to revoke the action everywhere.
+        if action.source == PruneSource::StateActionMask {
+            observations.push(json!({"kind": "state_action_mask_pruned", "op": op,
+                "action": action.action.0, "state_before": initial.as_slice(),
+                "reason": action.reason, "graph_mutated": false}));
+            continue;
+        }
+        let kind = match action.source {
+            PruneSource::PolicyGate => "policy_hard_stop",
+            PruneSource::StateActionMask => "state_action_mask_pruned",
+            PruneSource::ModelHazard => "model_hazard_pruned",
+        };
+        let payload = json!({"kind": kind, "op": op,
             "action": action.action.0, "step": 0, "state_before": initial.as_slice(),
             "reason": action.reason, "rules": action.violated_rules})
         .to_string();
@@ -396,6 +415,9 @@ fn planner_rejection(e: PlannerError) -> Rejection {
         | PlannerError::UnknownMode(_) => ("InvalidParams", 400),
         PlannerError::DivergentState(_) => ("DivergentState", 422),
         PlannerError::NoFeasibleAction => ("NoFeasibleAction", 422),
+        PlannerError::DeadEndRequiresReport => ("DeadEndRequiresReport", 422),
+        PlannerError::CausalGateEmpty { .. } => ("CausalGateEmpty", 422),
+        PlannerError::CausalInfeasible(_) => ("CausalInfeasible", 422),
         PlannerError::MissingSafetyEstimate { .. } => ("MissingSafetyEstimate", 422),
         PlannerError::InvalidSafetyEstimate(_) => ("InvalidSafetyEstimate", 500),
         PlannerError::Core(_) => ("WorldModelError", 500),
@@ -491,6 +513,7 @@ fn pruned_json(pruned: &[PrunedAction]) -> Value {
         .map(|p| {
             json!({
                 "action": p.action.0,
+                "source": p.source,
                 "tier": p.tier,
                 "violated_rules": p.violated_rules,
                 "reason": p.reason,
@@ -577,6 +600,7 @@ fn audit_json(r: &AuditReport, horizon: usize, warn_risk: f32) -> Value {
 fn decision_json(d: &Decision) -> Value {
     json!({
         "timed_out": d.timed_out,
+        "has_dead_end": d.has_dead_end,
         "action": d.action.0,
         "entropy": d.entropy.0,
         "mode": d.mode.as_str(),
@@ -590,6 +614,94 @@ fn decision_json(d: &Decision) -> Value {
         "pruned": pruned_json(&d.pruned),
         "trajectory": d.trajectory.as_ref().map(rollout_json),
         "graph_context": graph_context_json(&d.graph_context),
+        "triad": d.triad.as_ref().map(triad_json),
+    })
+}
+
+/// `causal_dag` (the DAG spec) and optional `causal_triad` (run options). The run
+/// options alone, without a DAG, are refused rather than ignored.
+fn parse_causal_triad(obj: &Map<String, Value>) -> Result<Option<CausalTriadRequest>, Rejection> {
+    let options = match obj.get("causal_triad") {
+        None => None,
+        Some(v) => Some(
+            serde_json::from_value::<TriadRunOptions>(v.clone())
+                .map_err(|e| invalid(format!("pipeline.causal_triad: {e}")))?,
+        ),
+    };
+    match obj.get("causal_dag") {
+        None if options.is_some() => Err(invalid(
+            "pipeline.causal_triad needs pipeline.causal_dag; run options alone do nothing",
+        )),
+        None => Ok(None),
+        Some(v) => Ok(Some(CausalTriadRequest {
+            dag: serde_json::from_value::<CausalDagSpec>(v.clone())
+                .map_err(|e| invalid(format!("pipeline.causal_dag: {e}")))?,
+            options: options.unwrap_or_default(),
+        })),
+    }
+}
+
+fn triad_json(r: &TriadReport) -> Value {
+    let lod = &r.lod.summary;
+    json!({
+        "engine": r.engine,
+        "energy_alpha": r.energy_alpha,
+        "chosen_path": ids(&r.chosen_path),
+        "nominal_time": r.nominal_time,
+        "net_reward": r.net_reward,
+        "gate_reasons": r.gate_reasons,
+        "n_samples": r.n_samples,
+        "n_pass": r.n_pass,
+        "dead_ends": r.dead_ends,
+        "sampled_steps": r.sampled_steps,
+        "mean_log_pf": r.mean_log_pf,
+        "sampling_entropy_bits": r.sampling_entropy_bits,
+        "decision_entropy": r.decision_entropy,
+        "shards": r.shards,
+        "top_p": r.top_p,
+        "elites": r.elites,
+        "shard_seeds": r.shard_seeds,
+        "shard_n_pass": r.shard_n_pass,
+        "shard_wall_ms": r.shard_wall_ms,
+        "threads_spawned": r.threads_spawned,
+        "tier1_ms": r.tier1_ms,
+        "tier2_ms": r.tier2_ms,
+        "plan_ms": r.plan_ms,
+        "lod": {
+            "atoms": lod.atoms,
+            "or_clusters": lod.or_clusters,
+            "and_clusters": lod.and_clusters,
+            "checkpoints": lod.checkpoints,
+            "hazard_barriers": lod.hazard_barriers,
+            "mandatory_floor": lod.mandatory_floor,
+            "graph_nodes": lod.graph_nodes,
+            "graph_edges": lod.graph_edges,
+            "chosen_goal_distance": r.lod.chosen_goal_distance,
+            "goal_distance_used_in_choice": false,
+        },
+        "robust": r.robust.as_ref().map(robust_json),
+    })
+}
+
+fn robust_json(r: &RobustReport) -> Value {
+    json!({
+        "clock_phase": r.clock_phase,
+        "disturbance_moments": r.disturbance_moments,
+        "objective": r.objective,
+        "p_success": r.p_success,
+        "expected_slack": r.expected_slack,
+        "expected_time": r.expected_time,
+        "reordered": r.reordered,
+        "n_scored": r.n_scored,
+        "probe_action": r.probe_action.map(|a| a.0),
+        "p_success_before_probe": r.p_success_before_probe,
+        "nominal_path": ids(&r.nominal_path),
+        "nominal_p_success": r.nominal_p_success,
+        "n_observed": r.n_observed,
+        "prior_kappa": r.prior_kappa,
+        "posterior_kappa": r.posterior_kappa,
+        "extra_pmf": r.extra_pmf,
+        "fatigue_at": r.fatigue_at,
     })
 }
 
@@ -627,5 +739,34 @@ fn graph_context_json(c: &GraphContext) -> Value {
             "hierarchical_prior_used_in_gate": true,
             "reason": reason,
         }),
+    }
+}
+
+#[cfg(test)]
+mod pruning_audit_tests {
+    use super::*;
+
+    #[test]
+    fn state_mask_pruning_is_not_a_policy_hard_stop_or_global_revocation() {
+        let graph = LodGraph::default();
+        let before = graph.node_count();
+        let pruned = PrunedAction {
+            action: ActionId(7),
+            source: PruneSource::StateActionMask,
+            tier: None,
+            violated_rules: vec![],
+            reason: "state precondition is not satisfied".into(),
+        };
+        let serialized = pruned_json(std::slice::from_ref(&pruned));
+        assert_eq!(serialized[0]["source"], "state_action_mask");
+        assert!(serialized[0]["tier"].is_null());
+        let reflection =
+            reflect_rollouts(&graph, true, "decide", &FullLatent::zeros(), &[], &[pruned]).unwrap();
+        assert_eq!(
+            reflection["observations"][0]["kind"],
+            "state_action_mask_pruned"
+        );
+        assert_eq!(reflection["observations"][0]["graph_mutated"], false);
+        assert_eq!(graph.node_count(), before);
     }
 }

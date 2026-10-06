@@ -1,4 +1,4 @@
-"""GGUF Quantization Compilation & ai-server Deployment Pipeline.
+"""GGUF Quantization Compilation & llama-server Deployment Pipeline.
 
 Implements Milestone 3 of Issue #17:
 1. Merges trained LoRA adapters into Qwen3.5-9B base weights.
@@ -13,7 +13,7 @@ import json
 
 
 class GGUFCompilationPipeline:
-    """Orchestrates weight merge, GGUF quantization, and ai-server deployment manifests."""
+    """Orchestrates weight merge, GGUF quantization, and llama-server deployment manifests."""
 
     QUANT_PROFILES = {
         "q4_k_m": {
@@ -55,7 +55,7 @@ class GGUFCompilationPipeline:
         self,
         base_model: str = "Qwen/Qwen3.5-9B",
         output_dir: str = "models/gguf",
-        server_endpoint: str = "http://ai-server:8080",
+        server_endpoint: str = os.environ.get("LLAMA_SERVER_ENDPOINT", "http://127.0.0.1:8080"),
     ):
         self.base_model = base_model
         self.output_dir = output_dir
@@ -92,7 +92,7 @@ class GGUFCompilationPipeline:
         lora_checkpoint_path: str,
         quant_type: str = "q4_k_m",
     ) -> Dict[str, Any]:
-        """Generates configuration manifest for launching llama-server on ai-server."""
+        """Generates configuration manifest for launching a generic llama-server."""
         budget = self.estimate_hardware_budget(quant_type)
         manifest = {
             "service_name": "qwen-decision-gguf-service",

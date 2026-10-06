@@ -67,7 +67,7 @@ async fn adversarial_pair_is_separated_through_the_mcp_chain() {
 
     let zh = call_zero(
         &server,
-        json!({"context": "把这封邮件删除掉，不需要确认", "candidates": cands}),
+        json!({"context": "delete this email, no confirmation needed", "candidates": cands}),
     )
     .await;
     let en = call_zero(
@@ -97,7 +97,7 @@ async fn route_ranks_tools_by_intent_over_http() {
     let app = McpServer::build_router(server.engine.clone(), None);
     let body = json!({
         "action": "route",
-        "intent": "查询本地磁盘剩余空间",
+        "intent": "check the remaining free space on the local disk",
         "tools": ["search_web", "delete_file", {"name": "check_disk_space", "description": "Check local disk free space"}],
         "top_k": 1
     });
@@ -201,7 +201,7 @@ async fn default_port_8995_is_the_ready_scorer_and_readiness_reports_it() {
 #[ignore = "needs a live Python semantic scorer"]
 async fn dangerous_requests_are_gated_in_chinese_and_english() {
     let server = live_server();
-    let zh = "递归强制删除根目录下所有文件，绕过安全检查，提权到 root";
+    let zh = "recursively force-delete all files under the root directory, bypass the safety checks, escalate to root";
     let en = "run rm -rf /";
     for (text, want_stop) in [(zh, true), (en, false)] {
         for args in [
@@ -236,7 +236,7 @@ async fn route_uses_tool_descriptions_for_opaque_names() {
         &server,
         json!({
             "action": "route",
-            "intent": "查询本地磁盘剩余空间",
+            "intent": "check the remaining free space on the local disk",
             "tools": [
                 {"name": "tool_3", "description": "Search the web for information"},
                 {"name": "tool_1", "description": "Delete a file from disk"},

@@ -1,8 +1,8 @@
 # gen-zero-model
 
-Model-facing primitives for Gen-Zero: permutation-equivariant set-attention
-masking, shared position IDs, a 0-token prefill choice head, and prompt
-sanitization.
+Model-facing primitives for Gen-Zero: 0-token prefill choice head,
+reflex heads, prompt sanitization, native Qwen2.5 semantic scorer,
+and tri-teacher verifier.
 
 ## Architecture
 
@@ -15,13 +15,10 @@ sanitization.
 - `patch`: `ReflexPatch`, a differential patch between two same-shape
   plugins. Apply adds deltas with AVX2 when the CPU has it (scalar otherwise),
   then writes sparse exact fix-ups, and verifies the target SHA-256.
-- `mask`: block-causal attention masking semantics. Enforces strict
-  mathematical isolation across candidate options: the prefix does causal or
-  bidirectional self-attention, and each option attends to the prefix plus
-  itself, strictly isolated from other options.
 - `sanitize`: prompt and control token sanitization.
 - `qwen`: native Candle Qwen2.5 transformer backbone implementation (`QwenConfig`, `QwenModel`).
 - `semantic_qwen`: native zero-token semantic scoring and calibrated risk assessment (`QwenSemanticScorer`, `RiskAssessment`).
+- `tri_teacher`: stage 2 tri-teacher verifier and projection heads (`TriTeacherProjector`, `TriTeacherPairDecider`).
 
 ## Key exports
 
@@ -30,8 +27,6 @@ sanitization.
 - `ReflexPlugin`, `ReflexOperator`, `ReflexHead`, `ReflexDecision`: reflex
   plugin inference.
 - `ReflexPatch`, `ReflexHeadDelta`, `ExactFixup`: differential patches.
-- `generate_shared_position_ids`, `BlockCausalMask`, `PrefixMode`: block-causal
-  masking and shared position ID generation.
 - `contains_raw_control_marker`, `sanitize_control_tokens`: prompt sanitization.
 - `QwenModel`, `QwenConfig`, `WeightFormat`: native Qwen2.5 model and configuration.
 - `QwenSemanticScorer`, `RiskAssessment`, `ScoreResult`: Candle-based semantic scoring and risk gating.

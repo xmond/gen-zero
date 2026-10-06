@@ -112,15 +112,15 @@ class CpSatFormalEngine:
                 verb = a.strip().lower().split("_", 1)[0].split(":")[-1]
                 if verb in {"query", "read", "inspect", "observe", "search", "quarantine", "cancel", "abstain"}:
                     effect = "READ_ONLY"
-                elif verb in {"execute", "launch", "run", "approve", "on", "执行", "启动", "批准", "unit"}:
+                elif verb in {"execute", "launch", "run", "approve", "on", "unit"}:
                     effect = "EXECUTE"
                 else:
                     effect = "UNKNOWN"
             if not isinstance(effect, str):
                 return False
             effect = effect.upper()
-            if "已授权=no" in s_low or "unauthorized" in s_low or (
-                "heater" in s_low and ("人数=0" in s_low or "occupancy=0" in s_low)
+            if "unauthorized" in s_low or (
+                "heater" in s_low and ("occupancy=0" in s_low)
             ):
                 if effect != "READ_ONLY":
                     return False

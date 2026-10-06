@@ -303,15 +303,8 @@ def test_rejects_mismatched_mask_length():
 # ---------------------------------------------------------------------------
 
 def test_numpy_path_works_without_torch_import(monkeypatch):
-    import builtins
-    real_import = builtins.__import__
-
-    def blocking_import(name, *args, **kwargs):
-        if name == "torch" or name.startswith("torch."):
-            raise ImportError("torch intentionally blocked for this test")
-        return real_import(name, *args, **kwargs)
-
-    monkeypatch.setattr(builtins, "__import__", blocking_import)
+    # None in sys.modules makes `import torch` raise ImportError.
+    monkeypatch.setitem(sys.modules, "torch", None)
     D = 16
     H = _rng(9).normal(size=(50, D))
     out = Pooler().pool(H)

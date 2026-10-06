@@ -1,7 +1,7 @@
 {
  "title": "Manifold-Pareto dual 70B/72B ensemble: geometric fusion + CALA gate + conformal control",
  "generated_utc": "2026-09-25T11:41:33.139390+00:00",
- "command": "suites/evaluate_manifold_pareto_ensemble.py --qwen-dir /home/sapex/gz_offload_b0925h/features/q --llama-dir /home/sapex/gz_offload_b0925h/features/l --out /home/sapex/gz_offload_b0925h/out/report --workers 3 --skip-references",
+ "command": "suites/evaluate_manifold_pareto_ensemble.py --qwen-dir <FEATURES_ROOT>/q --llama-dir <FEATURES_ROOT>/l --out <FEATURES_ROOT>/out --workers 3 --skip-references",
  "host": {
   "name": "DESKTOP-B0ALJME",
   "cores": 24,
@@ -1022,8 +1022,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/massive_en.npz": "6bf96fd909a0883d26d58fcec2ed3c3e6234b831f0885093bac92b6a4fb6c1a8",
-    "/home/sapex/gz_offload_b0925h/features/l/massive_en.npz": "bbb91c2a9a579a04e5ae97224e3be8af34ed18a0c7659f470a55477894aca7ef"
+    "<FEATURES_ROOT>/q/massive_en.npz": "6bf96fd909a0883d26d58fcec2ed3c3e6234b831f0885093bac92b6a4fb6c1a8",
+    "<FEATURES_ROOT>/l/massive_en.npz": "bbb91c2a9a579a04e5ae97224e3be8af34ed18a0c7659f470a55477894aca7ef"
    },
    "test_sha256": "a6115226dd88711000d8ba7259cc9d9431a8c062b9fea93ca29f1a75816b92a5",
    "seconds": {
@@ -1756,8 +1756,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/massive_de.npz": "522db7e482cf5aa65cbb3aa99a5d441e6c608f8e2633392f5e35e917766a168c",
-    "/home/sapex/gz_offload_b0925h/features/l/massive_de.npz": "62bb38bc9e080d95f372d1206de2c4a21376bed95fc42f25fef1f679026d7baa"
+    "<FEATURES_ROOT>/q/massive_de.npz": "522db7e482cf5aa65cbb3aa99a5d441e6c608f8e2633392f5e35e917766a168c",
+    "<FEATURES_ROOT>/l/massive_de.npz": "62bb38bc9e080d95f372d1206de2c4a21376bed95fc42f25fef1f679026d7baa"
    },
    "test_sha256": "7539497efc6f40a176c6dbaf982a9abd5f45865903298c9ef603b073430c90f1",
    "seconds": {
@@ -2401,8 +2401,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/multinli.npz": "53fcfbee86975b7110147179d6c9a0813e881631889a7c618434a7d01eea8728",
-    "/home/sapex/gz_offload_b0925h/features/l/multinli.npz": "1b8165fe5c72e6e8859d24b4f9c7d0065147c92336ae46a2d994c4e210fe4504"
+    "<FEATURES_ROOT>/q/multinli.npz": "53fcfbee86975b7110147179d6c9a0813e881631889a7c618434a7d01eea8728",
+    "<FEATURES_ROOT>/l/multinli.npz": "1b8165fe5c72e6e8859d24b4f9c7d0065147c92336ae46a2d994c4e210fe4504"
    },
    "test_sha256": "f6bbf79b5b7e8e06dd4cabbbe098310ea9cac1d5f49f2049fbb942cef1985bdc",
    "seconds": {
@@ -3060,8 +3060,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/pubmedqa.npz": "aa07455d2972410bc77e0fb075e0ba606421f398a7f5595b8fb0bee3eca0b6b1",
-    "/home/sapex/gz_offload_b0925h/features/l/pubmedqa.npz": "8c2980c43d71d4409b6d7dc6c6eedc80c5a8c74a03793d5e338f5329a67f606d"
+    "<FEATURES_ROOT>/q/pubmedqa.npz": "aa07455d2972410bc77e0fb075e0ba606421f398a7f5595b8fb0bee3eca0b6b1",
+    "<FEATURES_ROOT>/l/pubmedqa.npz": "8c2980c43d71d4409b6d7dc6c6eedc80c5a8c74a03793d5e338f5329a67f606d"
    },
    "test_sha256": "ad0de7785564bceadfbbd50828b3a87017aa079081a669521696f672e63a3fbd",
    "seconds": {
@@ -3719,8 +3719,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/vitaminc.npz": "93cc2f1482ac513e7a12f87309554fe80fea6f31126d2738224e5dc8be19bba9",
-    "/home/sapex/gz_offload_b0925h/features/l/vitaminc.npz": "7687fc0dfdd2358a0693f36a87f078cdf406b78ef57dabe36d91680d9a3fe6f0"
+    "<FEATURES_ROOT>/q/vitaminc.npz": "93cc2f1482ac513e7a12f87309554fe80fea6f31126d2738224e5dc8be19bba9",
+    "<FEATURES_ROOT>/l/vitaminc.npz": "7687fc0dfdd2358a0693f36a87f078cdf406b78ef57dabe36d91680d9a3fe6f0"
    },
    "test_sha256": "f2756bc9af363762d6d195c96574f624dcad1fab04fff92bd452a50134947e76",
    "seconds": {
@@ -4387,8 +4387,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/boolq.npz": "0b5bb874e4905ff62574294f646d0a5eef15c8a6e7bb3518938615e6b0897f2c",
-    "/home/sapex/gz_offload_b0925h/features/l/boolq.npz": "d3b0172849c785016ee76ea01dde4f3c05c448e2ae49a29be9e2c88080d0da8b"
+    "<FEATURES_ROOT>/q/boolq.npz": "0b5bb874e4905ff62574294f646d0a5eef15c8a6e7bb3518938615e6b0897f2c",
+    "<FEATURES_ROOT>/l/boolq.npz": "d3b0172849c785016ee76ea01dde4f3c05c448e2ae49a29be9e2c88080d0da8b"
    },
    "test_sha256": "8f62171280a7104852a8ae77f14284f07f0984b7d9459b574542c9c434127aec",
    "seconds": {
@@ -5027,8 +5027,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/squad2.npz": "00d1b4ff0d09633c49cb61d66de55bd50c0e49e57e3169d950d87e2ec65b0899",
-    "/home/sapex/gz_offload_b0925h/features/l/squad2.npz": "cad113956b9e1dde9faeaf7113ae9cdba0c85549fccffa22a0d74801d93ed7f4"
+    "<FEATURES_ROOT>/q/squad2.npz": "00d1b4ff0d09633c49cb61d66de55bd50c0e49e57e3169d950d87e2ec65b0899",
+    "<FEATURES_ROOT>/l/squad2.npz": "cad113956b9e1dde9faeaf7113ae9cdba0c85549fccffa22a0d74801d93ed7f4"
    },
    "test_sha256": "e1a3708586e0825f7be4b63798a61137a8c2cb7816f351aebaca926ce3028f36",
    "seconds": {
@@ -5667,8 +5667,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/paws.npz": "987e9db1cfbfe34305fe3615fb0f7c06d8e56c3b9f6b0d3c3d78ec4e0b7ee415",
-    "/home/sapex/gz_offload_b0925h/features/l/paws.npz": "1df188764d1e8d89e18a11d5f52209242360cd708c1aa6d08eb0b3f63e818e4a"
+    "<FEATURES_ROOT>/q/paws.npz": "987e9db1cfbfe34305fe3615fb0f7c06d8e56c3b9f6b0d3c3d78ec4e0b7ee415",
+    "<FEATURES_ROOT>/l/paws.npz": "1df188764d1e8d89e18a11d5f52209242360cd708c1aa6d08eb0b3f63e818e4a"
    },
    "test_sha256": "42b14f258679a74e1b0e72d84ce17a6c3a8bd62b3d6cf52dad1245ce053abb24",
    "seconds": {
@@ -6405,8 +6405,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/civil_comments.npz": "81e12de1a1db9a3ea2033444bef54e381fe852a5a84232bebc3288d28a7057b6",
-    "/home/sapex/gz_offload_b0925h/features/l/civil_comments.npz": "3254b02807e72215284eae762a666984bd4c729083c46d2b0a5c2af1c9824e5b"
+    "<FEATURES_ROOT>/q/civil_comments.npz": "81e12de1a1db9a3ea2033444bef54e381fe852a5a84232bebc3288d28a7057b6",
+    "<FEATURES_ROOT>/l/civil_comments.npz": "3254b02807e72215284eae762a666984bd4c729083c46d2b0a5c2af1c9824e5b"
    },
    "test_sha256": "89dc680f64ce1f7bc8934d17e23b380698c77fdb4129642c9c35c9e2dfb79be6",
    "seconds": {
@@ -7045,8 +7045,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/aegis_safety.npz": "1a549d60906f4d93039c3219277a7eaf17508f88ea0df8599f50e88d0b9d5c1b",
-    "/home/sapex/gz_offload_b0925h/features/l/aegis_safety.npz": "ef2960039e5970a5a9c7d7c8fdd3e7a287c8eaf66ade743fcbd8a2ddae989e4a"
+    "<FEATURES_ROOT>/q/aegis_safety.npz": "1a549d60906f4d93039c3219277a7eaf17508f88ea0df8599f50e88d0b9d5c1b",
+    "<FEATURES_ROOT>/l/aegis_safety.npz": "ef2960039e5970a5a9c7d7c8fdd3e7a287c8eaf66ade743fcbd8a2ddae989e4a"
    },
    "test_sha256": "511bd5d3aa94081f58b8ca962f56107a5a19c426a207bbde9df5d4e96f8c4f20",
    "seconds": {
@@ -7784,8 +7784,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/helpsteer2.npz": "62568fd84eda03651a536de838025b9ae5239143b4bf6b6c7f88ad6ff421807b",
-    "/home/sapex/gz_offload_b0925h/features/l/helpsteer2.npz": "1765cda1421617ca321c52c3d9f837c67e3a35ecf474b68873c457a518d7db2a"
+    "<FEATURES_ROOT>/q/helpsteer2.npz": "62568fd84eda03651a536de838025b9ae5239143b4bf6b6c7f88ad6ff421807b",
+    "<FEATURES_ROOT>/l/helpsteer2.npz": "1765cda1421617ca321c52c3d9f837c67e3a35ecf474b68873c457a518d7db2a"
    },
    "test_sha256": "9d649a1e42b2a4a8008ede403f1133b293480c55d8fe62da91f429e5442d20bd",
    "seconds": {
@@ -8509,8 +8509,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/summeval_relevance.npz": "23d3e573f72d9fb931300c16ae866da6ac60da05b87c5ae2d5c68fb6949a8598",
-    "/home/sapex/gz_offload_b0925h/features/l/summeval_relevance.npz": "bd9b99aa47841bf4e26bf3e91d88aba12a9dc4d9090d122649750fbf6ccff7bc"
+    "<FEATURES_ROOT>/q/summeval_relevance.npz": "23d3e573f72d9fb931300c16ae866da6ac60da05b87c5ae2d5c68fb6949a8598",
+    "<FEATURES_ROOT>/l/summeval_relevance.npz": "bd9b99aa47841bf4e26bf3e91d88aba12a9dc4d9090d122649750fbf6ccff7bc"
    },
    "test_sha256": "c2850a1fdb6586696b90e1356d2fd8717bbc97dd2389a257e04884b1e30d6c3a",
    "seconds": {
@@ -9284,8 +9284,8 @@
     }
    },
    "feature_sha256": {
-    "/home/sapex/gz_offload_b0925h/features/q/summeval_consistency.npz": "77479cf6057d9cb4cc2b4c9e6f738a3e02441c455cafe5b6b826d448763d8d23",
-    "/home/sapex/gz_offload_b0925h/features/l/summeval_consistency.npz": "99300d5a00a6032981cacfda0110696f4c403607267f69d48a6e4e1a4272075d"
+    "<FEATURES_ROOT>/q/summeval_consistency.npz": "77479cf6057d9cb4cc2b4c9e6f738a3e02441c455cafe5b6b826d448763d8d23",
+    "<FEATURES_ROOT>/l/summeval_consistency.npz": "99300d5a00a6032981cacfda0110696f4c403607267f69d48a6e4e1a4272075d"
    },
    "test_sha256": "2a5d8ab9bbb7bf730b141a849d5aea7d3e383157649c9588b65c74a6516571a6",
    "seconds": {

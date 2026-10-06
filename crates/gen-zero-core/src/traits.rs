@@ -19,6 +19,17 @@ pub struct SafetyEstimate {
 pub trait WorldModelDynamics: Send + Sync {
     type Error;
 
+    /// State-dependent subset of candidate IDs, in candidate order. Implementations
+    /// must be deterministic and may only remove candidates. Empty means dead end.
+    /// Unconstrained dynamics explicitly permit the entire candidate frame.
+    fn allowed_actions(
+        &self,
+        _state: &FullLatent,
+        candidates: &[ActionId],
+    ) -> Result<Vec<ActionId>, Self::Error> {
+        Ok(candidates.to_vec())
+    }
+
     /// Single-step forward transition in continuous latent space.
     fn step(
         &self,

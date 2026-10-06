@@ -4,6 +4,21 @@ This guide covers the public Rust binary, its reflex plugin runtime, and the MCP
 
 `gen-zero` is the production runtime engine and client SDK. Training reflex plugins, continuous offline learning, and compiling checkpoints into patches happen in `gen-zero-research` and the tuning API (`tuning.gen-zero.ai`); this repository consumes their plugin and patch archives.
 
+## What you can run today
+
+Gen-Zero provides a deterministic Rust runtime engine, an MCP service with 24 cognitive verbs, and the **Two-Stage Dual-Track QA Gate** (`qa-gate` CLI command & `qa_gate` MCP verb):
+
+1. **Stage 1 Fast Pass**: Evaluates the best span margin `diff = null_score - best_span_score`. When confident (`diff < -1.5` or `diff > 0.5`), it immediately releases or denies the candidate without invoking neural teachers (<1 ms latency).
+2. **Stage 2 Tri-Teacher Verifier**: When inputs fall inside the ambiguity band `[-1.5, 0.5]`, it evaluates the candidate across the joint latent manifold of three independent teachers (LLaMA-3.1-405B, Qwen2.5-72B, LLaMA-3.1-70B) via a distilled LoRA adapter on Qwen2.5-0.5B. If the counterfactual alignment score `tri_sim` falls below the threshold (default 0.91), the decision flips and refuses to hallucinate.
+
+Gen-Zero operates in pure-inference mode on open-source community weights (such as `Qwen2.5-1.5B-Instruct`), requiring zero internal training pipelines. You can pull official open-source weights using our automated setup script:
+
+```bash
+pip install -e ./python
+pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+python -m gen_zero.scripts.setup_qwen15b_models
+```
+
 ## 1. Build the native binary
 
 Install Rust 1.88 or newer, then:
@@ -15,9 +30,74 @@ CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS=fallback cargo build --release
 ./target/release/gen-zero --help
 ```
 
-Cargo builds the workspace and places the CLI at `target/release/gen-zero`. Use this explicit path if the Python package's separate `gen-zero` console command is also installed. Inspect decision inputs with `./target/release/gen-zero decide --help` or `reflex --help`. Semantic `ask`, `route`, and `imagine` need the optional Python scorer; without it they can refuse or return a degraded result. The Rust server itself has no Python runtime dependency.
+Cargo builds the workspace and places the CLI at `target/release/gen-zero`.
 
-## 2. Start MCP locally
+## 2. Fast Decision & Causal Validation
+
+### Example A: Fast Margin Evaluation (<1ms)
+
+When confidence margin is clear, the gate releases candidates with sub-millisecond latency:
+
+```bash
+./target/release/gen-zero qa-gate \
+  --context "The Eiffel Tower is in Paris, France." \
+  --question "Where is the Eiffel Tower?" \
+  --candidate "Paris" \
+  --best-span-score 3.0 \
+  --null-score 0.0
+```
+
+Output:
+
+```json
+{
+  "decision_flipped": false,
+  "fast_pass": true,
+  "final_answer": "Paris",
+  "is_answerable": true,
+  "score_diff": -3.0,
+  "stage2_triggered": false
+}
+```
+
+### Example B: Contrastive Decoding (CAD) Pure Inference via Python CLI
+
+Evaluate ambiguous or contentious queries with counterfactual prior conditioning:
+
+```bash
+python -m gen_zero.cli cad \
+  --gguf ./models/qwen2.5-1.5b-instruct-q4_k_m.gguf \
+  --question "Does medication A cause drowsiness?" \
+  --context "Medication A shows equal incidence of drowsiness compared to control groups." \
+  --alpha 0.5
+```
+
+Output:
+
+```json
+{
+  "best_candidate": "No",
+  "calibrated": false,
+  "clipped": false,
+  "scores": {
+    "No": 1.482,
+    "Yes": -1.215,
+    "Maybe": -0.892
+  }
+}
+```
+
+### Example C: Fail-Closed Decision Without Model Weights
+
+When semantic backends are explicitly disabled, the policy gate safely fails closed with an explicit refusal:
+
+```bash
+GENZERO_PYTHON_ENDPOINT=off ./target/release/gen-zero decide \
+  --context "Should I run an unreviewed production database migration?" \
+  --candidates "run_now,request_review"
+```
+
+## 3. Start MCP locally
 
 For a client that launches Gen-Zero as a child process:
 
@@ -34,9 +114,9 @@ GENZERO_API_KEY=your-generated-token ./target/release/gen-zero serve --mode sse 
 
 The SSE URL is `http://127.0.0.1:8999/sse`. Keep the token private; use a secret store for deployment.
 
-## 3. Connect an MCP client
+## 4. Connect an MCP client
 
-For Cursor (`mcp.json`) or another standard MCP client, add a server entry with the **absolute** path to your built binary:
+For Claude Code, add the local stdio server with `claude mcp add gen-zero -- /absolute/path/to/gen-zero/target/release/gen-zero serve --mode stdio` (check your installed CLI syntax). For Cursor, put the following entry in its `mcp.json`. Replace the path with the absolute path to your built binary:
 
 ```json
 {
@@ -64,7 +144,7 @@ For SSE clients that support request headers:
 
 For Antigravity CLI, use its MCP server configuration with the same stdio command or SSE URL and bearer header. Client syntax and supported transports vary by version; verify them with the installed client's help.
 
-## 4. Reflex runtime: bench, patch, feedback, adapt
+## 5. Reflex runtime: bench, patch, feedback, adapt
 
 Build release binaries and write two seeded, untrained plugins of the same shape (input dim 1024, rank 16, 8 steps, 4 candidates). They stand in for two trained checkpoints; latency depends on shape, not on weight values, but their decisions mean nothing.
 
@@ -110,7 +190,7 @@ Feedback and adaptation run against a SQLite store:
 
 On a fresh store `reflex-adapt` prints `"adapted": false, "reason": "no unconsumed feedback"` and writes no checkpoint, and `reflex-feedback-record` for an unknown trace id exits 1. Traces are inserted by library callers of `SqliteFeedbackStore::insert_trace`; `serve` does not load reflex plugins or record traces yet.
 
-## 5. Reproduce the trap-avoidance decision benchmark
+## 6. Reproduce the trap-avoidance decision benchmark
 
 No Rust build, checkpoint, or downloaded artifact required: needs `numpy` and `torch` installed in
 your Python environment (this repo's `python/` package declares both; see [Quickstart:
@@ -132,7 +212,7 @@ search loop is local to this benchmark script, not the Rust production planner. 
 benchmark section](README.md#instant-decision-benchmark-cpu-only-local-reproduction) for a full example
 run and [benchmarks/README.md](benchmarks/README.md) for the rest of the CPU benchmark suite.
 
-## 6. Run the 9B adapter smoke test
+## 7. Run the 9B adapter smoke test
 
 A standalone pre-extracted feature adapter for Qwen3.5-9B is included in `artifacts/qwen35_9b/zero_rnn_set_adapter_qwen35_9b.npz` (~6.4MB). This is a **local numeric smoke test, not an accuracy benchmark**: it verifies the adapter loads, scores candidates, and holds Lyapunov spectral stability (`sigma_max_A < 1`) on standard CPU without installing PyTorch or GPU drivers (requires only `numpy`). The repository does not ship the real teacher-validation parity set (`parity_val200.npz`); without it, the script falls back to fixed-seed (seed=0) synthetic vectors, so the `results`/`scores` values below are not a measurement of task accuracy:
 
@@ -160,7 +240,7 @@ Expected output (exact `latency_ms` values are machine-dependent; this is one re
 ```
 `latency_ms.load` is the one-time cold-start weight-loading time (~37ms here). `latency_ms.mean_score_call` / `per_record` are the warm, post-warm-up per-sample scoring time (~3-5ms here) — a separate measurement, not interchangeable with load time. `sample_source` says whether the scores came from the real held-out parity set or the synthetic fallback; without `parity_val200.npz` locally (not shipped in this repository), `results`/`scores` are not a measurement of task accuracy. Two separate mechanisms give the stability and order properties. Lyapunov spectral stability of the recurrent think loop comes from a spectral-norm clamp on its state-transition matrix A: A is rescaled by `a_scale` so that its largest singular value `sigma_max_A` is below 1 (which also bounds its spectral radius below 1), and `RNNSetAdapterRuntime` re-derives this by SVD at load and refuses a checkpoint with `sigma_max_A >= 1` (`python/gen_zero/causal/rnn_set_adapter.py`). Permutation equivariance over candidate actions comes from the network structure: the Set-Attention block has no positional encoding, so reordering the candidates reorders the scores the same way.
 
-## Authorization and deployment
+## 8. Authorization and deployment
 
 - Set `GENZERO_API_KEY` (or `serve --token`) for any SSE service reachable beyond a trusted local machine. Without a token, SSE starts in open mode.
 - Send `Authorization: Bearer <token>` to `/sse` and other protected routes. Avoid query-string tokens because URLs can enter logs.

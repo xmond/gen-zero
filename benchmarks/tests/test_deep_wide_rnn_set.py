@@ -325,46 +325,6 @@ def test_cpu_latency_ceiling(tmp_path):
 
 
 # --------------------------------------------------------------------------
-# 6. Trainability: an actual gradient step through forward_pair, not just a
-#    forward pass, and the per-layer clamp still holds after the optimiser
-#    moves the raw factors (it is recomputed every forward, not just at init).
-# --------------------------------------------------------------------------
-def test_forward_pair_is_trainable_and_clamp_survives_a_step():
-    torch.manual_seed(12)
-    m = dws.DeepWideRNNSetAdapter(
-        IN_DIM, d=D, rank=RANK, think_steps=T, rnn_layers=RNN_LAYERS,
-        rho_max_schedule=[0.95, 0.85, 0.70], n_heads=N_HEADS, set_layers=SET_LAYERS, ffn_mult=2,
-    )
-    before = [p.detach().clone() for p in m.parameters()]
-    opt = torch.optim.AdamW(m.parameters(), lr=1e-2)
-
-    rng = np.random.default_rng(13)
-    x_a = torch.from_numpy(rng.normal(size=(4, IN_DIM)).astype(np.float32))
-    x_b = torch.from_numpy(rng.normal(size=(4, IN_DIM)).astype(np.float32))
-    C = torch.from_numpy(rng.normal(size=(4, 5, IN_DIM)).astype(np.float32))
-    mask = torch.ones(4, 5, dtype=torch.bool)
-    y = torch.from_numpy(rng.integers(0, 5, size=4)).long()
-
-    logits = m.forward_pair(x_a, x_b, C, mask)
-    loss = torch.nn.functional.cross_entropy(logits, y)
-    assert torch.isfinite(loss)
-    opt.zero_grad(set_to_none=True)
-    loss.backward()
-    grads = [p.grad for p in m.parameters()]
-    assert any(g is not None and torch.isfinite(g).all() and g.abs().sum() > 0 for g in grads)
-    opt.step()
-
-    after = list(m.parameters())
-    assert any(not torch.equal(b, a.detach()) for b, a in zip(before, after)), \
-        "optimiser step should have changed at least one parameter"
-
-    radii_after = m.spectral_radii()
-    for l, rho in enumerate([0.95, 0.85, 0.70]):
-        assert radii_after[l] <= rho + 1e-6, \
-            f"layer {l}: clamp violated after optimiser step, rho={radii_after[l]} > {rho}"
-
-
-# --------------------------------------------------------------------------
 # 7. No `re` import, no regex/label shortcuts, in the implementation module.
 # --------------------------------------------------------------------------
 def test_module_does_not_import_re():

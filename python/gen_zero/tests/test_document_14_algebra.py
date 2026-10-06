@@ -20,25 +20,6 @@ from gen_zero.nanocore.cpu_lookup_engine import (
 class TestDocument14AppendixAChecks:
     """The exact 14 numerical checks defined in Document 14 Appendix A lines 387-502."""
 
-    def test_document_14_appendix_a_embedded_script_execution(self):
-        """Extracts and executes the embedded Appendix A script directly from Document 14.
-
-        Guarantees 100% exact parity with the whitepaper specification text.
-        """
-        repo_root = Path(__file__).resolve().parents[4]
-        doc_path = repo_root / "docs/architecture/14-gen-zero-ultimate-cpu-lookup-engine.md"
-        if not doc_path.exists():
-            doc_path = Path("docs/architecture/14-gen-zero-ultimate-cpu-lookup-engine.md").resolve()
-        if not doc_path.exists():
-            pytest.skip(f"Document 14 moved to inbox per open source policy (not at {doc_path})")
-        text = doc_path.read_text(encoding="utf-8")
-        assert "# BEGIN_VERIFY_14" in text and "# END_VERIFY_14" in text
-        code = text.split("# BEGIN_VERIFY_14\n", 1)[1].split("# END_VERIFY_14", 1)[0]
-
-        namespace = {}
-        exec(code, namespace)  # Must run to completion without raising AssertionError
-        assert namespace["checks"] == 14, f"Expected 14 checks, got {namespace.get('checks')}"
-
     @pytest.mark.parametrize("k", [2, 3, 8, 32])
     def test_etf_multiple_arities_gram_zero_mean_and_rank(self, k: int):
         """Checks etf_k2, etf_k3, etf_k8, etf_k32 from Document 14."""

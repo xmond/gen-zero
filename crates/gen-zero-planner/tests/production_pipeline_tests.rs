@@ -218,6 +218,7 @@ fn decide_req<'a>(
         entropy: NormalizedEntropy(0.5),
         return_trajectory: false,
         horizon: 4,
+        causal_triad: None,
     }
 }
 
@@ -368,7 +369,7 @@ fn what_if_excludes_gate_blocked_candidates() {
     assert_eq!(report.gate_blocked.len(), 1);
     assert_eq!(report.gate_blocked[0].action, ESCAPE);
     assert_eq!(report.gate_blocked[0].violated_rules, vec![900]);
-    assert_eq!(report.gate_blocked[0].tier, PolicyTier::Tier3HardStop);
+    assert_eq!(report.gate_blocked[0].tier, Some(PolicyTier::Tier3HardStop));
 }
 
 #[test]
@@ -863,5 +864,64 @@ fn decide_excludes_real_worldmodel_divergence_in_every_mode() {
         assert_eq!(decision.action, ESCAPE);
         assert!(decision.hazard_detected);
         assert_eq!(decision.hazardous_actions, vec![LETHAL]);
+    }
+}
+
+// Exercise production dispatch and HazardCheckedDynamics with the real model.
+struct EvolvingMask {
+    empty: bool,
+}
+impl gen_zero_planner::StateActionMask for EvolvingMask {
+    fn allowed_actions(&self, state: &[f32], candidates: &[u32]) -> Vec<u32> {
+        let at_root = state.iter().all(|&x| x == 0.0);
+        candidates
+            .iter()
+            .copied()
+            .filter(|&a| !self.empty && a == if at_root { 1 } else { 2 })
+            .collect()
+    }
+}
+
+#[test]
+fn production_dispatch_preserves_state_mask_and_successor_candidates() {
+    for mode in ALL_MODES {
+        let p = ProductionPipeline::new(
+            Arc::new(gen_zero_planner::MaskedDynamics::new(
+                LatentDynamicsWorldModel::default(),
+                Arc::new(EvolvingMask { empty: false }),
+            )),
+            Arc::new(PolicyGate::default()),
+        )
+        .with_astar_goal(gen_zero_planner::AStarGoal::Predicate(|s| {
+            s.l2_norm() > 0.0
+        }));
+        let state = FullLatent::zeros();
+        let mut req = decide_req(&state, &ACTS, mode);
+        req.return_trajectory = true;
+        let decision = p.decide(&req).unwrap();
+        assert_eq!(decision.action, ActionId(1), "{mode:?}");
+        assert_eq!(decision.feasible, vec![ActionId(1)]);
+        assert!(decision.pruned.iter().any(|p| p.action == ActionId(2)
+            && p.source == gen_zero_planner::PruneSource::StateActionMask
+            && p.tier.is_none()
+            && p.violated_rules.is_empty()));
+    }
+}
+
+#[test]
+fn production_dispatch_empty_mask_is_no_feasible_action_in_every_mode() {
+    for mode in ALL_MODES {
+        let p = ProductionPipeline::new(
+            Arc::new(gen_zero_planner::MaskedDynamics::new(
+                LatentDynamicsWorldModel::default(),
+                Arc::new(EvolvingMask { empty: true }),
+            )),
+            Arc::new(PolicyGate::default()),
+        );
+        assert_eq!(
+            p.decide(&decide_req(&FullLatent::zeros(), &ACTS, mode))
+                .unwrap_err(),
+            PlannerError::NoFeasibleAction
+        );
     }
 }

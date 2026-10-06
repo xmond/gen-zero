@@ -282,7 +282,7 @@ class TestMCPServer(unittest.IsolatedAsyncioTestCase):
         """B06: an all-Chinese task_goal extracts zero ASCII keywords; the lexical baseline
         must say so instead of silently returning an input-order 'ranking'."""
         res = await execute_zero_route({
-            "task_goal": "部署容器集群并检查网络配置",
+            "task_goal": "Deploy container cluster and check network configuration",
             "tools": [
                 {"name": "kubectl_apply", "description": "Apply k8s deployment YAML"},
                 {"name": "send_email", "description": "Send email notification"}

@@ -17,12 +17,12 @@ from gen_zero.gateway.gguf_pipeline import GGUFCompilationPipeline
 
 
 class TestGGUFCompilationPipeline(unittest.TestCase):
-    """Verifies Milestone 3: GGUF Quantization & ai-server Deployment."""
+    """Verifies Milestone 3: GGUF Quantization & llama-server Deployment."""
 
     def setUp(self):
         self.pipeline = GGUFCompilationPipeline(
             base_model="Qwen/Qwen3.5-9B",
-            server_endpoint="http://ai-server:8080"
+            server_endpoint="http://127.0.0.1:8080"
         )
 
     def test_hardware_budget_estimation(self):

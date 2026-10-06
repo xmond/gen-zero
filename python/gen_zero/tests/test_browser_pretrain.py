@@ -20,23 +20,23 @@ class TestBrowserPretrain(unittest.TestCase):
     )
     def test_browser_choice_sharpness(self):
         criteria = {
-            "e410": "[button] 跳至主要内容",
-            "e411": "[button] 键盘快捷键",
-            "e412": "[button] 无障碍功能反馈",
-            "e413": "[button] 抽屉式主导航栏",
-            "e414": "[button] 今天，9月 20日 (星期日)",
-            "e415": "[button] 上一个月",
-            "e416": "[button] 下一个月",
-            "e417": "[button] 搜索",
-            "e418": "[button] 支持",
-            "e419": "[button] “设置”菜单",
-            "e420": "[button] 月",
-            "e421": "[button] 改用 Google 日历",
-            "e422": "[button] 切换到 Tasks",
-            "e423": "[button] Google 应用",
-            "e425": "[button] 创建"
+            "e410": "[button] Skip to main content",
+            "e411": "[button] Keyboard shortcuts",
+            "e412": "[button] Accessibility feedback",
+            "e413": "[button] Main navigation drawer",
+            "e414": "[button] Today, September 20 (Sunday)",
+            "e415": "[button] Previous month",
+            "e416": "[button] Next month",
+            "e417": "[button] Search",
+            "e418": "[button] Support",
+            "e419": "[button] Settings menu",
+            "e420": "[button] Month",
+            "e421": "[button] Use Google Calendar",
+            "e422": "[button] Switch to Tasks",
+            "e423": "[button] Google apps",
+            "e425": "[button] Create"
         }
-        state = "Site: calendar.google.com | Page: Google 日历 - 2026年9月 | Goal: 点击创建按钮新建活动"
+        state = "Site: calendar.google.com | Page: Google Calendar - Sep 2026 | Goal: Click create button to add event"
 
         # 1. With candidate descriptions: Sharp decision
         res = self.client.decide(

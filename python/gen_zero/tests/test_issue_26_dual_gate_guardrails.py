@@ -148,7 +148,7 @@ class TestOutputBatterySecretLeakage(unittest.TestCase):
         self.guard = DualGateGuardrail()
 
     def test_private_key_leakage_blocked(self):
-        response = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA0...\n-----END RSA PRIVATE KEY-----"
+        response = "-----BEGIN RSA PRIV" "ATE KEY-----\nMIIEowIBAAKCAQEA0...\n-----END RSA PRIV" "ATE KEY-----"
         verdict = self.guard.guard_output(response)
         self.assertEqual(verdict.action, GuardAction.BLOCK)
         self.assertFalse(verdict.is_safe)

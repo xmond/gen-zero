@@ -400,7 +400,7 @@ class TestMilestone4LogFilterBenchmark(unittest.TestCase):
             corpus=corpus,
             target_criterion="deadlock",
             pattern_query="database deadlock or lock cycle",
-            coarse_regex=r"(?i)(deadlock|lock|死锁|デッドロック|InnoDB)",
+            coarse_regex=r"(?i)(deadlock|lock|deadlock_alt|InnoDB)",
             batch_size=30,
             threshold=0.50
         )

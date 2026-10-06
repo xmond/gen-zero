@@ -6,6 +6,7 @@
 
 use crate::error::LodError;
 use crate::manifold::{GeometryParams, MixedCurvatureCoord, COORD_BOUNDARY_FLOOR};
+use crate::operator::OperatorSignature;
 use serde::{Deserialize, Serialize};
 
 /// Cognitive multi-scale Level of Detail (Lod) bands.
@@ -280,6 +281,16 @@ pub struct LodNode {
     /// insert.
     #[serde(default)]
     pub embedding: Option<Vec<f32>>,
+    /// Identity of the model that produced `embedding` (e.g. a scorer id).
+    /// The graph locks this to the first declared one
+    /// (`LodGraph::embedder_space`) and refuses a later `embedding` declaring
+    /// a different one: two models can share a dimension while embedding
+    /// different semantic spaces, so a width match alone cannot catch a mix.
+    /// `None` declares no identity and is never compared against the lock, so
+    /// a caller that does not track its embedder's identity is unaffected.
+    /// Ignored without `embedding`. Fixed at insert.
+    #[serde(default)]
+    pub embedder_space: Option<String>,
     /// Dense projection of `embedding`, the anchor vector queries search. The
     /// graph computes it at insert and overwrites whatever the caller put here.
     #[serde(default)]
@@ -287,6 +298,13 @@ pub struct LodNode {
     /// Which projection made `coord` and `hdc_fingerprint`.
     #[serde(default)]
     pub placement: Placement,
+    /// The causal operator this node stands for: a hard tool or a soft
+    /// operator ([`crate::operator`]). The graph validates it at insert and
+    /// refuses a soft operator whose embedder space differs from the graph's
+    /// lock. Persisted; the implementation is registered at runtime
+    /// (`LodGraph::register_operator`). Fixed at insert.
+    #[serde(default)]
+    pub operator: Option<OperatorSignature>,
 }
 
 impl LodNode {
@@ -323,9 +341,17 @@ impl LodNode {
             aliases: Vec::new(),
             alias_anchors: Vec::new(),
             embedding: None,
+            embedder_space: None,
             embedding_anchor: None,
             placement: Placement::Chart,
+            operator: None,
         }
+    }
+
+    /// Bind the node to a causal operator. The graph checks it at insert.
+    pub fn with_operator(mut self, signature: OperatorSignature) -> Self {
+        self.operator = Some(signature);
+        self
     }
 
     /// Set the aliases. The graph checks them ([`Self::validate_aliases`]) and
@@ -339,6 +365,14 @@ impl LodNode {
     /// queries can reach this node.
     pub fn with_embedding(mut self, embedding: Vec<f32>) -> Self {
         self.embedding = Some(embedding);
+        self
+    }
+
+    /// Declare the model identity of `embedding`. The graph locks its
+    /// `embedder_space` to the first node that declares one, and refuses a
+    /// later `embedding` declaring a different one.
+    pub fn with_embedder_space(mut self, embedder: impl Into<String>) -> Self {
+        self.embedder_space = Some(embedder.into());
         self
     }
 

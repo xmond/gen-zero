@@ -13,6 +13,7 @@ Acceptance Criteria:
 4. Zero-Word Compliance:
    0 hits for historical deprecated keywords.
 """
+# anti-leakage: allow-mock-tensor
 
 import math
 import os
@@ -259,6 +260,14 @@ class TestIssue86HamiltonianWorldModel(unittest.TestCase):
         loss.backward()
         self.assertIsNotNone(z.grad)
         self.assertFalse(torch.isnan(z.grad).any())
+
+    @unittest.skipUnless(HAS_TORCH, "PyTorch required for Hamiltonian Neural ODE")
+    def test_08b_closed_form_potential_gradient_matches_autograd(self):
+        """The closed-form dV/dq used at inference equals the autograd reference."""
+        ode = PyTorchHamiltonianNeuralODE(latent_dim=16, action_dim=4, hidden_dim=8).double()
+        q = torch.randn(3, 8, dtype=torch.float64, requires_grad=True)
+        reference = torch.autograd.grad(ode.v_net(q).sum(), q)[0]
+        torch.testing.assert_close(ode._grad_potential(q), reference)
 
     def test_09_zero_word_compliance(self):
         """Validates zero hits for historical deprecated keywords."""

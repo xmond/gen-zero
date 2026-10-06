@@ -7,6 +7,7 @@ Verifies:
 4. ActionETFChoiceHead end-to-end decision and verification report.
 5. PyTorch differentiable head integration (if torch is available).
 """
+# anti-leakage: allow-mock-tensor
 
 import math
 import unittest

@@ -5,6 +5,7 @@ its CLI entry point against a loopback HTTPS server (self-signed certificate,
 trusted through SSL_CERT_FILE), and ``run`` is driven through that same real
 subprocess. Only the Pier sandbox is a spy: no Docker here.
 """
+import ast
 import asyncio
 import hashlib
 import importlib
@@ -166,7 +167,7 @@ def test_real_newlines_in_code_string_are_repaired_and_round_trip(mod):
     assert repairs == ["control_chars"]
     content = action["files"][0]["content"]
     assert content == "def f():\n    return 1\n"
-    compile(content, "items.py", "exec")
+    ast.parse(content, "items.py")
 
 
 def test_newlines_tabs_and_lone_backslashes_together(mod):
@@ -175,7 +176,7 @@ def test_newlines_tabs_and_lone_backslashes_together(mod):
     assert repairs == ["invalid_escapes"]
     content = action["files"][0]["content"]
     assert content == PY_SOURCE
-    compile(content, "items.py", "exec")
+    ast.parse(content, "items.py")
 
 
 def test_valid_escapes_are_not_disturbed(mod):
@@ -258,7 +259,7 @@ def test_real_proposer_process_accepts_multiline_code_answer(https_proposer, tmp
     assert result.returncode == 0, result.stderr
     action = json.loads(result.stdout)
     assert action["files"][0]["content"] == source
-    compile(action["files"][0]["content"], "items.py", "exec")
+    ast.parse(action["files"][0]["content"], "items.py")
     assert json.loads((tmp_path / "out.parse.json").read_text()) == {
         "parsed": True, "repairs": ["invalid_escapes"]}
     assert "Proposer JSON repaired" in result.stderr

@@ -206,8 +206,11 @@ class ZeroBlock(nn.Module):
         h = config.hidden_size
         self.input_layernorm = RMSNorm(h, config.rms_norm_eps, **kwargs)
         self.post_attention_layernorm = RMSNorm(h, config.rms_norm_eps, **kwargs)
-        for name in ('q_proj', 'k_proj', 'v_proj', 'o_proj'):
-            setattr(self, name, nn.Linear(h, h, bias=config.attention_bias and name != "o_proj", **kwargs))
+        bias = config.attention_bias
+        self.q_proj = nn.Linear(h, h, bias=bias, **kwargs)
+        self.k_proj = nn.Linear(h, h, bias=bias, **kwargs)
+        self.v_proj = nn.Linear(h, h, bias=bias, **kwargs)
+        self.o_proj = nn.Linear(h, h, bias=False, **kwargs)
         self._build_mlp(config, **kwargs)
 
     def _build_mlp(self, config, **kwargs):

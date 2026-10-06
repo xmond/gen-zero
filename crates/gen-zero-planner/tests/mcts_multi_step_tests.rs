@@ -171,6 +171,7 @@ fn mcts_request<'a>(state: &'a FullLatent) -> DecideRequest<'a> {
         entropy: NormalizedEntropy::ZERO,
         return_trajectory: false,
         horizon: 4,
+        causal_triad: None,
     }
 }
 

@@ -24,7 +24,6 @@ of current capabilities.
 | --- | --- |
 | [Planner architecture optimality audit](architecture/planner_architecture_optimality_audit.md) | Audit, baseline `025360f` |
 | [Capability boundary and 8B attribution survey](architecture/gen_zero_capability_audit_20260927.md) | Survey, baseline `6dfd609` |
-| [Dense fleet implementation master plan](architecture/260927-dense-fleet-implementation-plan.md) | Design |
 | [Qwen3.8-Flash-Next downstream integration plan](architecture/qwen38_flash_next_downstream_integration_plan.md) | Design |
 | [F01–F09 planner fault regression evidence](architecture/fault_regression_evidence/README.md) | Historical evidence |
 
@@ -94,7 +93,6 @@ current tree.
 
 | Report | Topic |
 | --- | --- |
-| [b0927c-t1: dense representation geometry and symplectic dynamics](research/b0927c-t1-geom-audit/REPORT.md) | Geometry audit |
 | [b0927c-t2: dense-teacher zero-token continuous world model](research/b0927c-t2-wm/REPORT.md) | World model plan |
 | [b0927c-t5: irreversible-action audit and conformal safety barrier](research/b0927c-t5-causal/REPORT.md) | Safety gate |
 | [b0928-t4: manifold anchor fixes B11/B12/B13/B18](research/b0928-t4-manifold/report.md) | Manifold anchors |
@@ -115,11 +113,6 @@ artifacts, not the sanitized copies. Model/patch hashes and recorded outcomes
 have not been recomputed or presented as new benchmark runs. Configure the roots
 shown in runnable recipes before use. The service evidence scripts require
 `GENZERO_EVAL_ROOT` to point to an existing evaluation checkout.
-
-Raw source-code snapshots were pruned from `docs/research/` on 2026-09-29. Their
-SHA-256 values remain in
-[`research/b0927c-t1-geom-audit/SHA256.json`](research/b0927c-t1-geom-audit/SHA256.json)
-as the record of what was audited.
 
 ## Rust compatibility
 

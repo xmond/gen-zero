@@ -61,6 +61,7 @@ fn request(state: &FullLatent, mode: DecideMode) -> DecideRequest<'_> {
         horizon: 4,
         deadline: None,
         budget_ms: Some(2.0),
+        causal_triad: None,
     }
 }
 fn one_step_goal(state: &FullLatent) -> bool {

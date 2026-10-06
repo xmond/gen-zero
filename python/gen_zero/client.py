@@ -250,7 +250,7 @@ class UniversalParadigmRouter:
 
 DecisionMoERouter = UniversalParadigmRouter
 from .model.prm import ProcessRewardModel
-from .causal.counterfactual_engine import CounterfactualEngine, StructuralCausalModel
+from .causal.counterfactual_engine import CounterfactualEngine
 from .causal.nanocore_bridge import NanocoreAnchorBridge
 from .rollout.hard_miner import HardSampleMiner
 from .gate.alignment_gate import (

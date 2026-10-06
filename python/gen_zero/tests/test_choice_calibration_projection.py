@@ -1,4 +1,5 @@
 """Numerical contracts, independent of language, labels, or external models."""
+# anti-leakage: allow-mock-tensor
 import math
 import numpy as np
 import pytest

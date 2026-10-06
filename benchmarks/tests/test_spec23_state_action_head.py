@@ -37,7 +37,7 @@ def test_export_reload_absolute_error_and_unicode_ids(tmp_path, normalize):
     rng = np.random.default_rng(10)
     h = StateActionDisentangledHead(rng.normal(size=(16, 7)), .123, normalize=normalize)
     a, s = rng.normal(size=(4, 7)), rng.normal(size=(8, 16))
-    ids = ['动作甲', 'acción β', 'تشغيل', '実行']
+    ids = ['action-alpha', 'acción β', 'تشغيل', '실행']
     h.cache_actions(a, ids)
     path = h.export_cpu(tmp_path / 'head.npz')
     cpu = CachedCPUHead.load_cpu(path)

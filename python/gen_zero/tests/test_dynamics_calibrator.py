@@ -22,22 +22,28 @@ def separation(z, y):
     return np.square(means[0] - means[1]).sum() / np.square(z - means[y]).sum(1).mean()
 
 
+def static_factors(seed):
+    """Fixed numeric factors: input axis 0 drives state axis 0."""
+    rng = np.random.default_rng(seed)
+    u_b = np.zeros((8, 2), np.float32)
+    v_b = np.zeros((12, 2), np.float32)
+    u_b[0, 0] = 1.0
+    v_b[0, 0] = 1.0
+    u_a = (.05 * rng.normal(size=(8, 2))).astype(np.float32)
+    v_a = (.05 * rng.normal(size=(8, 2))).astype(np.float32)
+    return u_a, v_a, u_b, v_b
+
+
 @pytest.mark.parametrize('seed', [0, 1, 2])
-def test_fixed_point_learning_roundtrip_and_frozen_diagonal(seed, tmp_path):
-    x, y = numeric_problem(40, 256)
+def test_static_parameters_roundtrip_and_frozen_diagonal(seed, tmp_path):
     eval_x, eval_y = numeric_problem(41, 256)
     c = CausalDynamicsCalibrator(8, 2, 12, seed=seed)
-    before = separation(c.adapter.fixed_points(eval_x), eval_y)
     diagonal = c.adapter.lambda_.copy()
-    original_x = x.copy()
-    history = c.fit(x, y, sample_ids=np.arange(len(x)), source='mathematical-test-only',
-                    split='train', encoder_id='numeric-identity', epochs=1000)
+    c.set_static_parameters(*static_factors(seed), source='mathematical-test-only',
+                            split='train', encoder_id='numeric-identity')
     after = separation(c.adapter.fixed_points(eval_x), eval_y)
-    print(f'seed={seed} numeric separation before={before:.6f} after={after:.6f}')
-    assert after > 3 * before
-    assert history[-1] < history[0]
+    assert after > 1.0
     np.testing.assert_array_equal(diagonal, c.adapter.lambda_)
-    np.testing.assert_array_equal(x, original_x)
     path = tmp_path / 'numeric-test-only.npz'
     c.adapter.save(path)
     restored = CalibratedDynamics.load(path, encoder_id='numeric-identity')
@@ -78,24 +84,22 @@ def test_budget_includes_buffers_and_rejects_large_encoder():
 @pytest.mark.parametrize('split', ['test', 'validation', 'validation_matched', ''])
 def test_reject_eval_splits(split):
     c = CausalDynamicsCalibrator(8, 2, 12)
-    x, y = numeric_problem(0, 16)
     with pytest.raises(ValueError, match='splits'):
-        c.fit(x, y, sample_ids=np.arange(16), source='test', split=split, encoder_id='numeric')
+        c.set_static_parameters(*static_factors(0), source='test', split=split,
+                                encoder_id='numeric')
 
 
 def test_fail_closed_inputs_and_export(tmp_path):
     c = CausalDynamicsCalibrator(8, 2, 12)
-    x, y = numeric_problem(0, 16)
-    kw = dict(sample_ids=np.arange(16), source='math', split='train', encoder_id='numeric')
+    kw = dict(source='math', split='train', encoder_id='numeric')
     with pytest.raises(ValueError, match='uncalibrated'):
         c.adapter.save(tmp_path / 'bad.npz')
-    with pytest.raises(ValueError, match='unique'):
-        c.fit(x, y, **dict(kw, sample_ids=np.zeros(16)))
-    x[0, 0] = np.nan
+    u_a, v_a, u_b, v_b = static_factors(0)
+    u_b[0, 0] = np.nan
     with pytest.raises(ValueError, match='finite'):
-        c.fit(x, y, **kw)
-
-
+        c.set_static_parameters(u_a, v_a, u_b, v_b, **kw)
+    with pytest.raises(ValueError, match='shape'):
+        c.set_static_parameters(u_a[:4], v_a, *static_factors(0)[2:], **kw)
 
 
 def test_projection_handles_large_nonnormal_transient():

@@ -119,6 +119,60 @@ async fn deposit_flushes_into_the_csr_and_feeds_recall_and_ppr() {
     assert_eq!(out.meta["graph_op"]["results"][0]["entity_id"], 7);
 }
 
+/// A deposited node carries its operator signature into the graph and back
+/// out of every node echo; an invalid signature fails the whole deposit.
+#[tokio::test]
+async fn deposit_carries_operator_signature_and_refuses_bad_ones() {
+    let engine = engine();
+    let sig = json!({"name": "valve.open", "operator_kind": "hard_dcm",
+                     "embedder_space": null, "version": "1", "pure": false});
+    let mut n = node(json!({"entity_id": 7}), "open main valve", "validated", 1);
+    n["operator"] = sig.clone();
+    let out = run(
+        &engine,
+        json!({"action": "graph_deposit", "graph": {"nodes": [n]}}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    assert_eq!(out.meta["graph_op"]["nodes"][0]["operator"], sig);
+
+    for bad in [
+        json!({"name": "x", "operator_kind": "hard_dcm", "embedder_space": null,
+               "version": "1", "pure": true}),
+        json!({"name": "x", "operator_kind": "hard_dcm", "embedder_space": "qwen",
+               "version": "1", "pure": false}),
+        json!({"name": "", "operator_kind": "soft_pcm", "embedder_space": null,
+               "version": "1", "pure": true}),
+        json!({"name": "x", "operator_kind": "magic", "embedder_space": null,
+               "version": "1", "pure": true}),
+        json!({"name": "x", "operator_kind": "soft_pcm", "embedder_space": null,
+               "version": "1", "pure": true, "extra": 0}),
+    ] {
+        let mut n = node(json!({"entity_id": 8}), "other", "hypothesized", 2);
+        n["operator"] = bad.clone();
+        let out = run(
+            &engine,
+            json!({"action": "graph_deposit", "graph": {"nodes": [n]}}),
+        )
+        .await;
+        assert!(out.is_error, "{bad}");
+        assert_eq!(code(&out), "InvalidParams", "{bad}");
+    }
+    let out = run(
+        &engine,
+        json!({"action": "graph_recall", "graph": {
+            "coord": origin(), "hdc": [1, 0, 0, 0], "top_k": 4, "crag_margin": 0.0,
+        }}),
+    )
+    .await;
+    let results = out.meta["graph_op"]["results"].as_array().unwrap();
+    assert_eq!(
+        results.len(),
+        1,
+        "refused deposits left nothing: {results:?}"
+    );
+}
+
 #[tokio::test]
 async fn pipeline_decide_carries_advisory_graph_context() {
     let engine = engine();
@@ -1015,6 +1069,8 @@ async fn graph_rag_and_text_deposits_fail_closed() {
     assert!(!empty.is_error, "{:?}", empty.meta);
     assert_eq!(empty.meta["graph_op"]["hits"], json!([]));
     assert!(empty.meta["graph_op"]["diffusion"].is_null());
+    // No anchor, so no diffusion ran: it is neither converged nor degraded.
+    assert!(empty.meta["graph_op"]["diffusion_quality"].is_null());
 
     deposit_texts(&engine).await;
     for (req, want) in [
@@ -1091,7 +1147,7 @@ async fn graph_rag_and_text_deposits_fail_closed() {
     assert_eq!(out.meta["graph_op"]["graph"]["nodes"], 4, "{:?}", out.meta);
 }
 
-const CLOSE_MAIN_VALVE: &str = "关闭主阀";
+const CLOSE_MAIN_VALVE: &str = "закрыть главный клапан";
 const HANDWHEEL: &str = "turn the handwheel clockwise until the stem stops";
 
 /// Thirteen facts that are not about closing a valve. The first two share a
@@ -1134,7 +1190,7 @@ async fn deposit_valve_facts(engine: &PolymorphicZeroEngine, aliases: bool) -> V
     let mut zh = text_node(1, CLOSE_MAIN_VALVE, "validated");
     let mut en = text_node(2, HANDWHEEL, "validated");
     if aliases {
-        zh["aliases"] = json!(["valve closure", "主阀关断"]);
+        zh["aliases"] = json!(["valve closure", "отсечка главного клапана"]);
         en["aliases"] = json!(["Valve  CLOSURE"]);
     }
     let mut nodes = distractors();
@@ -1181,7 +1237,7 @@ async fn graph_rag_recalls_a_translation_through_aliases_and_the_control_misses_
     assert_eq!(deposited["alias_link_edges"], 2);
     assert_eq!(deposited["flush"]["merged_edges"], 2);
     let nodes = deposited["nodes"].as_array().unwrap();
-    assert_eq!(nodes[13]["aliases"], json!(["valve closure", "主阀关断"]));
+    assert_eq!(nodes[13]["aliases"], json!(["valve closure", "отсечка главного клапана"]));
     assert_eq!(nodes[13]["placement"], "chart");
 
     // The English name finds both facts, each by its alias.
@@ -1255,7 +1311,7 @@ async fn deposit_embedded(engine: &PolymorphicZeroEngine, topic: &[f32], link: b
     let mut nodes: Vec<Value> = (0..13)
         .map(|i| embedded(100 + i, "distractor", random_vector(900 + i, VECTOR_DIM)))
         .collect();
-    nodes.push(embedded(1, "冷却液泄漏", near(topic, 0.3, 7)));
+    nodes.push(embedded(1, "утечка охлаждающей жидкости", near(topic, 0.3, 7)));
     nodes.push(text_node(2, HANDWHEEL, "validated"));
     let mut both = text_node(3, PUMP, "validated");
     both["embedding"] = json!(random_vector(55, VECTOR_DIM));
@@ -1306,14 +1362,15 @@ async fn http_graph_rag_takes_a_query_vector_and_diffuses_from_the_embedding_anc
     );
     assert!(op["query"]["projector"].is_null());
     assert_eq!(op["query"]["vector_dim"], VECTOR_DIM);
-    // 15 of the 16 nodes carry an embedding; the pool is 4 of them.
+    // 15 of the 16 nodes carry an embedding; the vector track keeps at
+    // least gen_zero_lod::DENSE_RERANK_POOL candidates, so all 15.
     assert_eq!(op["searchable_nodes"], 15);
-    assert_eq!(op["stage1_candidates"], 4);
+    assert_eq!(op["stage1_candidates"], 15);
     assert_eq!(op["anchors"][0]["entity_id"], 1);
     assert_eq!(hit_entities(op), vec![1, 2], "{op}");
     let hits = op["hits"].as_array().unwrap();
     assert_eq!(hits[0]["matched"], "embedding");
-    assert_eq!(hits[0]["label"], "冷却液泄漏");
+    assert_eq!(hits[0]["label"], "утечка охлаждающей жидкости");
     assert_eq!(hits[1]["via"], "diffusion");
     assert_eq!(hits[1]["payload"], HANDWHEEL);
     assert_eq!(op["diffusion"]["converged"], true);
@@ -1756,4 +1813,445 @@ fn failed_startup_seed_never_commits_an_empty_snapshot() {
     // Recovery uses the committed graph even if the original seed is gone.
     std::fs::remove_file(seed).unwrap();
     assert!(PolymorphicZeroEngine::try_from_config(config).is_ok());
+}
+
+/// Two nodes at the same coordinate and HDC fingerprint, so a `graph_rag`
+/// query at that point anchors both directly instead of reaching one only by
+/// diffusion; `falsifies` points from `loser` to `winner`.
+fn conflicting_pair(
+    winner_entity: u64,
+    winner_confidence: f64,
+    loser_entity: u64,
+    loser_confidence: f64,
+) -> Value {
+    json!({"action": "graph_deposit", "graph": {
+        "nodes": [
+            node(json!({"entity_id": winner_entity, "confidence": winner_confidence}), "claim A", "validated", 0b1111),
+            node(json!({"entity_id": loser_entity, "confidence": loser_confidence}), "claim B", "validated", 0b1111),
+        ],
+        "edges": [
+            {"source": {"entity_id": loser_entity}, "target": {"entity_id": winner_entity}, "type": "falsifies", "weight": 1.0},
+        ],
+    }})
+}
+
+fn rag_at_origin_hdc_1111(top_k: usize) -> Value {
+    json!({"action": "graph_rag", "graph": {
+        "coord": origin(), "hdc": [0b1111, 0, 0, 0], "top_k": top_k,
+    }})
+}
+
+#[tokio::test]
+async fn graph_rag_excludes_the_losing_side_of_a_falsifies_conflict() {
+    let engine = engine();
+    let deposit = run(&engine, conflicting_pair(30, 0.9, 31, 0.2)).await;
+    assert!(!deposit.is_error, "{:?}", deposit.meta);
+
+    let out = run(&engine, rag_at_origin_hdc_1111(2)).await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    // Both nodes sit at the same point, so without the filter both would be
+    // top_k=2 anchors; the conflict drops the lower-confidence one.
+    assert_eq!(hit_entities(op), vec![30], "{op}");
+    assert_eq!(
+        op["conflict_resolved"],
+        json!([{"winner": 30, "loser": 31, "edge": "Falsifies"}]),
+        "{op}"
+    );
+    assert_eq!(op["unresolved_conflict"], false);
+}
+
+#[tokio::test]
+async fn graph_rag_hit_exposes_the_falsifies_edge_to_a_live_counterpart() {
+    let engine = engine();
+    // Both sides stay live (0.6 and 0.55 are well above any decay threshold):
+    // the conflict is unsettled, so the winner must say it is contested.
+    let deposit = run(&engine, conflicting_pair(50, 0.6, 51, 0.55)).await;
+    assert!(!deposit.is_error, "{:?}", deposit.meta);
+
+    let out = run(&engine, rag_at_origin_hdc_1111(2)).await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    assert_eq!(hit_entities(op), vec![50], "{op}");
+    let winner = &op["hits"][0];
+    assert_eq!(winner["status"], "validated", "{op}");
+    assert_eq!(
+        winner["conflict_edges"],
+        json!([{
+            "counterpart_entity_id": 51,
+            "direction": "falsified_by",
+            "weight": 1.0,
+            "edge": "Falsifies",
+            "counterpart_kept": false,
+        }]),
+        "{op}"
+    );
+    assert_eq!(
+        op["conflict_resolved"],
+        json!([{"winner": 50, "loser": 51, "edge": "Falsifies"}]),
+        "{op}"
+    );
+}
+
+#[tokio::test]
+async fn graph_rag_hit_without_a_conflict_has_empty_conflict_edges() {
+    let engine = engine();
+    deposit_texts(&engine).await;
+    let out = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {
+            "query_text": "Coolant pump failed during the night shift?", "top_k": 2,
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let hits = out.meta["graph_op"]["hits"].as_array().expect("hits array");
+    assert!(!hits.is_empty());
+    for hit in hits {
+        assert_eq!(hit["conflict_edges"], json!([]), "{hit}");
+    }
+}
+
+#[tokio::test]
+async fn graph_rag_excludes_the_losing_side_of_a_falsifies_conflict_from_anchors_too() {
+    let engine = engine();
+    let deposit = run(&engine, conflicting_pair(40, 0.9, 41, 0.2)).await;
+    assert!(!deposit.is_error, "{:?}", deposit.meta);
+
+    let out = run(&engine, rag_at_origin_hdc_1111(2)).await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    // Both nodes sit at the same point, so without the filter both would be
+    // anchors; the loser must not leak through `anchors` either, same as `hits`.
+    assert_eq!(hit_entities(op), vec![40], "{op}");
+    let anchor_entities: Vec<Value> = op["anchors"]
+        .as_array()
+        .expect("anchors array")
+        .iter()
+        .map(|a| a["entity_id"].clone())
+        .collect();
+    assert!(
+        !anchor_entities.contains(&json!(41)),
+        "loser leaked into anchors: {op}"
+    );
+    assert!(anchor_entities.contains(&json!(40)), "{op}");
+}
+
+#[tokio::test]
+async fn graph_rag_drops_both_sides_of_an_unresolvable_tie() {
+    let engine = engine();
+    let deposit = run(&engine, conflicting_pair(32, 0.5, 33, 0.5)).await;
+    assert!(!deposit.is_error, "{:?}", deposit.meta);
+
+    let out = run(&engine, rag_at_origin_hdc_1111(2)).await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    // Neither side can be trusted alone, so neither is served as confirmed.
+    assert!(hit_entities(op).is_empty(), "{op}");
+    assert_eq!(op["conflict_resolved"], json!([]));
+    assert_eq!(op["unresolved_conflict"], true);
+    let tied = op["tied_conflicts"]
+        .as_array()
+        .expect("tied_conflicts array");
+    assert_eq!(tied.len(), 1, "{op}");
+    let pair = &tied[0];
+    assert_eq!(pair["edge"], "Falsifies");
+    let (a, b) = (pair["a"].as_u64().unwrap(), pair["b"].as_u64().unwrap());
+    assert_eq!(
+        std::collections::BTreeSet::from([a, b]),
+        std::collections::BTreeSet::from([32, 33]),
+        "{op}"
+    );
+}
+
+#[tokio::test]
+async fn graph_ppr_flags_a_diffusion_that_did_not_converge() {
+    let engine = engine();
+    assert!(!deposit_world(&engine).await.is_error);
+    // One iteration against the default 1e-6 tolerance cannot converge.
+    let out = run(
+        &engine,
+        json!({"action": "graph_ppr", "graph": {
+            "seeds": [{"entity_id": 7, "weight": 1.0}], "top_k": 3, "max_iters": 1,
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    assert_eq!(op["converged"], false, "{op}");
+    assert_eq!(op["diffusion_quality"], "degraded");
+    assert_eq!(
+        op["non_converged_warning"],
+        "PPR residual exceeded tolerance"
+    );
+}
+
+#[tokio::test]
+async fn graph_rag_flags_a_diffusion_that_did_not_converge() {
+    let engine = engine();
+    deposit_texts(&engine).await;
+    let out = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {
+            "query_text": "Coolant pump failed during the night shift?", "top_k": 1, "max_iters": 1,
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    assert_eq!(op["diffusion"]["converged"], false, "{op}");
+    assert_eq!(op["diffusion"]["quality"], "degraded", "{op}");
+    assert_eq!(op["diffusion_quality"], "degraded");
+    assert_eq!(
+        op["non_converged_warning"],
+        "PPR residual exceeded tolerance"
+    );
+}
+
+#[tokio::test]
+async fn graph_rag_reports_a_converged_diffusion_explicitly() {
+    let engine = engine();
+    deposit_texts(&engine).await;
+    let out = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {
+            "query_text": "Coolant pump failed during the night shift?", "top_k": 1,
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    assert_eq!(op["diffusion"]["converged"], true, "{op}");
+    assert_eq!(op["diffusion"]["quality"], "converged", "{op}");
+    assert_eq!(op["diffusion_quality"], "converged", "{op}");
+    assert!(op.get("non_converged_warning").is_none(), "{op}");
+}
+
+/// A detail leaf (band 0) coarse-grained into a summary (band 1) that itself
+/// carries a payload: `graph_coarse_grain` never puts one on its own summary,
+/// so the summary is linked separately with a plain `coarse_grain` edge from
+/// `graph_deposit`, the path `LodGraph::coarse_grain_summary_of` falls back to.
+/// Detail and summary take distinct `status`/`confidence` so a fold's
+/// identity/confidence/status substitution (Defect 2) is a non-trivial check.
+/// Returns the detail node's graph-internal `node` id (its `"node"` field
+/// stays stable across folding; its `entity_id` does not once folded).
+async fn deposit_detail_and_summary(
+    engine: &PolymorphicZeroEngine,
+    detail_payload: &str,
+    detail_status: &str,
+    detail_confidence: f64,
+    summary_payload: &str,
+    summary_status: &str,
+    summary_confidence: f64,
+) -> u64 {
+    let mut detail = text_node(50, detail_payload, detail_status);
+    detail["confidence"] = json!(detail_confidence);
+    detail["coord"] = radial(DEEP, 0);
+    detail["hdc"] = json!([50, 0, 0, 0]);
+    let mut summary = text_node(51, summary_payload, summary_status);
+    summary["confidence"] = json!(summary_confidence);
+    summary["coord"] = radial(MID, 0);
+    summary["hdc"] = json!([51, 0, 0, 0]);
+    summary["band"] = json!(1);
+    let out = run(
+        engine,
+        json!({"action": "graph_deposit", "graph": {
+            "nodes": [detail, summary],
+            "edges": [
+                {"source": {"entity_id": 50}, "target": {"entity_id": 51}, "type": "coarse_grain", "weight": 1.0},
+            ],
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    assert_eq!(out.meta["graph_op"]["nodes"][0]["band"], 0);
+    assert_eq!(out.meta["graph_op"]["nodes"][1]["band"], 1);
+    out.meta["graph_op"]["nodes"][0]["node"].as_u64().unwrap()
+}
+
+#[tokio::test]
+async fn graph_rag_folds_a_tight_budget_down_to_the_coarse_grain_summary() {
+    let engine = engine();
+    let detail_payload = "d".repeat(400);
+    let summary_payload = "short summary";
+    // Detail: high confidence, validated. Summary: lower confidence,
+    // hypothesized. A folded hit must report the summary's own identity and
+    // the lesser (summary's) confidence, not the detail's.
+    let detail_node_id = deposit_detail_and_summary(
+        &engine,
+        &detail_payload,
+        "validated",
+        0.9,
+        summary_payload,
+        "hypothesized",
+        0.3,
+    )
+    .await;
+
+    // Budget too small for the detail payload (~100 tokens at chars/4) but
+    // enough for the short summary (~4 tokens).
+    let out = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {
+            "coord": radial(DEEP, 0), "hdc": [50, 0, 0, 0], "top_k": 1, "token_budget": 10,
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    assert_eq!(op["token_budget"], 10);
+    assert_eq!(op["selection_strategy"], "lod_budget_fit");
+    // The summary (entity 51) is reached by diffusion too, through the same
+    // `coarse_grain` edge: its own payload is already short enough to need no
+    // folding. Only the detail node (graph-internal id `detail_node_id`) had
+    // to fold, and its JSON then takes the summary's own entity_id,
+    // confidence and status.
+    let hits = op["hits"].as_array().unwrap();
+    let detail_hit = hits
+        .iter()
+        .find(|h| h["node"] == detail_node_id)
+        .expect("detail hit");
+    assert_eq!(detail_hit["payload"], summary_payload);
+    assert_eq!(detail_hit["payload_band"], "summary");
+    assert_eq!(detail_hit["entity_id"], 51, "{op}");
+    // f32 round-trip of 0.3 is not exactly the f64 literal 0.3, so compare
+    // with a tolerance rather than bit-for-bit JSON equality.
+    assert!(
+        (detail_hit["confidence"].as_f64().unwrap() - 0.3).abs() < 1e-6,
+        "expected min(0.9, 0.3): {op}"
+    );
+    assert_eq!(detail_hit["status"], "hypothesized", "{op}");
+    let summary_hit = hits
+        .iter()
+        .find(|h| h["entity_id"] == 51 && h["node"] != detail_node_id)
+        .expect("summary hit");
+    assert_eq!(summary_hit["payload"], summary_payload);
+    assert!(summary_hit["payload_band"].is_null(), "{op}");
+    assert!(
+        (summary_hit["confidence"].as_f64().unwrap() - 0.3).abs() < 1e-6,
+        "{op}"
+    );
+    assert_eq!(summary_hit["status"], "hypothesized", "{op}");
+    assert!(op["estimated_tokens_used"].as_u64().unwrap() <= 10, "{op}");
+    assert_eq!(op["token_budget_dropped_hits"], json!([]));
+
+    // Plenty of budget: the detail node keeps its own payload, no `payload_band`.
+    let out = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {
+            "coord": radial(DEEP, 0), "hdc": [50, 0, 0, 0], "top_k": 1, "token_budget": 1000,
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    let detail_hit = op["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|h| h["entity_id"] == 50)
+        .expect("detail hit");
+    assert_eq!(detail_hit["payload"], detail_payload);
+    assert!(detail_hit["payload_band"].is_null(), "{op}");
+
+    // No `token_budget` at all: behavior is exactly as before this field
+    // existed, and none of the new top-level keys appear.
+    let out = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {
+            "coord": radial(DEEP, 0), "hdc": [50, 0, 0, 0], "top_k": 1,
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    assert!(op["token_budget"].is_null());
+    assert!(op["selection_strategy"].is_null());
+    let detail_hit = op["hits"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|h| h["entity_id"] == 50)
+        .expect("detail hit");
+    assert_eq!(detail_hit["payload"], detail_payload);
+}
+
+#[tokio::test]
+async fn graph_rag_drops_a_hit_neither_variant_fits_and_reports_it() {
+    let engine = engine();
+    // No coarser summary at all: nothing to fold to.
+    let mut lone = text_node(60, &"e".repeat(400), "validated");
+    lone["coord"] = radial(DEEP, 0);
+    lone["hdc"] = json!([60, 0, 0, 0]);
+    let out = run(
+        &engine,
+        json!({"action": "graph_deposit", "graph": {"nodes": [lone]}}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+
+    let out = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {
+            "coord": radial(DEEP, 0), "hdc": [60, 0, 0, 0], "top_k": 1, "token_budget": 1,
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    assert!(op["hits"].as_array().unwrap().is_empty(), "{op}");
+    assert_eq!(op["estimated_tokens_used"], 0);
+    assert_eq!(op["token_budget_dropped_hits"], json!([60]));
+}
+
+#[tokio::test]
+async fn graph_rag_refuses_to_fold_into_an_excluded_summary() {
+    let engine = engine();
+    let detail_payload = "d".repeat(200);
+    let summary_payload = "s".repeat(20);
+    let mut detail = text_node(70, &detail_payload, "validated");
+    detail["coord"] = radial(DEEP, 0);
+    detail["hdc"] = json!([70, 0, 0, 0]);
+    detail["confidence"] = json!(0.9);
+
+    let mut summary = text_node(71, &summary_payload, "hypothesized");
+    summary["coord"] = radial(MID, 0);
+    summary["hdc"] = json!([70, 0, 0, 0]);
+    summary["confidence"] = json!(0.4);
+    summary["band"] = json!(1);
+
+    let mut opponent = text_node(72, "opponent", "validated");
+    opponent["coord"] = radial(MID, 0);
+    opponent["hdc"] = json!([70, 0, 0, 0]);
+    opponent["confidence"] = json!(0.95);
+
+    let out = run(
+        &engine,
+        json!({"action": "graph_deposit", "graph": {
+            "nodes": [detail, summary, opponent],
+            "edges": [
+                {"source": {"entity_id": 70}, "target": {"entity_id": 71}, "type": "coarse_grain", "weight": 1.0},
+                {"source": {"entity_id": 71}, "target": {"entity_id": 72}, "type": "falsifies", "weight": 1.0},
+            ],
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+
+    // Tight budget: 70 exceeds budget. Summary 71 was refuted by 72 (confidence 0.95 > 0.4).
+    // So 70 must NOT fold into 71! 70 should be dropped.
+    let out = run(
+        &engine,
+        json!({"action": "graph_rag", "graph": {
+            "coord": radial(DEEP, 0), "hdc": [70, 0, 0, 0], "top_k": 5, "token_budget": 10,
+        }}),
+    )
+    .await;
+    assert!(!out.is_error, "{:?}", out.meta);
+    let op = &out.meta["graph_op"];
+    let hits = op["hits"].as_array().unwrap();
+    // 71 must not appear anywhere in hits (neither as detail nor summary)
+    assert!(hits.iter().all(|h| h["entity_id"] != 71), "{op}");
+    // 70 was dropped because summary was excluded
+    assert_eq!(op["token_budget_dropped_hits"], json!([70]), "{op}");
 }

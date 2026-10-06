@@ -58,8 +58,7 @@ def test_fit_rejects_evaluation_splits():
 def test_certificate_rejects_non_contractive_A():
     dyn, _, _ = _fit(2)
     bad = CounterfactualDriftDynamics.__new__(CounterfactualDriftDynamics)
-    for name in ARRAY_KEYS:
-        setattr(bad, name, getattr(dyn, name).copy())
+    vars(bad).update({name: getattr(dyn, name).copy() for name in ARRAY_KEYS})
     bad.provenance = dict(dyn.provenance)
     bad.A = np.eye(dyn.dim) * 1.2
     with pytest.raises(ValueError, match="not contractive"):

@@ -85,21 +85,14 @@ class GraphDeduplicator:
 
     @staticmethod
     def _compute_jaccard(s1: str, s2: str) -> float:
-        stopwords = {"首先", "然后", "接着", "我们", "你们", "他们", "还", "需要", "对", "完成", "做", "进行", "的", "与", "和", "在", "把", "请", "以及", "由"}
-        clean1 = re.sub(r"[^\w\u4e00-\u9fff]", "", s1.lower())
-        clean2 = re.sub(r"[^\w\u4e00-\u9fff]", "", s2.lower())
-        for w in stopwords:
-            clean1 = clean1.replace(w, "")
-            clean2 = clean2.replace(w, "")
-        if not clean1 or not clean2:
+        stopwords = {"first", "then", "next", "we", "you", "they", "need", "to", "for", "with", "and", "in", "the", "a", "an"}
+        clean1 = re.sub(r"[^\w\s]", "", s1.lower())
+        clean2 = re.sub(r"[^\w\s]", "", s2.lower())
+        tokens1 = {w for w in clean1.split() if w and w not in stopwords}
+        tokens2 = {w for w in clean2.split() if w and w not in stopwords}
+        if not tokens1 or not tokens2:
             return 0.0
-        chars1 = set(clean1)
-        chars2 = set(clean2)
-        c_sim = len(chars1 & chars2) / len(chars1 | chars2)
-        bg1 = {clean1[i:i+2] for i in range(len(clean1) - 1)}
-        bg2 = {clean2[i:i+2] for i in range(len(clean2) - 1)}
-        bg_sim = (len(bg1 & bg2) / len(bg1 | bg2)) if (bg1 and bg2) else c_sim
-        return max(c_sim, bg_sim)
+        return len(tokens1 & tokens2) / len(tokens1 | tokens2)
 
     def deduplicate(
         self,
@@ -134,13 +127,13 @@ class RoleAttributor:
     """Maps candidate roles to discrete canonical role lanes."""
 
     DEFAULT_ROLE_POOL = [
-        "客户经理",
-        "风控法务",
-        "权证专员",
-        "审批主管",
-        "业务经办",
-        "外部客户",
-        "系统自动化",
+        "account_manager",
+        "risk_legal",
+        "warrant_specialist",
+        "approval_lead",
+        "operator",
+        "external_client",
+        "automation",
     ]
 
     def __init__(self, allowable_roles: Optional[List[str]] = None) -> None:
@@ -148,8 +141,8 @@ class RoleAttributor:
 
     def attribute_role(self, candidate_role: str) -> str:
         if not candidate_role:
-            return "业务经办"
-        c_role = candidate_role.strip()
+            return "operator"
+        c_role = candidate_role.strip().lower()
         for role in self.allowable_roles:
             if role in c_role or c_role in role:
                 return role

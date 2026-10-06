@@ -6,12 +6,12 @@ Given a latent state z in R^{D_s} and an action a in R^{D_a}:
     z_next  = z + delta_z
     r_hat   = sigmoid(reward_net([z; a]))   # outcome / safety probability in [0, 1]
 
-Training minimises  L = ||z_next - z'||^2 + lambda * BCE(r_hat, r)
-(see ``joint_loss`` and ``scripts/train_world_model_dynamics.py``).
+The weights are static: they are loaded from an exported checkpoint. This
+module only evaluates ``joint_loss`` (forward pass) and never fits a model.
 
 Fail-closed contract: a freshly constructed model holds random weights and is
 NOT usable for inference. ``step`` raises until ``load_checkpoint`` has
-succeeded. Training a model in memory does not unlock it either; the only
+succeeded. Building a model in memory does not unlock it either; the only
 path to inference is a checkpoint that passed format and shape validation.
 
 ``done`` has no label in (s, a, s', r) data. It is defined as a rule, not a
@@ -400,19 +400,3 @@ def joint_loss(
     state_sq_err = ((pred_next - next_states) ** 2).sum(dim=-1).mean()
     bce = F.binary_cross_entropy_with_logits(logit, rewards)
     return state_sq_err + bce_weight * bce, state_sq_err, bce
-
-
-def train_step(
-    model: NeuralDynamicsWorldModel,
-    optimizer: torch.optim.Optimizer,
-    batch: Dict[str, torch.Tensor],
-    bce_weight: float,
-) -> Dict[str, float]:
-    model.train()
-    optimizer.zero_grad(set_to_none=True)
-    total, sq_err, bce = joint_loss(model, batch, bce_weight)
-    if not torch.isfinite(total):
-        raise FloatingPointError(f"non-finite training loss: {total.item()}")
-    total.backward()
-    optimizer.step()
-    return {"loss": float(total.item()), "state_sq_err": float(sq_err.item()), "bce": float(bce.item())}

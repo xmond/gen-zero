@@ -1,4 +1,5 @@
 """Real computation tests; compact configs test math, production config tests storage/forward."""
+# anti-leakage: allow-mock-tensor
 import gc
 import os
 from pathlib import Path
@@ -57,7 +58,7 @@ def test_production_bf16_storage_and_native_text_forward(qwen_path):
     assert 450_000_000 <= count <= 490_000_000
     assert model.storage_bytes() == config.storage_bytes() <= 1_000_000_000
     assert all(p.device.type == 'cpu' and p.dtype == torch.bfloat16 for p in model.parameters())
-    texts = ['因果关系需要干预验证。', 'التدخل يغير النتيجة.', '原因と結果', 'Intervention changes outcomes.']
+    texts = ['Causal relations require interventional verification.', 'التدخل يغير النتيجة.', 'cause and effect', 'Intervention changes outcomes.']
     tokens = tokenizer(texts, padding=True, return_tensors='pt', add_special_tokens=False)
     assert tokenizer.batch_decode(tokenizer(texts, add_special_tokens=False)['input_ids']) == texts
     with torch.inference_mode():
@@ -140,7 +141,7 @@ def test_real_checkpoint_slice(qwen_path):
                                original_k[kv_rows, :32].to(torch.bfloat16), rtol=0, atol=0)
     with pytest.raises(ValueError, match='structured student dimensions'):
         converter.convert(ZeroConfig(vocab_size=len(native), attention_bias=True), tokenizer_path=qwen_path)
-    tokens = native('真实权重切片验证', return_tensors='pt')
+    tokens = native('real weight slice verification', return_tensors='pt')
     with torch.no_grad():
         assert torch.isfinite(model(tokens['input_ids'])).all()
     print(f'real slice source={report.checkpoint}; layers={report.source_layers}; tensors={len(report.tensor_sha256)}')

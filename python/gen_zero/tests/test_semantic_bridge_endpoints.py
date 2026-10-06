@@ -21,7 +21,7 @@ pytestmark = pytest.mark.skipif(not HAVE_BACKBONE, reason="Zero backbone weights
 
 TOKEN = "gz_test_semantic_bridge"
 CANDS = ["delete", "backup", "wait"]
-DELETE_ZH = "把这封邮件删除掉，不需要确认"
+DELETE_ZH = "Delete this email without confirmation"
 BACKUP_EN = "Please carefully back up the database before deleting"
 
 
@@ -136,7 +136,7 @@ def test_select_ask_frame_priority():
 def test_semantic_route_ranks_by_intent(client):
     tools = ["delete_file", "search_web", {"name": "send_email", "description": "Send an email"}]
     resp = client.post("/v1/semantic_route", json={
-        "intent": "帮我给老板发一封邮件说我明天请假", "tools": tools, "top_k": 1})
+        "intent": "Send an email to boss asking for leave tomorrow", "tools": tools, "top_k": 1})
     assert resp.status_code == 200, resp.text
     body = resp.json()
     assert body["selected"] == ["send_email"]
@@ -153,9 +153,9 @@ OPAQUE_TOOLS = [
 
 
 @pytest.mark.parametrize("intent,expected", [
-    ("帮我给老板发一封邮件说我明天请假", "tool_7"),
+    ("Send an email to boss asking for leave tomorrow", "tool_7"),
     ("Email my landlord that the rent will be late", "tool_7"),
-    ("查一下明天东京的天气", "tool_3"),
+    ("Check Tokyo weather tomorrow", "tool_3"),
     ("remove the old log file", "tool_1"),
 ])
 def test_route_reads_descriptions_when_names_say_nothing(client, intent, expected):

@@ -47,6 +47,10 @@ use crate::node::{
     hdc_hamming_distance_256, ChartAnchor, EpistemicStatus, LodBand, LodNode, Placement,
     ZoomDirection,
 };
+use crate::operator::{
+    check_space, CausalOperator, OperatorExecution, OperatorInput, OperatorRegistry,
+    OperatorSignature,
+};
 use crate::ppr::compute_ppr_csr;
 use crate::projection::{normalized, TextEmbeddingProjector};
 use arc_swap::ArcSwap;
@@ -451,8 +455,11 @@ fn discard_range(discarded: &mut Vec<(u64, u64)>, after: u64, upto: u64) {
 /// Lock order: `txn_lock` -> `flush_lock` -> `state`. The CSR snapshot is stored
 /// only while `state` is write-locked; methods that must see it consistent with
 /// the nodes load it while holding `state`.
+///
+/// Public only as the read-only view a [`CausalOperator`] judges; its fields
+/// stay private to the graph.
 #[derive(Clone, Default)]
-struct GraphState {
+pub struct GraphState {
     nodes: NodeChunks,
     /// Shared copy-on-write: the first insert of a transaction copies the map.
     entity_index: Arc<HashMap<u64, u32>>,
@@ -468,12 +475,58 @@ struct GraphState {
     alias_index: Arc<HashMap<String, Vec<u32>>>,
     /// Dimension of every node embedding in this graph, fixed by the first one.
     embedding_dim: Option<usize>,
+    /// Identity of the model behind every node embedding in this graph, fixed
+    /// by the first node that declares one ([`LodNode::embedder_space`]).
+    /// `None` until some node does; never set back to `None`.
+    embedder_space: Option<String>,
     /// Bumped by every CSR store and every rollback. A flush built against an
     /// older generation is discarded.
     generation: u64,
     /// Sorted, disjoint checkpoint sequence ranges `(after, upto]` whose state a
     /// rollback discarded. Checkpoints in them can no longer be restored.
     discarded: Vec<(u64, u64)>,
+}
+
+impl GraphState {
+    /// Number of nodes.
+    pub fn node_count(&self) -> usize {
+        self.nodes.len()
+    }
+
+    /// The node with id `id`, if any.
+    pub fn node(&self, id: u32) -> Option<&LodNode> {
+        self.nodes.get(id as usize)
+    }
+
+    /// Node id holding `entity_id`, if any.
+    pub fn node_for_entity(&self, entity_id: u64) -> Option<u32> {
+        self.entity_index.get(&entity_id).copied()
+    }
+
+    /// The node holding `entity_id`, if any.
+    pub fn entity_node(&self, entity_id: u64) -> Option<&LodNode> {
+        self.node_for_entity(entity_id).and_then(|id| self.node(id))
+    }
+
+    /// Whether `entity_id` is revoked: pruned or manually revoked.
+    pub fn is_revoked(&self, entity_id: u64) -> bool {
+        self.revocations.contains(&entity_id)
+    }
+
+    /// Edges appended but not yet merged into the CSR snapshot.
+    pub fn pending_edge_count(&self) -> usize {
+        self.edge_buffer.len()
+    }
+
+    /// Dimension of every node embedding, fixed by the first one.
+    pub fn embedding_dim(&self) -> Option<usize> {
+        self.embedding_dim
+    }
+
+    /// Embedder identity the graph locked to, if any node declared one.
+    pub fn embedder_space(&self) -> Option<&str> {
+        self.embedder_space.as_deref()
+    }
 }
 
 /// The node fields a graph method may change after insert. Label, coordinate,
@@ -510,7 +563,8 @@ impl NodeMutable {
 /// Everything a rollback restores: the node count, each node's mutable fields
 /// ([`NodeMutable`]: status, confidence, refutation mark, band and parent), the
 /// CSR snapshot reference, pending edges, revocations, privileges, validated
-/// dependencies and the embedding dimension. The alias index follows the nodes.
+/// dependencies, the embedding dimension and the embedder space. The alias
+/// index follows the nodes.
 /// The edge ticket counter is never rewound, so tickets stay unique.
 ///
 /// Memory is O(nodes + pending edges + revocations + dependencies) per checkpoint.
@@ -526,6 +580,7 @@ pub struct GraphCheckpoint {
     privileges: HashMap<u64, Vec<u32>>,
     validated_deps: HashSet<(u64, u64)>,
     embedding_dim: Option<usize>,
+    embedder_space: Option<String>,
 }
 
 impl GraphCheckpoint {
@@ -1462,12 +1517,48 @@ pub enum AnchorMatch {
 }
 
 /// One query coordinate with its fingerprint, and the kind of anchor it may be
-/// compared with.
+/// compared with. An embedding probe also carries the raw query vector: its
+/// stage 2 measures angles between raw vectors, not projected coordinates.
 #[derive(Clone, Copy)]
-struct Probe {
+struct Probe<'a> {
     coord: MixedCurvatureCoord,
     hdc: [u64; 4],
     space: Placement,
+    vector: Option<&'a [f32]>,
+}
+
+/// Fewest stage 1 candidates an embedding probe reranks exactly. One bit of
+/// the 256-bit fingerprint is 0.7 degrees of angle, and its noise near 30 bits
+/// apart is about 5 bits (3.6 degrees), while mean-pooled Qwen2.5 embeddings
+/// of a right and a wrong passage were measured 4 degrees apart: the Hamming
+/// order alone drops the right node. The exact rerank of 256 candidates of at
+/// most 8192 floats costs at most 2M multiply-adds.
+pub const DENSE_RERANK_POOL: usize = 256;
+
+/// Angle in radians between two vectors of one dimension. Refused: unequal
+/// dimensions, a value that is not finite and a vector of norm 0.
+fn angular_distance(a: &[f32], b: &[f32]) -> Result<f32, LodError> {
+    if a.len() != b.len() {
+        return Err(LodError::InvalidQuery(format!(
+            "vectors of {} and {} dimensions cannot be compared",
+            a.len(),
+            b.len()
+        )));
+    }
+    let (mut dot, mut aa, mut bb) = (0.0_f64, 0.0_f64, 0.0_f64);
+    for (&x, &y) in a.iter().zip(b) {
+        let (x, y) = (f64::from(x), f64::from(y));
+        dot += x * y;
+        aa += x * x;
+        bb += y * y;
+    }
+    let norm = (aa * bb).sqrt();
+    if !(dot.is_finite() && norm.is_finite() && norm > 0.0) {
+        return Err(LodError::InvalidQuery(
+            "an embedding is not finite or has norm 0".into(),
+        ));
+    }
+    Ok((dot / norm).clamp(-1.0, 1.0).acos() as f32)
 }
 
 /// Anchors of [`LodGraph::recall_in`] with the Stage 1 counts.
@@ -1527,6 +1618,66 @@ pub struct RagHit {
     pub source_uri: Option<String>,
     pub timestamp_ns: u64,
     pub payload_digest: [u8; 32],
+    /// Every `Falsifies` edge, committed or pending, between this hit and
+    /// another hit of the same result, read under the same lock as the
+    /// search. A read-only annotation: no hit is dropped for it.
+    pub conflict_edges: Vec<ConflictEdge>,
+}
+
+/// Which end of a `Falsifies` edge a [`RagHit`] sits on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConflictDirection {
+    /// The hit is the source: it falsifies the counterpart.
+    Falsifies,
+    /// The hit is the target: the counterpart falsifies it.
+    FalsifiedBy,
+}
+
+impl ConflictDirection {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Falsifies => "falsifies",
+            Self::FalsifiedBy => "falsified_by",
+        }
+    }
+}
+
+/// One `Falsifies` edge between two hits of one result, seen from one of them.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConflictEdge {
+    pub counterpart_node_id: u32,
+    pub counterpart_entity_id: u64,
+    pub direction: ConflictDirection,
+    pub weight: f32,
+}
+
+/// Whether a PPR run can be trusted as a ranking.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DiffusionQuality {
+    /// The residual fell below the tolerance before the iteration cap.
+    Converged,
+    /// The cap ran out first, or the residual is not finite: the scores are
+    /// an unfinished iterate, not the PPR fixed point.
+    Degraded,
+}
+
+impl DiffusionQuality {
+    /// `converged` alone is not trusted: the residual must also be finite and
+    /// below `tolerance`.
+    pub fn assess(converged: bool, residual: f32, tolerance: f32) -> Self {
+        if converged && residual.is_finite() && residual < tolerance {
+            Self::Converged
+        } else {
+            Self::Degraded
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Converged => "converged",
+            Self::Degraded => "degraded",
+        }
+    }
 }
 
 /// The PPR run of one [`LodGraph::hybrid_rag_search`].
@@ -1538,6 +1689,8 @@ pub struct RagDiffusion {
     pub iterations: usize,
     pub residual: f32,
     pub converged: bool,
+    /// [`DiffusionQuality::assess`] of this run.
+    pub quality: DiffusionQuality,
 }
 
 /// Output of [`LodGraph::hybrid_rag_search`].
@@ -1594,6 +1747,10 @@ pub struct LodGraph {
     /// Checkpoint numbers this candidate issued. If it is dropped unpublished,
     /// they are discarded in the graph it came from.
     issued: Mutex<Vec<u64>>,
+    /// Registered operator implementations and spent nonces. Runtime only:
+    /// never persisted, checkpointed or rolled back. Shared with every
+    /// candidate, so a nonce is spent once whichever copy spends it.
+    operators: Arc<Mutex<OperatorRegistry>>,
 }
 
 impl Default for LodGraph {
@@ -1638,7 +1795,7 @@ impl LodGraph {
             policy: [0; 32],
         };
         let manifold = ProductManifold::new(layout, rounded, epochs)?;
-        Ok(Self {
+        let graph = Self {
             graph_id: NEXT_GRAPH_ID.fetch_add(1, Ordering::Relaxed),
             manifold,
             metric: (alphas, c, r),
@@ -1652,7 +1809,10 @@ impl LodGraph {
             persistence: None,
             candidate: false,
             issued: Mutex::new(Vec::new()),
-        })
+            operators: Arc::new(Mutex::new(OperatorRegistry::default())),
+        };
+        crate::builtin_operator::register(&graph)?;
+        Ok(graph)
     }
 
     /// A private candidate holding this graph's current state. It shares the
@@ -1674,6 +1834,7 @@ impl LodGraph {
             persistence: None,
             candidate: true,
             issued: Mutex::new(Vec::new()),
+            operators: Arc::clone(&self.operators),
         }
     }
 
@@ -1755,6 +1916,19 @@ impl LodGraph {
         self.projector.project_dense(embedding)
     }
 
+    /// Dimension every node embedding of this graph has, fixed by the first
+    /// one; `None` while no live state holds an embedding.
+    pub fn embedding_dim(&self) -> Option<usize> {
+        self.state.read().embedding_dim
+    }
+
+    /// Identity of the model behind every node embedding of this graph
+    /// ([`LodNode::embedder_space`]), fixed by the first node that declares
+    /// one; `None` while no live node has declared one.
+    pub fn embedder_space(&self) -> Option<String> {
+        self.state.read().embedder_space.clone()
+    }
+
     /// Distance between two coordinates under this graph's geometry.
     fn distance(&self, a: &MixedCurvatureCoord, b: &MixedCurvatureCoord) -> Result<f32, LodError> {
         let (alphas, c, r) = self.metric;
@@ -1780,8 +1954,10 @@ impl LodGraph {
     /// that breaks [`LodNode::validate_aliases`], has no alphanumeric
     /// character, repeats another alias of the node or already has
     /// [`MAX_ALIAS_HOLDERS`] holders; an embedding [`Self::project_dense`]
-    /// refuses or whose dimension differs from the graph's earlier embeddings;
-    /// and [`Placement::Embedding`] without an embedding.
+    /// refuses, whose dimension differs from the graph's earlier embeddings, or
+    /// whose [`LodNode::embedder_space`] (when declared) differs from the
+    /// graph's locked one ([`Self::embedder_space`]); and
+    /// [`Placement::Embedding`] without an embedding.
     pub fn add_node(&self, node: LodNode) -> Result<u32, LodError> {
         self.write(|g| g.add_node_now(node))
     }
@@ -1827,6 +2003,14 @@ impl LodGraph {
                         st.embedding_dim.unwrap_or_default()
                     )));
                 }
+                if let (Some(locked), Some(claimed)) = (&st.embedder_space, &node.embedder_space) {
+                    if locked != claimed {
+                        return Err(LodError::InvalidNode(format!(
+                            "embedding declares embedder `{claimed}` but this graph's \
+                             embeddings are from `{locked}`"
+                        )));
+                    }
+                }
                 Some(ChartAnchor {
                     coord,
                     hdc_fingerprint,
@@ -1843,6 +2027,12 @@ impl LodGraph {
         }
         node.coord.to_point(&self.manifold)?;
         node.validate_payload()?;
+        if let Some(sig) = &node.operator {
+            sig.validate()?;
+            // This node's own embedding locks the space when the graph has none yet.
+            let own = node.embedding.as_ref().and(node.embedder_space.as_deref());
+            check_space(sig, st.embedder_space.as_deref().or(own))?;
+        }
         if !(node.prior.is_finite() && (0.0..=1.0).contains(&node.prior)) {
             return Err(LodError::InvalidNode(format!(
                 "prior {} must lie in [0, 1]",
@@ -1888,6 +2078,9 @@ impl LodGraph {
         if st.embedding_dim.is_none() {
             st.embedding_dim = node.embedding.as_ref().map(Vec::len);
         }
+        if st.embedder_space.is_none() {
+            st.embedder_space = node.embedding.as_ref().and(node.embedder_space.clone());
+        }
         st.nodes.push(node);
         // Nothing below can fail: both ends exist and the weight is valid.
         let mut linked = HashSet::new();
@@ -1923,6 +2116,173 @@ impl LodGraph {
     /// Edges appended but not yet merged into the CSR snapshot.
     pub fn pending_edge_count(&self) -> usize {
         self.state.read().edge_buffer.len()
+    }
+
+    /// Register the implementation of one operator. Refused: an invalid
+    /// signature ([`OperatorSignature::validate`]), an `is_pure()` that
+    /// contradicts the signature, a soft operator whose embedder space differs
+    /// from this graph's lock, a name already registered (never replaced), and
+    /// more than [`crate::operator::MAX_REGISTERED_OPERATORS`].
+    pub fn register_operator(&self, op: Arc<dyn CausalOperator>) -> Result<(), LodError> {
+        let locked = self.embedder_space();
+        self.operators.lock().register(op, locked.as_deref())
+    }
+
+    /// The operator registered under exactly `signature`:
+    /// [`LodError::OperatorNotFound`] when the name is not registered,
+    /// [`LodError::InvalidOperator`] when it is under another signature.
+    pub fn operator(
+        &self,
+        signature: &OperatorSignature,
+    ) -> Result<Arc<dyn CausalOperator>, LodError> {
+        self.operators.lock().lookup(signature)
+    }
+
+    /// Run the operator node `node_id` is bound to ([`LodNode::operator`]).
+    ///
+    /// Gate, in order; the first failure is the error and later stages never
+    /// run:
+    /// 1. the node exists, carries a signature, is neither revoked nor
+    ///    falsified, the signature is registered exactly, the implementation
+    ///    still declares it, and a soft operator's space matches the graph's
+    ///    lock ([`LodError::OperatorNodeRevoked`] / [`LodError::OperatorNodeFalsified`]);
+    /// 2. nonce: a hard tool needs one not spent before, a soft operator takes
+    ///    none ([`LodError::OperatorNonceRejected`]). A hard tool's nonce is
+    ///    spent here, so a run refused by a later stage still consumes it;
+    /// 3. [`CausalOperator::check_preconditions`] on a snapshot of the state;
+    /// 4. recheck the live node, then [`CausalOperator::transit`] under the state read lock; an error or a
+    ///    non-zero exit code is [`LodError::OperatorTransitFailed`];
+    /// 5. [`CausalOperator::verify_postconditions`] on output, input and node after
+    ///    the transit; an error, a report that checked no invariant, whose
+    ///    `valid` disagrees with its violations, or that is not valid, is
+    ///    [`LodError::OperatorPostconditionFailed`].
+    ///
+    /// A state read lock is held during transit; operators must not mutate
+    /// this graph. The graph does not apply
+    /// `state_delta` (Phase 0), and cannot undo a hard tool's side effect
+    /// when its postcondition fails: the error is the signal.
+    pub fn execute_operator(
+        &self,
+        node_id: u32,
+        input: &OperatorInput,
+    ) -> Result<OperatorExecution, LodError> {
+        let snapshot = self.state.read().clone();
+        let node = snapshot
+            .node(node_id)
+            .ok_or(LodError::NodeNotFound(node_id))?;
+        let sig = node.operator.clone().ok_or_else(|| {
+            LodError::InvalidOperator(format!("node {node_id} is bound to no operator"))
+        })?;
+        let entity_id = node.entity_id;
+        let refuse = |detail: String| LodError::OperatorPreconditionFailed {
+            operator: sig.name.clone(),
+            detail,
+        };
+        if snapshot.is_revoked(entity_id) {
+            return Err(LodError::OperatorNodeRevoked(node_id));
+        }
+        if node.status.is_falsified() {
+            return Err(LodError::OperatorNodeFalsified(node_id));
+        }
+        if input.node_id != node_id {
+            return Err(refuse("input is bound to a different execution node".into()));
+        }
+        let op = self.operator(&sig)?;
+        if op.signature() != &sig || op.is_pure() != sig.pure {
+            return Err(LodError::InvalidOperator(format!(
+                "operator `{}` no longer declares the signature it was registered with",
+                sig.name
+            )));
+        }
+        check_space(&sig, snapshot.embedder_space())?;
+        self.operators.lock().spend_nonce(&sig, input.nonce)?;
+        op.check_preconditions(&snapshot)
+            .map_err(|e| refuse(e.to_string()))?;
+        // Recheck after preconditions, then retain the read lock through transit:
+        // revocation/falsification cannot commit between this gate and the effect.
+        // Operators must not re-enter graph mutation while executing transit.
+        let live = self.state.read();
+        let live_node = live.node(node_id).ok_or(LodError::NodeNotFound(node_id))?;
+        if live_node.entity_id != entity_id || live_node.operator.as_ref() != Some(&sig) {
+            return Err(refuse("execution target changed during preconditions".into()));
+        }
+        check_space(&sig, live.embedder_space())?;
+        if live.is_revoked(entity_id) {
+            return Err(LodError::OperatorNodeRevoked(node_id));
+        }
+        if live_node.status.is_falsified() {
+            return Err(LodError::OperatorNodeFalsified(node_id));
+        }
+        let started = std::time::Instant::now();
+        let transit = op.transit(&live, input);
+        let state_after = live_node.clone();
+        drop(live);
+        let elapsed = u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        let failed = |detail: String| {
+            tracing::warn!(
+                operator = %sig.name,
+                operator_kind = sig.operator_kind.as_str(),
+                node_id,
+                %detail,
+                "operator transit failed"
+            );
+            LodError::OperatorTransitFailed {
+                operator: sig.name.clone(),
+                detail,
+            }
+        };
+        let mut output = transit.map_err(|e| failed(e.to_string()))?;
+        output.execution_time_ns = elapsed;
+        if output.exit_code != 0 {
+            return Err(failed(format!("exit code {}", output.exit_code)));
+        }
+        drop(snapshot);
+        let violated = |violations: Vec<String>| {
+            tracing::warn!(
+                operator = %sig.name,
+                operator_kind = sig.operator_kind.as_str(),
+                node_id,
+                ?violations,
+                "operator postcondition failed"
+            );
+            LodError::OperatorPostconditionFailed {
+                operator: sig.name.clone(),
+                violations,
+            }
+        };
+        let report = op
+            .verify_postconditions(&output, input, &state_after)
+            .map_err(|e| violated(vec![e.to_string()]))?;
+        if report.invariants_checked.is_empty() {
+            return Err(violated(vec!["report checked no invariant".into()]));
+        }
+        if report.valid != report.violations.is_empty() {
+            return Err(violated(vec![format!(
+                "report says valid = {} with {} violation(s)",
+                report.valid,
+                report.violations.len()
+            )]));
+        }
+        if !report.valid {
+            return Err(violated(report.violations));
+        }
+        tracing::info!(
+            operator = %sig.name,
+            operator_kind = sig.operator_kind.as_str(),
+            node_id,
+            entity_id,
+            execution_time_ns = output.execution_time_ns,
+            "operator executed"
+        );
+        Ok(OperatorExecution {
+            node_id,
+            entity_id,
+            signature: sig,
+            context_digest: input.context_digest,
+            nonce: input.nonce,
+            output,
+            report,
+        })
     }
 
     /// The currently published CSR snapshot.
@@ -2392,6 +2752,7 @@ impl LodGraph {
             coord: *query_coord,
             hdc: *query_hdc,
             space: Placement::Chart,
+            vector: None,
         };
         let recall = self.recall_in(&st, &probe, top_k, crag_margin)?;
         Ok(recall.anchors.iter().map(|&(id, d, _)| (id, d)).collect())
@@ -2400,10 +2761,15 @@ impl LodGraph {
     /// Stages 1 and 2 under a held read lock, for one probe. A node is measured
     /// by the closest of its anchors of the probe's kind ([`anchors_in`]); a
     /// node with no such anchor is not a candidate.
+    ///
+    /// An embedding probe keeps at least [`DENSE_RERANK_POOL`] stage 1
+    /// candidates and reranks them by [`angular_distance`] between the raw
+    /// query vector and each node's raw embedding; the projected coordinates
+    /// serve the prefilter only.
     fn recall_in(
         &self,
         st: &GraphState,
-        probe: &Probe,
+        probe: &Probe<'_>,
         top_k: usize,
         crag_margin: f32,
     ) -> Result<Recall, LodError> {
@@ -2433,7 +2799,11 @@ impl LodGraph {
             .collect();
         let searchable_nodes = candidates.len();
 
-        let candidate_pool_size = top_k.saturating_mul(4).min(candidates.len());
+        let pool = match probe.space {
+            Placement::Chart => top_k.saturating_mul(4),
+            Placement::Embedding => top_k.saturating_mul(4).max(DENSE_RERANK_POOL),
+        };
+        let candidate_pool_size = pool.min(candidates.len());
         if candidate_pool_size < candidates.len() {
             // O(N) linear selection instead of O(N log N) full sort
             candidates.select_nth_unstable_by_key(candidate_pool_size, |c| c.1);
@@ -2444,7 +2814,19 @@ impl LodGraph {
         let closest = |node: &LodNode| -> Result<Option<(f32, AnchorMatch)>, LodError> {
             let mut best: Option<(f32, AnchorMatch)> = None;
             for (matched, coord, _) in anchors_in(node, probe.space) {
-                let distance = self.distance(coord, &probe.coord)?;
+                let distance = match matched {
+                    AnchorMatch::Embedding => {
+                        let (Some(query), Some(embedding)) =
+                            (probe.vector, node.embedding.as_deref())
+                        else {
+                            return Err(LodError::InvalidQuery(
+                                "an embedding anchor is compared only with a query vector".into(),
+                            ));
+                        };
+                        angular_distance(query, embedding)?
+                    }
+                    _ => self.distance(coord, &probe.coord)?,
+                };
                 if best.is_none_or(|(d, _)| distance < d) {
                     best = Some((distance, matched));
                 }
@@ -2487,13 +2869,21 @@ impl LodGraph {
         })
     }
 
-    /// Three-stage hybrid retrieval over one consistent state (one read lock):
+    /// Three-stage hybrid retrieval over one consistent state (one read lock).
+    /// This function only ever runs the lexical/chart track (a `coord` +
+    /// `hdc` query); [`Self::hybrid_rag_search_query`] adds the vector track,
+    /// whose stage 1 and 2 pool sizes and rerank differ from the chart
+    /// track's, noted below:
     ///
     /// 1. HDC prefilter: Hamming distance to every live node, keep the `4 * top_k`
-    ///    closest (see [`Self::two_stage_recall`]).
+    ///    closest on the chart track (see [`Self::two_stage_recall`]); the
+    ///    vector track keeps at least [`DENSE_RERANK_POOL`] instead.
     /// 2. Product-geodesic rerank of those under this graph's geometry, with the
     ///    CRAG neighbor expansion when the top two are within `crag_margin`; the
-    ///    `top_k` closest are the anchors.
+    ///    `top_k` closest are the anchors. The vector track of
+    ///    [`Self::hybrid_rag_search_query`] reranks its (larger) pool by the
+    ///    exact angle between raw vectors instead, and its `crag_margin` is in
+    ///    radians.
     /// 3. Personalized PageRank over the committed CSR snapshot, seeded with
     ///    each anchor at weight `1 / (1 + normalized_distance)` (normalized by PPR), teleport
     ///    probability `ppr_alpha`, at most `ppr_iters` iterations, tolerance
@@ -2513,13 +2903,17 @@ impl LodGraph {
     /// positive PPR score (at most `2 * top_k`), all ordered by PPR score,
     /// highest first. A node no anchor reaches has score 0 and is left out.
     /// Each hit carries its confidence, PPR score, anchor distance (none for a
-    /// node reached only by diffusion) and payload evidence.
+    /// node reached only by diffusion), payload evidence and the `Falsifies`
+    /// edges linking it to other hits ([`RagHit::conflict_edges`]). Both sides
+    /// of such an edge stay in the result; choosing between them is the
+    /// caller's job.
     ///
     /// Falsified and revoked nodes never appear. A graph with no live node gives
     /// no anchors, no hits and `diffusion: None`. Refused: `top_k` 0, a bad
     /// `crag_margin`, `ppr_alpha` outside (0, 1), `ppr_iters` 0, and a query
     /// coordinate outside this graph's geometry. PPR that stops at `ppr_iters`
-    /// before reaching the tolerance is reported in `diffusion.converged`.
+    /// before reaching the tolerance is reported in `diffusion.converged` and
+    /// marked [`DiffusionQuality::Degraded`] in `diffusion.quality`.
     pub fn hybrid_rag_search(
         &self,
         query_coord: &MixedCurvatureCoord,
@@ -2533,6 +2927,7 @@ impl LodGraph {
             coord: *query_coord,
             hdc: *query_hdc,
             space: Placement::Chart,
+            vector: None,
         };
         let st = self.state.read();
         self.rag_in(&st, &[probe], top_k, crag_margin, ppr_alpha, ppr_iters)
@@ -2543,21 +2938,30 @@ impl LodGraph {
     ///
     /// The text is projected with [`Self::project_text`] and compared with the
     /// chart anchors of each node (its own coordinate and its aliases). The
-    /// vector is projected with [`Self::project_dense`] and compared with the
-    /// embedding anchors only. With both, each track runs stages 1 and 2 on its
+    /// vector is projected with [`Self::project_dense`] for the Hamming
+    /// prefilter over embedding anchors only, which keeps at least
+    /// [`DENSE_RERANK_POOL`] candidates; they are reranked by the exact angle
+    /// between the query vector and each node's embedding. With both, each track runs stages 1 and 2 on its
     /// own and gives up to `top_k` anchors; a node both tracks found counts
     /// once, by the smaller independently normalized distance. So there are at most `2 * top_k` anchors
     /// and `3 * top_k` hits, `stage1_candidates` is the sum over the tracks,
     /// and neither track can crowd the other out.
     ///
     /// Refused: neither given, blank text ([`LodError::EmptyInput`]), a vector
-    /// [`Self::project_dense`] refuses, and a vector whose dimension is not the
-    /// one this graph's node embeddings have. A graph with no node embedding
-    /// refuses every vector: it has nothing to compare one with.
+    /// [`Self::project_dense`] refuses, a vector whose dimension is not the
+    /// one this graph's node embeddings have, and a `query_embedder` that
+    /// differs from this graph's locked [`Self::embedder_space`] (when both
+    /// are set: two models can share a dimension while embedding different
+    /// semantic spaces). A graph with no node embedding refuses every vector:
+    /// it has nothing to compare one with. `query_embedder` is the caller's
+    /// declared identity of the model that made `query_vector`; `None` skips
+    /// the identity check (the caller does not know, or nothing is locked).
+    #[allow(clippy::too_many_arguments)]
     pub fn hybrid_rag_search_query(
         &self,
         query_text: Option<&str>,
         query_vector: Option<&[f32]>,
+        query_embedder: Option<&str>,
         top_k: usize,
         crag_margin: f32,
         ppr_alpha: f32,
@@ -2570,6 +2974,7 @@ impl LodGraph {
                 coord,
                 hdc,
                 space: Placement::Chart,
+                vector: None,
             });
         }
         if let Some(vector) = query_vector {
@@ -2578,6 +2983,7 @@ impl LodGraph {
                 coord,
                 hdc,
                 space: Placement::Embedding,
+                vector: Some(vector),
             });
         }
         if probes.is_empty() {
@@ -2603,6 +3009,14 @@ impl LodGraph {
                     ))
                 }
             }
+            if let (Some(locked), Some(claimed)) = (&st.embedder_space, query_embedder) {
+                if locked != claimed {
+                    return Err(LodError::InvalidQuery(format!(
+                        "query vector declares embedder `{claimed}` but this graph's \
+                         embeddings are from `{locked}`"
+                    )));
+                }
+            }
         }
         self.rag_in(&st, &probes, top_k, crag_margin, ppr_alpha, ppr_iters)
     }
@@ -2611,7 +3025,7 @@ impl LodGraph {
     fn rag_in(
         &self,
         st: &GraphState,
-        probes: &[Probe],
+        probes: &[Probe<'_>],
         top_k: usize,
         crag_margin: f32,
         ppr_alpha: f32,
@@ -2675,7 +3089,7 @@ impl LodGraph {
             .collect();
         let ranking = self.ppr_in(st, &seeds, ppr_alpha, ppr_iters, HYBRID_PPR_TOLERANCE)?;
         let mut expanded = 0;
-        let hits = ranking
+        let mut hits: Vec<RagHit> = ranking
             .ranked
             .iter()
             .filter(|&&(id, score)| {
@@ -2707,9 +3121,11 @@ impl LodGraph {
                     source_uri: node.source_uri.clone(),
                     timestamp_ns: node.timestamp_ns,
                     payload_digest: node.payload_digest,
+                    conflict_edges: Vec::new(),
                 }
             })
             .collect();
+        self.annotate_conflicts_in(st, &mut hits);
         Ok(HybridRagResult {
             hits,
             anchors,
@@ -2722,8 +3138,71 @@ impl LodGraph {
                 iterations: ranking.iterations,
                 residual: ranking.residual,
                 converged: ranking.converged,
+                quality: DiffusionQuality::assess(
+                    ranking.converged,
+                    ranking.residual,
+                    HYBRID_PPR_TOLERANCE,
+                ),
             }),
         })
+    }
+
+    /// Fill [`RagHit::conflict_edges`] from every `Falsifies` edge, over the
+    /// committed CSR snapshot and the pending buffer together, whose two ends
+    /// are both in `hits`. `st` is held by the caller, and a flush swaps the
+    /// snapshot and drains the buffer only under the write lock, so the edges
+    /// read here are the ones the search ran against.
+    fn annotate_conflicts_in(&self, st: &GraphState, hits: &mut [RagHit]) {
+        let position: HashMap<u32, usize> = hits
+            .iter()
+            .enumerate()
+            .map(|(i, h)| (h.node_id, i))
+            .collect();
+        let snapshot = self.csr_snapshot.load_full();
+        for (source, target, edge_type, weight) in all_edges(&snapshot, &st.edge_buffer) {
+            if edge_type != EdgeType::Falsifies || source == target {
+                continue;
+            }
+            let (Some(&s), Some(&t)) = (position.get(&source), position.get(&target)) else {
+                continue;
+            };
+            let (source_entity, target_entity) = (hits[s].entity_id, hits[t].entity_id);
+            hits[s].conflict_edges.push(ConflictEdge {
+                counterpart_node_id: target,
+                counterpart_entity_id: target_entity,
+                direction: ConflictDirection::Falsifies,
+                weight,
+            });
+            hits[t].conflict_edges.push(ConflictEdge {
+                counterpart_node_id: source,
+                counterpart_entity_id: source_entity,
+                direction: ConflictDirection::FalsifiedBy,
+                weight,
+            });
+        }
+    }
+
+    /// The node `node_id` summarizes into, for a token-budget caller that
+    /// wants a coarser payload when a detailed one does not fit: `node_id`'s
+    /// own `parent_id` if [`Self::coarse_grain_cluster`] set one, else the
+    /// target of its first outgoing `CoarseGrain` edge, committed or pending.
+    /// The second form is what a plain `graph_deposit` of a `CoarseGrain`
+    /// edge produces: that path never sets `parent_id`, only
+    /// `coarse_grain_cluster` does, so a caller that only checked `parent_id`
+    /// would silently miss every summary made this way. `None` when neither
+    /// applies: the node has no coarser summary at all.
+    pub fn coarse_grain_summary_of(&self, node_id: u32) -> Option<u32> {
+        let st = self.state.read();
+        if let Some(parent) = st.nodes.get(node_id as usize).and_then(|n| n.parent_id) {
+            return Some(parent);
+        }
+        let snapshot = self.csr_snapshot.load_full();
+        let found = all_edges(&snapshot, &st.edge_buffer)
+            .find(|&(source, _, edge_type, _)| {
+                source == node_id && edge_type == EdgeType::CoarseGrain
+            })
+            .map(|(_, target, _, _)| target);
+        found
     }
 
     /// Record direct evidence against a node: it becomes `Falsified` and refuted,
@@ -3065,14 +3544,15 @@ impl LodGraph {
             privileges: st.privileges.clone(),
             validated_deps: st.validated_deps.clone(),
             embedding_dim: st.embedding_dim,
+            embedder_space: st.embedder_space.clone(),
         }
     }
 
     /// Restore `checkpoint` atomically: nodes added after it are removed (their
     /// ids become free again, with their aliases and the edges those linked),
     /// statuses, confidences, refutation marks, bands, parents, CSR snapshot,
-    /// pending edges, revocations, privileges, validated dependencies and the
-    /// embedding dimension return to its values.
+    /// pending edges, revocations, privileges, validated dependencies, the
+    /// embedding dimension and the embedder space return to its values.
     ///
     /// Every write since the checkpoint is discarded, including writes by other
     /// threads; use [`Self::transact`] to keep writers serialized. Refused: a
@@ -3122,6 +3602,7 @@ impl LodGraph {
             }
         }
         st.embedding_dim = checkpoint.embedding_dim;
+        st.embedder_space = checkpoint.embedder_space.clone();
         for (id, state) in checkpoint.node_states.iter().enumerate() {
             if NodeMutable::of(&st.nodes[id]) != *state {
                 state.restore(&mut st.nodes[id]);
@@ -4908,6 +5389,7 @@ mod tests {
             .hybrid_rag_search_query(
                 Some("coolant pump failed during night shift"),
                 None,
+                None,
                 1,
                 0.0,
                 0.15,
@@ -4987,7 +5469,7 @@ mod tests {
     fn hybrid_search_fails_closed_on_bad_input_and_is_empty_on_an_empty_graph() {
         let graph = LodGraph::new();
         let empty = graph
-            .hybrid_rag_search_query(Some(PUMP), None, 3, 0.0, 0.15, 50)
+            .hybrid_rag_search_query(Some(PUMP), None, None, 3, 0.0, 0.15, 50)
             .unwrap();
         assert!(empty.hits.is_empty() && empty.anchors.is_empty());
         assert_eq!(empty.diffusion, None);
@@ -4995,21 +5477,21 @@ mod tests {
         graph.add_node(text_node(&graph, PUMP, 1)).unwrap();
         for text in ["", "   ", "?!"] {
             assert!(matches!(
-                graph.hybrid_rag_search_query(Some(text), None, 3, 0.0, 0.15, 50),
+                graph.hybrid_rag_search_query(Some(text), None, None, 3, 0.0, 0.15, 50),
                 Err(LodError::EmptyInput(_))
             ));
         }
         for (alpha, iters) in [(0.0, 50), (1.0, 50), (f32::NAN, 50), (0.15, 0)] {
             assert!(matches!(
-                graph.hybrid_rag_search_query(Some(PUMP), None, 3, 0.0, alpha, iters),
+                graph.hybrid_rag_search_query(Some(PUMP), None, None, 3, 0.0, alpha, iters),
                 Err(LodError::InvalidQuery(_))
             ));
         }
         assert!(graph
-            .hybrid_rag_search_query(Some(PUMP), None, 0, 0.0, 0.15, 50)
+            .hybrid_rag_search_query(Some(PUMP), None, None, 0, 0.0, 0.15, 50)
             .is_err());
         assert!(graph
-            .hybrid_rag_search_query(Some(PUMP), None, 1, -1.0, 0.15, 50)
+            .hybrid_rag_search_query(Some(PUMP), None, None, 1, -1.0, 0.15, 50)
             .is_err());
     }
 
@@ -5036,7 +5518,7 @@ mod tests {
         graph.add_node(text_node(&graph, LOG, 2)).unwrap();
         graph.rollback_checkpoint(&checkpoint).unwrap();
         let result = graph
-            .hybrid_rag_search_query(Some(LOG), None, 2, 0.0, 0.15, 50)
+            .hybrid_rag_search_query(Some(LOG), None, None, 2, 0.0, 0.15, 50)
             .unwrap();
         assert!(result
             .hits
@@ -5068,7 +5550,7 @@ mod tests {
         "the turbine hall lighting was upgraded",
     ];
 
-    const CLOSE_MAIN_VALVE: &str = "关闭主阀";
+    const CLOSE_MAIN_VALVE: &str = "закрыть главный клапан";
     const HANDWHEEL: &str = "turn the handwheel clockwise until the stem stops";
 
     fn with_distractors() -> LodGraph {
@@ -5095,7 +5577,7 @@ mod tests {
             .add_node(text_node(&control, CLOSE_MAIN_VALVE, 1))
             .unwrap();
         let missed = control
-            .hybrid_rag_search_query(Some(query), None, 1, 0.0, 0.15, 100)
+            .hybrid_rag_search_query(Some(query), None, None, 1, 0.0, 0.15, 100)
             .unwrap();
         assert_eq!(missed.searchable_nodes, 14);
         assert_eq!(missed.stage1_candidates, 4);
@@ -5107,11 +5589,11 @@ mod tests {
         let graph = with_distractors();
         let target = graph
             .add_node(
-                text_node(&graph, CLOSE_MAIN_VALVE, 1).with_aliases(["主阀关断", "Valve closure"]),
+                text_node(&graph, CLOSE_MAIN_VALVE, 1).with_aliases(["отсечка главного клапана", "Valve closure"]),
             )
             .unwrap();
         let result = graph
-            .hybrid_rag_search_query(Some(query), None, 1, 0.0, 0.15, 100)
+            .hybrid_rag_search_query(Some(query), None, None, 1, 0.0, 0.15, 100)
             .unwrap();
         assert_eq!(result.anchors.len(), 1);
         assert_eq!(result.anchors[0].0, target);
@@ -5120,10 +5602,10 @@ mod tests {
         assert_eq!(top.anchor_match, Some(AnchorMatch::Alias(1)));
         assert!(top.anchor_distance.unwrap() < 1e-6);
         assert_eq!(top.payload.as_deref(), Some(CLOSE_MAIN_VALVE));
-        assert_eq!(top.aliases, ["主阀关断", "Valve closure"]);
+        assert_eq!(top.aliases, ["отсечка главного клапана", "Valve closure"]);
         // The node's own text still finds it, by its own coordinate.
         let own = graph
-            .hybrid_rag_search_query(Some(CLOSE_MAIN_VALVE), None, 1, 0.0, 0.15, 100)
+            .hybrid_rag_search_query(Some(CLOSE_MAIN_VALVE), None, None, 1, 0.0, 0.15, 100)
             .unwrap();
         assert_eq!(own.hits[0].anchor_match, Some(AnchorMatch::Primary));
         // Recall takes the same closest anchor.
@@ -5143,7 +5625,7 @@ mod tests {
         control.add_node(text_node(&control, HANDWHEEL, 2)).unwrap();
         control.flush_edges_to_csr().unwrap();
         let missed = control
-            .hybrid_rag_search_query(Some(CLOSE_MAIN_VALVE), None, 1, 0.0, 0.15, 200)
+            .hybrid_rag_search_query(Some(CLOSE_MAIN_VALVE), None, None, 1, 0.0, 0.15, 200)
             .unwrap();
         assert_eq!(hit_entities(&missed), vec![1], "{missed:?}");
 
@@ -5175,14 +5657,14 @@ mod tests {
             .any(|(v, t, _)| v == zh && t == EdgeType::Semantic));
 
         let result = graph
-            .hybrid_rag_search_query(Some(CLOSE_MAIN_VALVE), None, 1, 0.0, 0.15, 200)
+            .hybrid_rag_search_query(Some(CLOSE_MAIN_VALVE), None, None, 1, 0.0, 0.15, 200)
             .unwrap();
         assert_eq!(result.anchors, vec![(zh, result.anchors[0].1)]);
         assert_eq!(result.stage1_candidates, 4);
         // top_k 1 admits one diffusion-only node; ask for 2 to see both.
         assert_eq!(result.hits.len(), 2);
         let result = graph
-            .hybrid_rag_search_query(Some(CLOSE_MAIN_VALVE), None, 2, 0.0, 0.15, 200)
+            .hybrid_rag_search_query(Some(CLOSE_MAIN_VALVE), None, None, 2, 0.0, 0.15, 200)
             .unwrap();
         let ids = hit_entities(&result);
         assert_eq!(ids[0], 1, "{result:?}");
@@ -5271,6 +5753,55 @@ mod tests {
     }
 
     #[test]
+    fn angular_distance_is_the_angle_and_refuses_degenerate_vectors() {
+        let d = angular_distance(&[1.0, 0.0], &[0.0, 2.0]).unwrap();
+        assert!((d - std::f32::consts::FRAC_PI_2).abs() < 1e-6);
+        assert_eq!(angular_distance(&[1.0, 1.0], &[3.0, 3.0]).unwrap(), 0.0);
+        assert!(angular_distance(&[1.0], &[1.0, 0.0]).is_err());
+        assert!(angular_distance(&[0.0, 0.0], &[1.0, 0.0]).is_err());
+        assert!(angular_distance(&[f32::NAN, 0.0], &[1.0, 0.0]).is_err());
+    }
+
+    /// The vector track ranks by the exact angle between raw vectors: nodes
+    /// 10, 20 and 60 degrees from the query come back in that order with
+    /// distances in ratio 10 : 20 : 60 after the per-track normalization.
+    #[test]
+    fn vector_track_reranks_by_exact_angle() {
+        let dim = 64;
+        let at = |degrees: f32| {
+            let r = degrees.to_radians();
+            let mut v = vec![0.0_f32; dim];
+            v[0] = r.cos();
+            v[1] = r.sin();
+            v
+        };
+        let graph = LodGraph::new();
+        for (entity, degrees) in [(1, 60.0), (2, 10.0), (3, 20.0)] {
+            let v = at(degrees);
+            let (coord, hdc) = graph.project_dense(&v).unwrap();
+            let mut n = node("v", entity)
+                .with_hdc_fingerprint(hdc)
+                .with_embedding(v);
+            n.coord = coord;
+            graph.add_node(n.placed_by_embedding()).unwrap();
+        }
+        let r = graph
+            .hybrid_rag_search_query(None, Some(&at(0.0)), None, 3, 0.0, 0.15, 100)
+            .unwrap();
+        let entities: Vec<u64> = r
+            .anchors
+            .iter()
+            .map(|&(id, _)| graph.get_node(id).unwrap().entity_id)
+            .collect();
+        assert_eq!(entities, vec![2, 3, 1]);
+        let d: Vec<f32> = r.anchors.iter().map(|&(_, d)| d).collect();
+        assert!((d[0] - 10.0 / 60.0).abs() < 1e-4, "{d:?}");
+        assert!((d[1] - 20.0 / 60.0).abs() < 1e-4, "{d:?}");
+        assert!((d[2] - 1.0).abs() < 1e-6, "{d:?}");
+        assert_eq!(r.stage1_candidates, 3);
+    }
+
+    #[test]
     fn rollback_forgets_aliases_links_and_the_embedding_dimension() {
         let graph = LodGraph::new();
         graph
@@ -5302,6 +5833,95 @@ mod tests {
             .unwrap();
     }
 
+    #[test]
+    fn embedder_space_locks_to_the_first_declared_identity() {
+        let graph = LodGraph::new();
+        assert_eq!(graph.embedder_space(), None);
+
+        // An embedding with no declared identity never locks anything.
+        graph
+            .add_node(node("anon", 1).with_embedding(test_vectors::random(1, 64)))
+            .unwrap();
+        assert_eq!(graph.embedder_space(), None);
+
+        // The first declared identity locks the graph.
+        graph
+            .add_node(
+                node("qwen", 2)
+                    .with_embedding(test_vectors::random(2, 64))
+                    .with_embedder_space("qwen2:mean-pool"),
+            )
+            .unwrap();
+        assert_eq!(graph.embedder_space().as_deref(), Some("qwen2:mean-pool"));
+
+        // A matching identity is accepted.
+        graph
+            .add_node(
+                node("qwen-again", 3)
+                    .with_embedding(test_vectors::random(3, 64))
+                    .with_embedder_space("qwen2:mean-pool"),
+            )
+            .unwrap();
+
+        // A node that declares no identity is still accepted: it makes no claim.
+        graph
+            .add_node(node("anon-again", 4).with_embedding(test_vectors::random(4, 64)))
+            .unwrap();
+
+        // A different declared identity at the same width is refused.
+        let err = graph
+            .add_node(
+                node("other-model", 5)
+                    .with_embedding(test_vectors::random(5, 64))
+                    .with_embedder_space("other-model:last-token"),
+            )
+            .unwrap_err();
+        assert!(matches!(err, LodError::InvalidNode(_)));
+        let msg = err.to_string();
+        assert!(
+            msg.contains("qwen2:mean-pool") && msg.contains("other-model:last-token"),
+            "{msg}"
+        );
+
+        // A query vector declaring a different identity is refused too.
+        let err = graph
+            .hybrid_rag_search_query(
+                None,
+                Some(&test_vectors::random(9, 64)),
+                Some("other-model:last-token"),
+                1,
+                0.0,
+                0.15,
+                50,
+            )
+            .unwrap_err();
+        assert!(matches!(err, LodError::InvalidQuery(_)));
+
+        // A query vector declaring the locked identity, or none, still works.
+        assert!(graph
+            .hybrid_rag_search_query(
+                None,
+                Some(&test_vectors::random(9, 64)),
+                Some("qwen2:mean-pool"),
+                1,
+                0.0,
+                0.15,
+                50,
+            )
+            .is_ok());
+        assert!(graph
+            .hybrid_rag_search_query(
+                None,
+                Some(&test_vectors::random(9, 64)),
+                None,
+                1,
+                0.0,
+                0.15,
+                50
+            )
+            .is_ok());
+    }
+
     /// A graph of 13 embedding-placed distractors, a target near `query` and a
     /// text-only procedure node the target points to.
     fn embedded_graph(query: &[f32], link: bool) -> (LodGraph, u32, u32) {
@@ -5317,7 +5937,7 @@ mod tests {
         }
         let target = graph
             .add_node(
-                node("冷却液泄漏", 1)
+                node("утечка охлаждающей жидкости", 1)
                     .with_embedding(test_vectors::at_cosine(query, 0.9, 77))
                     .placed_by_embedding(),
             )
@@ -5337,11 +5957,12 @@ mod tests {
         let query = test_vectors::random(42, 256);
         let (graph, target, procedure) = embedded_graph(&query, true);
         let result = graph
-            .hybrid_rag_search_query(None, Some(&query), 1, 0.0, 0.15, 200)
+            .hybrid_rag_search_query(None, Some(&query), None, 1, 0.0, 0.15, 200)
             .unwrap();
         // The text-only node has no embedding: 14 of 15 nodes are searchable.
         assert_eq!(result.searchable_nodes, 14);
-        assert_eq!(result.stage1_candidates, 4);
+        // The vector track keeps at least DENSE_RERANK_POOL candidates: all 14.
+        assert_eq!(result.stage1_candidates, 14);
         assert_eq!(result.anchors.len(), 1);
         assert_eq!(result.anchors[0].0, target);
         let ids: Vec<u32> = result.hits.iter().map(|h| h.node_id).collect();
@@ -5361,7 +5982,7 @@ mod tests {
         // Control: without the edge the procedure node is not recalled.
         let (control, target, _) = embedded_graph(&query, false);
         let missed = control
-            .hybrid_rag_search_query(None, Some(&query), 1, 0.0, 0.15, 200)
+            .hybrid_rag_search_query(None, Some(&query), None, 1, 0.0, 0.15, 200)
             .unwrap();
         let ids: Vec<u32> = missed.hits.iter().map(|h| h.node_id).collect();
         assert_eq!(ids, vec![target]);
@@ -5373,7 +5994,7 @@ mod tests {
         let (graph, target, procedure) = embedded_graph(&query, false);
         // A text query sees only the one node with a chart anchor.
         let text_only = graph
-            .hybrid_rag_search_query(Some("handwheel clockwise"), None, 3, 0.0, 0.15, 100)
+            .hybrid_rag_search_query(Some("handwheel clockwise"), None, None, 3, 0.0, 0.15, 100)
             .unwrap();
         assert_eq!(text_only.searchable_nodes, 1);
         assert_eq!(text_only.anchors.len(), 1);
@@ -5387,10 +6008,19 @@ mod tests {
         // Both tracks in one query: each gives its own top anchor, and the
         // partly matching text is not crowded out by the dense track.
         let both = graph
-            .hybrid_rag_search_query(Some("handwheel clockwise"), Some(&query), 1, 0.0, 0.15, 100)
+            .hybrid_rag_search_query(
+                Some("handwheel clockwise"),
+                Some(&query),
+                None,
+                1,
+                0.0,
+                0.15,
+                100,
+            )
             .unwrap();
         assert_eq!(both.searchable_nodes, 15);
-        assert_eq!(both.stage1_candidates, 1 + 4);
+        // Text keeps 4 * top_k of its 1; the vector track all 14 embeddings.
+        assert_eq!(both.stage1_candidates, 1 + 14);
         assert_eq!(both.anchors.len(), 2);
         assert!(both.anchors[0].1 <= both.anchors[1].1);
         let matched: HashMap<u32, AnchorMatch> = both
@@ -5410,11 +6040,11 @@ mod tests {
         // No node carries an embedding: a vector has nothing to be compared with.
         graph.add_node(text_node(&graph, PUMP, 1)).unwrap();
         assert!(matches!(
-            graph.hybrid_rag_search_query(None, Some(&vector), 1, 0.0, 0.15, 50),
+            graph.hybrid_rag_search_query(None, Some(&vector), None, 1, 0.0, 0.15, 50),
             Err(LodError::InvalidQuery(_))
         ));
         assert!(matches!(
-            graph.hybrid_rag_search_query(None, None, 1, 0.0, 0.15, 50),
+            graph.hybrid_rag_search_query(None, None, None, 1, 0.0, 0.15, 50),
             Err(LodError::InvalidQuery(_))
         ));
         assert!(matches!(
@@ -5443,6 +6073,7 @@ mod tests {
             graph.hybrid_rag_search_query(
                 None,
                 Some(&test_vectors::random(2, 256)),
+                None,
                 1,
                 0.0,
                 0.15,
@@ -5451,10 +6082,10 @@ mod tests {
             Err(LodError::InvalidQuery(_))
         ));
         assert!(graph
-            .hybrid_rag_search_query(None, Some(&broken), 1, 0.0, 0.15, 50)
+            .hybrid_rag_search_query(None, Some(&broken), None, 1, 0.0, 0.15, 50)
             .is_err());
         let ok = graph
-            .hybrid_rag_search_query(None, Some(&vector), 1, 0.0, 0.15, 50)
+            .hybrid_rag_search_query(None, Some(&vector), None, 1, 0.0, 0.15, 50)
             .unwrap();
         assert_eq!(ok.hits[0].entity_id, 2);
         assert!(ok.hits[0].anchor_distance.unwrap() < 1e-6);

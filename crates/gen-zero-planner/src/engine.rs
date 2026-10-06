@@ -19,6 +19,15 @@ use gen_zero_core::{
 use gen_zero_gate::{GateVerdict, PolicyGate, PolicyTier};
 use std::cmp::Ordering;
 use std::collections::{BinaryHeap, HashMap, HashSet};
+use std::sync::atomic::{AtomicBool, Ordering as AtomicOrdering};
+
+/// Finite, JSON-safe value charged when a dynamics mask leaves no legal action.
+///
+/// This is intentionally much larger than ordinary planner rewards while still
+/// remaining finite in `f32`, so a dead end cannot look like a zero-cost normal
+/// terminal state and serialized plans never contain `-Infinity`/`NaN`.
+pub const DEAD_END_PENALTY: f32 = -1.0e30;
+const DEAD_END_PENALTY_F64: f64 = -1.0e30;
 
 /// Reject a latent before it enters an engine's numerical scoring path.
 ///
@@ -105,6 +114,10 @@ pub struct SearchBudget<'a> {
     pub deadline: Option<std::time::Instant>,
     pub(crate) started: std::time::Instant,
     pub(crate) publish: Option<&'a (dyn Fn(ActionId, &'static str) + Sync)>,
+    /// Optional caller-owned marker for a dead end observed during search.
+    /// Keeping this out of the engine return tuple preserves router compatibility
+    /// while allowing `ProductionPipeline` to expose the observation.
+    pub(crate) dead_end: Option<&'a AtomicBool>,
 }
 
 impl Default for SearchBudget<'_> {
@@ -113,13 +126,34 @@ impl Default for SearchBudget<'_> {
     }
 }
 
-impl SearchBudget<'_> {
+impl<'a> SearchBudget<'a> {
     pub fn new(deadline: Option<std::time::Instant>) -> Self {
         Self {
             deadline,
             started: std::time::Instant::now(),
             publish: None,
+            dead_end: None,
         }
+    }
+
+    /// Attach a caller-owned marker that engines set whenever dynamics masking
+    /// produces an empty action set below the root.
+    pub fn with_dead_end_marker(mut self, marker: &'a AtomicBool) -> Self {
+        self.dead_end = Some(marker);
+        self
+    }
+
+    /// Record a dynamics dead end without changing the search result shape.
+    pub(crate) fn mark_dead_end(&self) {
+        if let Some(marker) = self.dead_end {
+            marker.store(true, AtomicOrdering::Release);
+        }
+    }
+
+    /// Read the caller-owned dead-end observation, if one was attached.
+    pub fn has_dead_end(&self) -> bool {
+        self.dead_end
+            .is_some_and(|marker| marker.load(AtomicOrdering::Acquire))
     }
 
     pub fn check(&self) -> Result<(), PlannerError> {
@@ -144,6 +178,15 @@ impl SearchBudget<'_> {
     }
 }
 
+/// Search result with explicit mask-dead-end diagnostics.
+#[derive(Clone, Debug)]
+pub struct PlanReport {
+    pub action: ActionId,
+    pub entropy: NormalizedEntropy,
+    /// Any explored branch reached a masked dead end, not necessarily the winner.
+    pub has_dead_end: bool,
+}
+
 /// Core interface implemented by all 6 orthogonal planning engines.
 pub trait PlanningEngine: Send + Sync {
     fn name(&self) -> &'static str;
@@ -158,6 +201,23 @@ pub trait PlanningEngine: Send + Sync {
         self.plan_until(state, actions, world_model, gate, &SearchBudget::default())
     }
 
+    fn plan_report(
+        &self,
+        state: &FullLatent,
+        actions: &LocalActionFrame<'_>,
+        world_model: &dyn WorldModelDynamics<Error = CoreError>,
+        gate: &PolicyGate,
+    ) -> Result<PlanReport, PlannerError> {
+        let marker = AtomicBool::new(false);
+        let budget = SearchBudget::default().with_dead_end_marker(&marker);
+        let (action, entropy) = self.plan_until(state, actions, world_model, gate, &budget)?;
+        Ok(PlanReport {
+            action,
+            entropy,
+            has_dead_end: budget.has_dead_end(),
+        })
+    }
+
     fn plan_until(
         &self,
         state: &FullLatent,
@@ -166,6 +226,22 @@ pub trait PlanningEngine: Send + Sync {
         gate: &PolicyGate,
         budget: &SearchBudget<'_>,
     ) -> Result<(ActionId, NormalizedEntropy), PlannerError> {
+        // Tuple callers have no place for degradation metadata. Refuse a
+        // degraded result explicitly unless the caller installed an observer.
+        if budget.dead_end.is_none() {
+            let marker = AtomicBool::new(false);
+            let observed = SearchBudget {
+                deadline: budget.deadline,
+                started: budget.started,
+                publish: budget.publish,
+                dead_end: Some(&marker),
+            };
+            let result = self.plan_until(state, actions, world_model, gate, &observed)?;
+            if observed.has_dead_end() {
+                return Err(PlannerError::DeadEndRequiresReport);
+            }
+            return Ok(result);
+        }
         if budget.deadline.is_none() {
             return self.search(state, actions, world_model, gate, budget);
         }
@@ -184,6 +260,7 @@ pub trait PlanningEngine: Send + Sync {
             deadline: budget.deadline,
             started: budget.started,
             publish: Some(&publish),
+            dead_end: budget.dead_end,
         };
         match self.search(state, actions, world_model, gate, &search) {
             Err(error @ PlannerError::TimeoutExceeded(_)) => incumbent
@@ -213,8 +290,7 @@ pub trait PlanningEngine: Send + Sync {
 /// Sequential PUCT search with one persistent edge expansion per simulation,
 /// followed by a balanced deterministic rollout to `horizon` (or `done`).
 /// Each node caches its model successor: this assumes deterministic dynamics.
-/// The supplied, gate-filtered action frame is reused at every depth because
-/// WorldModelDynamics has no state-dependent action enumeration interface.
+/// The candidate frame is filtered by dynamics at each node and rollout state.
 /// Backups store discounted return-to-go, including the node's incoming reward.
 /// Leaves at the horizon/terminal have zero continuation value; no learned
 /// value function or optimality guarantee is implied. Root visits define the
@@ -243,23 +319,23 @@ impl Default for MctsEngine {
 
 /// Owned state arena for sequential search; indices remain stable as it grows.
 struct MctsNode {
-    state: FullLatent,
     action: Option<ActionId>,
     reward: f64,
     done: bool,
-    children: Vec<usize>,
+    dead_end: bool,
+    children: smallvec::SmallVec<[usize; 16]>,
     visits: usize,
     value_sum: f64,
 }
 
 impl MctsNode {
-    fn new(state: FullLatent, action: Option<ActionId>, reward: f32, done: bool) -> Self {
+    fn new(action: Option<ActionId>, reward: f32, done: bool) -> Self {
         Self {
-            state,
             action,
             reward: f64::from(reward),
             done,
-            children: Vec::new(),
+            dead_end: false,
+            children: smallvec::SmallVec::new(),
             visits: 0,
             value_sum: 0.0,
         }
@@ -324,36 +400,60 @@ impl PlanningEngine for MctsEngine {
                     .unwrap_or(false)
             })
             .collect();
-        if valid_actions.is_empty() {
+        let root_actions = world_model.allowed_actions(state, &valid_actions)?;
+        if root_actions.is_empty() {
+            budget.mark_dead_end();
             return Err(PlannerError::NoFeasibleAction);
         }
         if self.arena_capacity == 0 {
             return Err(PlannerError::ArenaCapacityExceeded { capacity: 0 });
         }
-        let mut nodes = vec![MctsNode::new(state.clone(), None, 0.0, false)];
+        let reserve = self
+            .arena_capacity
+            .min(self.max_simulations.saturating_add(1))
+            .min(4096);
+        let mut nodes = Vec::with_capacity(reserve);
+        let mut states = Vec::with_capacity(reserve.min(64));
+        nodes.push(MctsNode::new(None, 0.0, false));
+        states.push(state.clone());
+        let mut path = Vec::with_capacity(self.horizon.saturating_add(1));
         let gamma = f64::from(self.discount);
         for simulation in 0..self.max_simulations {
             budget.check()?;
-            let mut path = vec![0];
+            path.clear();
+            path.push(0);
             let mut current = 0;
             let mut depth = 0;
+            let mut encountered_dead_end = nodes[current].dead_end;
             // Selection descends through fully expanded nodes. Expand the first
             // missing action at the selected node, never a root-state replay.
-            while depth < self.horizon && !nodes[current].done {
+            while depth < self.horizon && !nodes[current].done && !nodes[current].dead_end {
                 budget.check()?;
-                if nodes[current].children.len() < valid_actions.len() {
+                let node_actions = world_model.allowed_actions(&states[current], &valid_actions)?;
+                if node_actions.is_empty() {
+                    nodes[current].dead_end = true;
+                    encountered_dead_end = true;
+                    budget.mark_dead_end();
+                    break;
+                }
+                if let Some(action) = node_actions.iter().copied().find(|a| {
+                    !nodes[current]
+                        .children
+                        .iter()
+                        .any(|&i| nodes[i].action == Some(*a))
+                }) {
                     if nodes.len() >= self.arena_capacity {
                         return Err(PlannerError::ArenaCapacityExceeded {
                             capacity: self.arena_capacity,
                         });
                     }
-                    let action = valid_actions[nodes[current].children.len()];
                     budget.check()?;
-                    let (next, reward, done) = world_model.step(&nodes[current].state, action)?;
+                    let (next, reward, done) = world_model.step(&states[current], action)?;
                     budget.check()?;
                     validate_transition(&next, reward, "MCTS expansion")?;
                     let child = nodes.len();
-                    nodes.push(MctsNode::new(next, Some(action), reward, done));
+                    nodes.push(MctsNode::new(Some(action), reward, done));
+                    states.push(next);
                     nodes[current].children.push(child);
                     current = child;
                     path.push(current);
@@ -361,17 +461,25 @@ impl PlanningEngine for MctsEngine {
                     break;
                 }
                 let parent = &nodes[current];
-                let scale = f64::from(self.c_puct) / valid_actions.len() as f64
+                let scale = f64::from(self.c_puct) / node_actions.len() as f64
                     * ((parent.visits + 1) as f64).sqrt();
+                if parent.children.len() > 16 {
+                    return Err(PlannerError::InvalidInput(
+                        "MCTS action frame exceeds 16 children".into(),
+                    ));
+                }
+                // Score contiguous lanes first, then select the earliest maximum.
+                let mut scores = [0.0_f64; 16];
+                for (lane, &child) in parent.children.iter().enumerate() {
+                    let node = &nodes[child];
+                    let visits = node.visits as f64;
+                    scores[lane] = node.value_sum / visits + scale / (1.0 + visits);
+                }
                 let mut best = parent.children[0];
                 let mut best_score = f64::NEG_INFINITY;
-                for &child in &parent.children {
-                    let node = &nodes[child];
-                    // Every published child has completed a rollout and backup.
-                    let score =
-                        node.value_sum / node.visits as f64 + scale / (1.0 + node.visits as f64);
-                    if score > best_score {
-                        best_score = score;
+                for (lane, &child) in parent.children.iter().enumerate() {
+                    if scores[lane] > best_score {
+                        best_score = scores[lane];
                         best = child;
                     }
                 }
@@ -381,15 +489,30 @@ impl PlanningEngine for MctsEngine {
             }
             // Evaluate the unexpanded tail. Rotate rollout actions across
             // simulations/depths; this is a heuristic policy, not a value oracle.
-            let mut rollout_state = nodes[current].state.clone();
-            let mut done = nodes[current].done;
-            let mut continuation = 0.0_f64;
+            encountered_dead_end |= nodes[current].dead_end;
+            let mut rollout_state = states[current].clone();
+            let mut done = nodes[current].done || nodes[current].dead_end;
+            let mut continuation = if encountered_dead_end {
+                DEAD_END_PENALTY_F64
+            } else {
+                0.0
+            };
             let mut weight = 1.0_f64;
             while depth < self.horizon && !done {
                 budget.check()?;
-                let action = valid_actions[(simulation % valid_actions.len()
-                    + depth % valid_actions.len())
-                    % valid_actions.len()];
+                let rollout_actions =
+                    world_model.allowed_actions(&rollout_state, &valid_actions)?;
+                if rollout_actions.is_empty() {
+                    // A masked state is a real terminal failure for search. Keep
+                    // the penalty finite and attach it at the current rollout
+                    // discount; never turn this into a zero-cost normal leaf.
+                    budget.mark_dead_end();
+                    continuation += weight * DEAD_END_PENALTY_F64;
+                    break;
+                }
+                let action = rollout_actions[(simulation % rollout_actions.len()
+                    + depth % rollout_actions.len())
+                    % rollout_actions.len()];
                 budget.check()?;
                 let (next, reward, terminal) = world_model.step(&rollout_state, action)?;
                 budget.check()?;
@@ -407,6 +530,12 @@ impl PlanningEngine for MctsEngine {
                 }
             }
         }
+        if nodes[0].children.is_empty() {
+            // A stateful dynamics mask may have closed the root after the
+            // initial preflight. The marker above records that dead end; do not
+            // index an empty root or fabricate an action.
+            return Err(PlannerError::NoFeasibleAction);
+        }
         let children = &nodes[0].children;
         let mut best = children[0];
         let mut probabilities: Vec<_> = children
@@ -418,7 +547,7 @@ impl PlanningEngine for MctsEngine {
                 nodes[idx].visits as f32 / nodes[0].visits as f32
             })
             .collect();
-        probabilities.resize(valid_actions.len(), 0.0);
+        probabilities.resize(root_actions.len(), 0.0);
         Ok((
             nodes[best].action.expect("root children carry actions"),
             NormalizedEntropy::from_probabilities(&probabilities),
@@ -508,7 +637,7 @@ fn astar_key(state: &FullLatent, terminal: bool) -> (Vec<u32>, bool) {
 /// distance and reward. Edge cost is `1 + max(-reward, 0) + weight * 0.05 * distance`.
 /// Positive rewards are not negative edges. Distance is a displacement penalty,
 /// not calibrated model uncertainty. Optimality assumes deterministic Markov
-/// dynamics, a pure goal predicate, and the same candidate actions at every node.
+/// dynamics, a pure goal predicate, and deterministic state-dependent action masks.
 /// Exact state keys prevent cycles; near-equal floating states remain distinct.
 /// No goal is configured by default: callers must explicitly define success.
 /// Exhaustion/budget limits return errors, never an unproven partial-path action.
@@ -572,7 +701,7 @@ impl AStarEngine {
                     .is_ok_and(|v| v.tier != PolicyTier::Tier3HardStop)
             })
             .collect();
-        if allowed.is_empty() {
+        if world_model.allowed_actions(state, &allowed)?.is_empty() {
             return Err(PlannerError::NoFeasibleAction);
         }
         let goal = self.goal.as_ref().ok_or(PlannerError::MissingSearchGoal)?;
@@ -638,7 +767,11 @@ impl AStarEngine {
             expanded += 1;
             let origin = node.state.clone();
             let g = node.g;
-            for &action in &allowed {
+            let node_actions = world_model.allowed_actions(&origin, &allowed)?;
+            if node_actions.is_empty() {
+                continue; // DeadEnd: already closed, never enqueued again.
+            }
+            for &action in &node_actions {
                 budget.check()?;
                 budget.check()?;
                 let (next, reward, terminal) = world_model.step(&origin, action)?;
@@ -695,15 +828,13 @@ impl PlanningEngine for AStarEngine {
             .copied()
             .ok_or(PlannerError::SearchAlreadyAtGoal)?;
         let mut first_step_costs = Vec::new();
-        for &act in actions.actions() {
+        for act in world_model.allowed_actions(state, actions.actions())? {
             if let Ok(verdict) = gate.evaluate_basic(act, NormalizedEntropy::ZERO) {
                 if verdict.tier != PolicyTier::Tier3HardStop {
-                    if let Ok((_, reward, _)) = world_model.step(state, act) {
-                        if reward.is_finite() {
-                            let step_cost = (1.0 - reward).max(0.0);
-                            first_step_costs.push(step_cost);
-                        }
-                    }
+                    let (next, reward, _) = world_model.step(state, act)?;
+                    validate_transition(&next, reward, "A* entropy")?;
+                    let step_cost = (1.0 - reward).max(0.0);
+                    first_step_costs.push(step_cost);
                 }
             }
         }
@@ -783,6 +914,10 @@ pub struct CemPlan {
     pub actions: Vec<ActionId>,
     pub score: f32,
     pub distribution: CemDistribution,
+    /// Whether any sampled trajectory reached a state with no legal dynamics
+    /// action. The score already includes [`DEAD_END_PENALTY`] for each such
+    /// trajectory; this flag makes the degradation explicit to callers.
+    pub has_dead_end: bool,
 }
 
 #[derive(Clone)]
@@ -860,8 +995,26 @@ impl MpcCemEngine {
             .iter()
             .map(|&v| if v { 1.0 / allowed_count as f32 } else { 0.0 })
             .collect();
+        let candidates: Vec<_> = action_slice
+            .iter()
+            .zip(&allowed)
+            .filter_map(|(&a, &ok)| ok.then_some(a))
+            .collect();
+        let root_actions = world_model.allowed_actions(state, &candidates)?;
+        if root_actions.is_empty() {
+            budget.mark_dead_end();
+            return Err(PlannerError::NoFeasibleAction);
+        }
         let mut probs = vec![initial; self.horizon];
+        for (p, action) in probs[0].iter_mut().zip(action_slice) {
+            *p = if root_actions.contains(action) {
+                1.0 / root_actions.len() as f32
+            } else {
+                0.0
+            };
+        }
         let mut best: Option<(Vec<usize>, f32)> = None;
+        let mut has_dead_end = false;
         for iteration in 0..self.num_iterations {
             budget.check()?;
             let mut trajectories = Vec::new();
@@ -879,7 +1032,38 @@ impl MpcCemEngine {
                     } else {
                         cem_uniform(iteration, s_idx, step)
                     };
-                    let index = sample_categorical(row, u);
+                    let legal = world_model.allowed_actions(&curr_state, &candidates)?;
+                    if legal.is_empty() {
+                        // A state with no legal masked action is a failed
+                        // trajectory. Keep its executed prefix for diagnostics,
+                        // but make it strictly costly and report the observation.
+                        budget.mark_dead_end();
+                        has_dead_end = true;
+                        total_reward += discount * DEAD_END_PENALTY;
+                        validate_score(total_reward, "CEM dead-end penalty")?;
+                        break;
+                    }
+                    // Preserve the original sampler exactly when no candidates
+                    // are removed; otherwise condition on the current legal set.
+                    let index = if legal == candidates {
+                        sample_categorical(row, u)
+                    } else {
+                        let mut conditioned: Vec<_> = row
+                            .iter()
+                            .zip(action_slice)
+                            .map(|(&p, a)| if legal.contains(a) { p } else { 0.0 })
+                            .collect();
+                        let mass: f32 = conditioned.iter().sum();
+                        if !mass.is_finite() || mass <= 0.0 {
+                            return Err(PlannerError::InvalidInput(
+                                "CEM mask has no probability mass".into(),
+                            ));
+                        }
+                        for p in &mut conditioned {
+                            *p /= mass;
+                        }
+                        sample_categorical(&conditioned, u)
+                    };
                     let action = action_slice[index];
                     if !gate
                         .evaluate_basic(action, NormalizedEntropy::ZERO)
@@ -904,6 +1088,12 @@ impl MpcCemEngine {
                     if done {
                         break;
                     }
+                }
+                if sequence.is_empty() {
+                    // A stateful mask may close the root between preflight and
+                    // sampling. The trajectory has no executable first action,
+                    // so it cannot become an incumbent or a returned plan.
+                    continue 'trajectory;
                 }
                 if !first_terminal {
                     budget.candidate(action_slice[sequence[0]], self.name())?;
@@ -941,6 +1131,7 @@ impl MpcCemEngine {
             distribution: CemDistribution::Categorical {
                 probabilities: probs,
             },
+            has_dead_end,
         })
     }
 }
@@ -1135,7 +1326,7 @@ impl ManifoldGFlowNetEngine {
         unique_actions(actions.actions())?;
         let mut feasible = Vec::new();
         let mut log_flows = Vec::new();
-        for &action in actions.actions() {
+        for action in world_model.allowed_actions(state, actions.actions())? {
             budget.check()?;
             if gate
                 .evaluate_basic(action, NormalizedEntropy::ZERO)
@@ -1251,7 +1442,7 @@ impl PlanningEngine for CfrNashEngine {
         unique_actions(actions.actions())?;
         let mut feasible = Vec::new();
         let mut payoffs = Vec::new();
-        for &action in actions.actions() {
+        for action in world_model.allowed_actions(state, actions.actions())? {
             budget.check()?;
             if gate
                 .evaluate_basic(action, NormalizedEntropy::ZERO)
@@ -1412,7 +1603,7 @@ impl CpSatFormalEngine {
             objective: None,
             evaluated: 0,
         };
-        for &action in actions.actions() {
+        for action in world_model.allowed_actions(state, actions.actions())? {
             budget.check()?;
             if expired() {
                 result.status = SolveStatus::Timeout;
@@ -1501,10 +1692,10 @@ mod tests {
     #[test]
     fn mcts_backup_updates_every_ancestor_with_its_own_discounted_return() {
         let mut nodes = vec![
-            MctsNode::new(FullLatent::zeros(), None, 0.0, false),
-            MctsNode::new(FullLatent::zeros(), Some(ActionId(0)), 1.0, false),
-            MctsNode::new(FullLatent::zeros(), Some(ActionId(1)), 10.0, false),
-            MctsNode::new(FullLatent::zeros(), Some(ActionId(2)), -7.0, false),
+            MctsNode::new(None, 0.0, false),
+            MctsNode::new(Some(ActionId(0)), 1.0, false),
+            MctsNode::new(Some(ActionId(1)), 10.0, false),
+            MctsNode::new(Some(ActionId(2)), -7.0, false),
         ];
         // Leaf tail value 4 -> leaf 12 -> parent 7 -> root 7.
         mcts_backup(&mut nodes, &[0, 1, 2], 4.0, 0.5).unwrap();

@@ -42,16 +42,21 @@ class SupervisorAssessment:
 
     def __post_init__(self):
         # Validate and clamp all 10 dimensions to [0.0, 1.0]
-        fields = [
-            "implementation_complete", "tests_sufficient", "requirements_satisfied",
-            "needs_verification", "meaningful_progress", "worker_stuck",
-            "work_off_track", "contract_drift", "ready_to_finish", "needs_human"
-        ]
-        for f in fields:
-            val = getattr(self, f, 0.0)
+        def clamp(val):
             if not isinstance(val, (int, float)) or not math.isfinite(val):
                 val = 0.0
-            setattr(self, f, max(0.0, min(1.0, float(val))))
+            return max(0.0, min(1.0, float(val)))
+
+        self.implementation_complete = clamp(self.implementation_complete)
+        self.tests_sufficient = clamp(self.tests_sufficient)
+        self.requirements_satisfied = clamp(self.requirements_satisfied)
+        self.needs_verification = clamp(self.needs_verification)
+        self.meaningful_progress = clamp(self.meaningful_progress)
+        self.worker_stuck = clamp(self.worker_stuck)
+        self.work_off_track = clamp(self.work_off_track)
+        self.contract_drift = clamp(self.contract_drift)
+        self.ready_to_finish = clamp(self.ready_to_finish)
+        self.needs_human = clamp(self.needs_human)
 
     @property
     def has_critical_contract_drift(self) -> bool:

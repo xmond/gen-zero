@@ -5,7 +5,8 @@
 //!   into the CSR snapshot. Any failure rolls the whole deposit back.
 //! - `graph_recall`: two-stage HDC + manifold recall under the graph's geometry.
 //! - `graph_rag`: three-stage retrieval (`LodGraph::hybrid_rag_search`): HDC
-//!   prefilter, geodesic rerank to anchors, PPR diffusion from the anchors.
+//!   prefilter, geodesic rerank to anchors (exact vector angle on the vector
+//!   track), PPR diffusion from the anchors.
 //!   The query is text (`query_text`, lexical projection), a dense vector
 //!   from an external embedding model (`query_vector`, dense projection), both
 //!   at once, or a `coord` + `hdc` pair. Text and coordinates are compared
@@ -31,6 +32,23 @@
 //! - `graph_zoom`: move one node one band `in` or `out`, or `to_coord`: to the
 //!   band its coordinate implies. The coarse-grain order is kept. `dry_run`
 //!   reports and changes nothing.
+//! - `graph_induce`: Text-to-Graph ([`crate::text_to_graph`]). A task text
+//!   passes the answerability gate and becomes a causal action DAG (the
+//!   planner's `CausalDagSpec`). With `auto_deposit: true` an answerable
+//!   result is deposited exactly like a `graph_deposit` (same transaction,
+//!   same Qwen embedding of payloads): one band-1 `hypothesized` node per
+//!   action, named by `action`, and one `depends_on` edge (weight 1) from each
+//!   parent to its child. Only `depends_on`: a parallel `causal_transition`
+//!   edge would count the same prerequisite twice in the row-normalized
+//!   support of `graph_prune` and `graph_evolve`. A refused text deposits
+//!   nothing; an action already in the graph fails the whole deposit (409).
+//!
+//! A deposited node may carry an `operator` signature (`name`,
+//! `operator_kind`: `hard_dcm` or `soft_pcm`, `embedder_space`, `version`,
+//! `pure`), the causal operator it stands for. The graph refuses an invalid
+//! one at insert; it is persisted and echoed in every node report
+//! (`node_json`), but not in `graph_rag` hits. `graph_execute_operator` runs
+//! registered operators; graph construction registers the audit DCM and state-summary PCM.
 //!
 //! A deposited node without `band` gets the band its coordinate implies
 //! (`LodNode::derive_band_from_coord`).
@@ -44,8 +62,11 @@
 //! A deposited node may carry `aliases` (other names: synonyms, translations)
 //! and an `embedding`. Each alias is one more anchor for text queries, and
 //! nodes that share an alias are linked by `semantic` edges both ways
-//! (`alias_link_edges` in the response). The engine holds no embedding model:
-//! the caller makes the vectors, all of one dimension per graph.
+//! (`alias_link_edges` in the response). Vectors come from the caller or from
+//! the native Qwen backend (below), all of one dimension per graph; a Qwen
+//! vector also carries the native backend's identity
+//! ([`gen_zero_lod::LodNode::embedder_space`]), which the graph locks the same
+//! way once the first one arrives.
 //!
 //! The graph's geometry (curvature, sphere radius, metric weights) is fixed when
 //! the engine starts (`GENZERO_GRAPH_GEOMETRY`) and echoed in every response.
@@ -54,18 +75,48 @@
 //! `entity_id`, or by `action`, whose entity id is `action_id(action)`: the key
 //! the gate checks, so a pruned action is hard-stopped everywhere.
 //!
+//! Qwen dense track: when the native Qwen backend is loaded
+//! (`GENZERO_QWEN_MODEL_PATH`), [`embed_graph_request`] runs before the verb
+//! and the graph stays model-free; it only receives vectors and, when it
+//! declares one, [`gen_zero_lod::LodNode::embedder_space`], a mean-pooled
+//! vector's identity string ([`crate::semantic::NativeQwen::embedder_id`]).
+//! - `graph_deposit`: each node with a `payload` and no caller `embedding` gets
+//!   the Qwen embedding of its payload (896 wide for Qwen2.5-0.5B, mean-pooled:
+//!   `qwen_pooling: "mean"`), so text queries have a dense track to meet.
+//! - `graph_rag`: a `query_text` without `query_vector` is also embedded and
+//!   searched as `text+vector`; the response says `qwen_embedded: true` and
+//!   `qwen_pooling: "mean"`.
+//!
+//! When no vector is made although text was there because no backend is
+//! configured, or the configured backend is the Python bridge (no in-process
+//! embedder), the verb runs lexical-only, says `qwen_embedded: false` and
+//! names `qwen_skip_reason`, and a warning is logged: there is no Qwen claim
+//! to protect, only an absent one. But once a native Qwen backend is loaded,
+//! a graph whose embeddings have another width, or are locked to a different
+//! embedder identity ([`gen_zero_lod::LodGraph::embedder_space`]), is a
+//! caller or graph-selection mistake: the request is refused outright
+//! (fail-closed), never silently downgraded to lexical-only. A configured
+//! backend that fails to embed also fails the request, as does text over the
+//! per-request token budget ([`crate::semantic::MAX_EMBED_TOKENS_PER_CALL`],
+//! 413); none of these ever fall back to lexical.
+//!
 //! GENZERO_GRAPH_PERSIST_DIR mounts durable transaction and reflection commits.
 //! Without it, a restart keeps only the startup seed (GENZERO_GRAPH_SEED).
 
+use crate::bridge::BridgeError;
 use crate::cognitive::Rejection;
+use crate::semantic::{NativeQwen, SemanticBackend};
+use crate::text_to_graph::{InduceOutcome, InduceRequest, TextToGraphInducer};
 use crate::zero::action_id;
 use gen_zero_lod::{
-    AnchorMatch, EdgeType, EpistemicStatus, FixedPointReport, HybridRagResult, LodBand, LodError,
-    LodGraph, LodNode, MixedCurvatureCoord, Placement, ZoomDirection, ADMISSION_BETA,
-    ADMISSION_GAMMA, DENSE_PROJECTOR_VERSION, PROJECTOR_VERSION,
+    AnchorMatch, DiffusionQuality, EdgeType, EpistemicStatus, FixedPointReport, HybridRagResult,
+    LodBand, LodError, LodGraph, LodNode, MixedCurvatureCoord, OperatorSignature, Placement,
+    RagHit, ZoomDirection, ADMISSION_BETA, ADMISSION_GAMMA, DENSE_PROJECTOR_VERSION,
+    PROJECTOR_VERSION,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 const STAGE: &str = "graph";
@@ -109,7 +160,7 @@ pub const MAX_EVOLVE_RETRACTIONS: usize = 256;
 /// Most status transitions listed in one response; the total is always reported.
 pub const MAX_LISTED_TRANSITIONS: usize = 256;
 
-/// The eight graph operations.
+/// The ten graph operations.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GraphOp {
     Deposit,
@@ -120,6 +171,8 @@ pub enum GraphOp {
     Evolve,
     CoarseGrain,
     Zoom,
+    Induce,
+    ExecuteOperator,
 }
 
 impl GraphOp {
@@ -133,6 +186,8 @@ impl GraphOp {
             Self::Evolve => "graph_evolve",
             Self::CoarseGrain => "graph_coarse_grain",
             Self::Zoom => "graph_zoom",
+            Self::Induce => "graph_induce",
+            Self::ExecuteOperator => "graph_execute_operator",
         }
     }
 }
@@ -172,6 +227,8 @@ struct NodeSpec {
     #[serde(default)]
     aliases: Vec<String>,
     embedding: Option<Vec<f32>>,
+    /// The causal operator the node stands for; validated by the graph at insert.
+    operator: Option<OperatorSignature>,
 }
 
 #[derive(Deserialize)]
@@ -214,6 +271,10 @@ struct RagSpec {
     crag_margin: Option<f32>,
     alpha: Option<f32>,
     max_iters: Option<usize>,
+    /// Caps the LOD payload variant chosen per hit: detail when it fits,
+    /// else a `CoarseGrain` summary ancestor's payload, else the hit is
+    /// dropped. `None`: every hit keeps its own detailed payload, as before.
+    token_budget: Option<usize>,
 }
 
 #[derive(Deserialize)]
@@ -341,6 +402,13 @@ fn invalid(detail: impl Into<String>) -> Rejection {
 /// or checkpoint failure is an engine fault, 500.
 pub(crate) fn graph_rejection(e: LodError) -> Rejection {
     let (code, status) = match &e {
+        LodError::OperatorNodeRevoked(_) => ("OperatorNodeRevoked", 409),
+        LodError::OperatorNodeFalsified(_) => ("OperatorNodeFalsified", 409),
+        LodError::OperatorNonceRejected { .. } => ("OperatorNonceRejected", 409),
+        LodError::OperatorPreconditionFailed { .. } => ("OperatorPreconditionFailed", 409),
+        LodError::OperatorTransitFailed { .. } => ("OperatorTransitFailed", 422),
+        LodError::OperatorPostconditionFailed { .. } => ("OperatorPostconditionFailed", 422),
+        LodError::OperatorNotFound(_) => ("OperatorNotFound", 404),
         LodError::FixedPointDiverged { .. } => ("FixedPointDiverged", 422),
         LodError::FixedPointNotContractive { .. } => ("FixedPointNotContractive", 422),
         LodError::FixedPointTooSlow { .. } => ("FixedPointTooSlow", 422),
@@ -482,6 +550,7 @@ fn node_json(graph: &LodGraph, id: u32) -> Value {
             "aliases": n.aliases,
             "embedding_dim": n.embedding.as_ref().map(Vec::len),
             "placement": placement_name(n.placement),
+            "operator": n.operator,
         }),
         None => json!({"node": id, "missing": true}),
     }
@@ -507,21 +576,398 @@ fn now_ns() -> Result<u64, Rejection> {
         .map_err(|_| clock_fault("system clock overflows u64 nanoseconds".into()))
 }
 
-/// Run one graph verb. `Ok` holds a one-line summary and the result object.
+/// Qwen vectors made for one graph request before it runs
+/// ([`embed_graph_request`]), or why none were made for text that was there.
+#[derive(Debug, Default)]
+pub struct QwenVectors {
+    /// Set when at least one vector was made.
+    embedder: Option<String>,
+    /// The pooling [`Self::embedder`] used, e.g. `"mean"`. Set together with
+    /// `embedder`.
+    pooling: Option<String>,
+    /// `graph_rag`: the embedding of `query_text`.
+    query: Option<Vec<f32>>,
+    /// `graph_deposit`: the payload embedding of `nodes[i]`, by `i`.
+    nodes: HashMap<usize, Vec<f32>>,
+    skip_reason: Option<String>,
+}
+
+impl QwenVectors {
+    fn skipped(op: GraphOp, reason: String, configured: bool) -> Self {
+        if configured {
+            tracing::warn!(op = op.name(), reason = %reason, "graph: Qwen dense track skipped; lexical only");
+        } else {
+            tracing::info!(op = op.name(), reason = %reason, "graph: Qwen dense track off; lexical only");
+        }
+        Self {
+            skip_reason: Some(reason),
+            ..Self::default()
+        }
+    }
+
+    fn report(&self, out: &mut Value, embedded_key: &str, embedded: Value) {
+        out[embedded_key] = embedded;
+        out["qwen_embedder"] = json!(self.embedder);
+        out["qwen_pooling"] = json!(self.pooling);
+        out["qwen_skip_reason"] = json!(self.skip_reason);
+    }
+}
+
+/// A configured backend that fails to embed fails the request: text over the
+/// token budget is 413, a full queue 503, every other failure 500.
+fn embed_rejection(e: BridgeError) -> Rejection {
+    let (code, status) = match &e {
+        BridgeError::EmbedBudget { .. } => ("EmbedBudgetExceeded", 413),
+        BridgeError::Overloaded { .. } => ("EmbedderOverloaded", 503),
+        _ => ("EmbedderError", 500),
+    };
+    Rejection {
+        code: code.to_string(),
+        stage: STAGE.to_string(),
+        detail: e.to_string(),
+        http_status: status,
+    }
+}
+
+/// Texts of a deposit that get a Qwen embedding: the non-blank payload of
+/// every node that carries no caller `embedding`, by node index.
+fn deposit_texts(spec: &DepositSpec) -> Vec<(usize, String)> {
+    spec.nodes
+        .iter()
+        .enumerate()
+        .filter(|(_, n)| n.embedding.is_none())
+        .filter_map(|(i, n)| n.payload.as_ref().map(|p| (i, p)))
+        .filter(|(_, p)| !p.trim().is_empty())
+        .map(|(i, p)| (i, p.clone()))
+        .collect()
+}
+
+/// Why this deposit's Qwen vectors (width `dim`, identity `embedder`) cannot
+/// join `graph`, fail-closed: the graph or a caller embedding in the same
+/// deposit has another width, or the graph is locked to a different embedder
+/// identity ([`LodGraph::embedder_space`]; two models can share a width while
+/// embedding different semantic spaces). Never silently skipped to
+/// lexical-only: a configured, dimension-matched Qwen backend that disagrees
+/// with an already-populated graph is a caller or graph-selection mistake,
+/// not a normal degraded mode.
+fn deposit_qwen_conflict(
+    graph: &LodGraph,
+    spec: &DepositSpec,
+    dim: usize,
+    embedder: &str,
+) -> Option<String> {
+    if let Some(have) = graph.embedding_dim().filter(|&have| have != dim) {
+        return Some(format!(
+            "graph embedding dimension {have} does not match configured native Qwen dimension {dim}"
+        ));
+    }
+    if let Some(locked) = graph.embedder_space().filter(|locked| locked != embedder) {
+        return Some(format!(
+            "graph embedder `{locked}` does not match configured native Qwen embedder `{embedder}`"
+        ));
+    }
+    spec.nodes
+        .iter()
+        .enumerate()
+        .find_map(|(i, n)| n.embedding.as_ref().map(|e| (i, e.len())))
+        .filter(|&(_, len)| len != dim)
+        .map(|(i, len)| {
+            format!("nodes[{i}] carries a {len}-dimensional caller embedding; the Qwen embedder gives {dim}")
+        })
+}
+
+/// The backend and its in-process embedder, or the skip report when there is
+/// none: no backend at all, or the Python bridge. Unlike
+/// [`deposit_qwen_conflict`], these are not fail-closed: no Qwen backend is
+/// configured at all, so there is no conflicting claim to protect, only an
+/// absent one.
+fn qwen_embedder(
+    op: GraphOp,
+    semantic: Option<&SemanticBackend>,
+) -> Result<(&SemanticBackend, &NativeQwen), QwenVectors> {
+    let Some(backend) = semantic else {
+        let reason = "no semantic backend is configured (GENZERO_QWEN_MODEL_PATH unset)";
+        return Err(QwenVectors::skipped(op, reason.into(), false));
+    };
+    match backend.embedder() {
+        Some(native) => Ok((backend, native)),
+        None => Err(QwenVectors::skipped(
+            op,
+            format!(
+                "the {} semantic backend has no text embedder",
+                backend.engine_name()
+            ),
+            true,
+        )),
+    }
+}
+
+/// Why [`deposit_embedder`] made no Qwen vectors: a lexical-only skip (no
+/// backend, or the Python bridge), or a width/identity conflict the caller
+/// must fix, which [`embed_graph_request`] and [`load_seed`] surface as a
+/// hard failure rather than papering over it as [`QwenVectors::skipped`].
+enum QwenEmbedFault {
+    Skip(QwenVectors),
+    Reject(Rejection),
+}
+
+/// [`qwen_embedder`] for a deposit, also refused (fail-closed, never skipped)
+/// when [`deposit_qwen_conflict`] finds one.
+fn deposit_embedder<'a>(
+    graph: &LodGraph,
+    op: GraphOp,
+    spec: &DepositSpec,
+    semantic: Option<&'a SemanticBackend>,
+) -> Result<&'a NativeQwen, QwenEmbedFault> {
+    let (_, native) = qwen_embedder(op, semantic).map_err(QwenEmbedFault::Skip)?;
+    let embedder_id = native.embedder_id();
+    match deposit_qwen_conflict(graph, spec, native.embedding_dim(), &embedder_id) {
+        Some(reason) => Err(QwenEmbedFault::Reject(invalid(reason))),
+        None => Ok(native),
+    }
+}
+
+/// Make the Qwen vectors `op` uses, before the verb runs. Only `graph_rag`
+/// with `query_text` and no `query_vector`, and `graph_deposit` nodes with
+/// a payload and no `embedding`, get any. A malformed block is refused here
+/// exactly as [`execute_graph`] would refuse it.
+pub async fn embed_graph_request(
+    graph: &LodGraph,
+    op: GraphOp,
+    block: &Value,
+    semantic: Option<&SemanticBackend>,
+) -> Result<QwenVectors, Rejection> {
+    match op {
+        GraphOp::Rag => {
+            let spec: RagSpec = parse(block, op)?;
+            let text = match (&spec.query_text, &spec.query_vector, &spec.coord, spec.hdc) {
+                (Some(t), None, None, None) if !t.trim().is_empty() => t.clone(),
+                _ => return Ok(QwenVectors::default()),
+            };
+            let (backend, native) = match qwen_embedder(op, semantic) {
+                Ok(found) => found,
+                Err(skipped) => return Ok(skipped),
+            };
+            let dim = native.embedding_dim();
+            let embedder_id = native.embedder_id();
+            match graph.embedding_dim() {
+                Some(have) if have == dim => {}
+                Some(have) => {
+                    // Fail-closed: a configured Qwen backend whose dimension
+                    // disagrees with an already-populated graph is refused,
+                    // never silently downgraded to a lexical-only success.
+                    return Err(invalid(format!(
+                        "graph embedding dimension {have} does not match configured native \
+                         Qwen dimension {dim}"
+                    )));
+                }
+                None => {
+                    let reason = "no node of this graph carries an embedding to compare a Qwen \
+                                  query vector with"
+                        .to_string();
+                    return Ok(QwenVectors::skipped(op, reason, true));
+                }
+            }
+            if let Some(locked) = graph
+                .embedder_space()
+                .filter(|locked| locked != &embedder_id)
+            {
+                // Fail-closed: same width, different model. A bare dimension
+                // match cannot tell the semantic spaces apart.
+                return Err(invalid(format!(
+                    "graph embedder `{locked}` does not match configured native Qwen embedder \
+                     `{embedder_id}`"
+                )));
+            }
+            let vector = backend.embed(&text).await.map_err(embed_rejection)?;
+            Ok(QwenVectors {
+                embedder: Some(embedder_id),
+                pooling: Some(native.pooling().as_str().to_string()),
+                query: Some(vector),
+                ..QwenVectors::default()
+            })
+        }
+        GraphOp::Deposit => embed_deposit(graph, op, &parse(block, op)?, semantic).await,
+        GraphOp::Induce => {
+            // The induction is deterministic, so the deposit `execute_graph`
+            // builds from the same block has these node indices.
+            let req: InduceRequest = parse(block, op)?;
+            if req.auto_deposit != Some(true) {
+                return Ok(QwenVectors::default());
+            }
+            let outcome = TextToGraphInducer::new().induce(&req)?;
+            match induced_deposit_spec(&req, &outcome) {
+                Some(spec) => embed_deposit(graph, op, &spec, semantic).await,
+                None => Ok(QwenVectors::default()),
+            }
+        }
+        _ => Ok(QwenVectors::default()),
+    }
+}
+
+/// The Qwen payload vectors of one deposit (`graph_deposit`, or the deposit
+/// of a `graph_induce`).
+async fn embed_deposit(
+    graph: &LodGraph,
+    op: GraphOp,
+    spec: &DepositSpec,
+    semantic: Option<&SemanticBackend>,
+) -> Result<QwenVectors, Rejection> {
+    let texts = deposit_texts(spec);
+    // Over the cap the verb refuses the deposit; embed nothing first.
+    if texts.is_empty() || spec.nodes.len() > MAX_DEPOSIT_NODES {
+        return Ok(QwenVectors::default());
+    }
+    let native = match deposit_embedder(graph, op, spec, semantic) {
+        Ok(native) => native,
+        Err(QwenEmbedFault::Skip(skipped)) => return Ok(skipped),
+        Err(QwenEmbedFault::Reject(rejection)) => return Err(rejection),
+    };
+    let (index, texts): (Vec<usize>, Vec<String>) = texts.into_iter().unzip();
+    let vectors = native.embed_texts(texts).await.map_err(embed_rejection)?;
+    Ok(QwenVectors {
+        embedder: Some(native.embedder_id()),
+        pooling: Some(native.pooling().as_str().to_string()),
+        nodes: index.into_iter().zip(vectors).collect(),
+        ..QwenVectors::default()
+    })
+}
+
+/// Band of every induced action node: Lod1, the operator-binding layer of
+/// RFC-20261002 section 4.4.
+const INDUCED_ACTION_BAND: u8 = 1;
+
+/// The `graph_deposit` of an answerable induction: one node per action and
+/// one `depends_on` edge per parent. `None` when the text was refused.
+fn induced_deposit_spec(req: &InduceRequest, outcome: &InduceOutcome) -> Option<DepositSpec> {
+    if !outcome.answerable || outcome.actions.is_empty() {
+        return None;
+    }
+    let source_uri = format!(
+        "graph_induce:{}:{}",
+        outcome.engine,
+        blake3::hash(req.text.as_bytes()).to_hex()
+    );
+    let names: HashMap<u32, &str> = outcome
+        .actions
+        .iter()
+        .map(|a| (a.action_id, a.name.as_str()))
+        .collect();
+    let nodes = outcome
+        .actions
+        .iter()
+        .map(|a| NodeSpec {
+            entity_id: None,
+            action: Some(a.name.clone()),
+            label: a.name.clone(),
+            band: Some(INDUCED_ACTION_BAND),
+            status: "hypothesized".into(),
+            coord: None,
+            hdc: None,
+            confidence: outcome.confidence,
+            payload: Some(match &req.context {
+                Some(context) => format!("{}\ncontext: {context}", a.name),
+                None => a.name.clone(),
+            }),
+            source_uri: Some(source_uri.clone()),
+            timestamp_ns: None,
+            aliases: Vec::new(),
+            embedding: None,
+            operator: Some(a.operator.clone()),
+        })
+        .collect();
+    let edges = outcome
+        .actions
+        .iter()
+        .flat_map(|child| {
+            let names = &names;
+            child.parents.iter().map(move |p| EdgeSpec {
+                source: EntityRef {
+                    entity_id: None,
+                    action: Some(names[p].to_string()),
+                },
+                target: EntityRef {
+                    entity_id: None,
+                    action: Some(child.name.clone()),
+                },
+                edge_type: "depends_on".into(),
+                weight: 1.0,
+            })
+        })
+        .collect();
+    Some(DepositSpec { nodes, edges })
+}
+
+fn induce(
+    graph: &LodGraph,
+    req: InduceRequest,
+    qwen: &QwenVectors,
+) -> Result<(String, Value), Rejection> {
+    let mut outcome = TextToGraphInducer::new().induce(&req)?;
+    let deposit_report = match (
+        req.auto_deposit == Some(true),
+        induced_deposit_spec(&req, &outcome),
+    ) {
+        (true, Some(spec)) => {
+            let (_, report) = deposit(graph, spec, false, qwen)?;
+            let ids = report["nodes"]
+                .as_array()
+                .map(|nodes| nodes.iter().filter_map(|n| n["node"].as_u64()).collect())
+                .unwrap_or_default();
+            outcome.deposited_node_ids = Some(ids);
+            Some(report)
+        }
+        _ => None,
+    };
+    let summary = match &outcome.dag_spec {
+        Some(spec) => format!(
+            "graph_induce: {} action(s), target {}, confidence {:.3}{}",
+            outcome.actions.len(),
+            spec.target,
+            outcome.confidence,
+            if deposit_report.is_some() {
+                ", deposited"
+            } else {
+                ""
+            }
+        ),
+        None => format!(
+            "graph_induce: not answerable ({})",
+            outcome.refusal_reason.as_deref().unwrap_or("refused")
+        ),
+    };
+    let mut out = serde_json::to_value(&outcome)
+        .map_err(|e| invalid(format!("internal: graph_induce outcome: {e}")))?;
+    out["auto_deposit"] = json!(req.auto_deposit == Some(true));
+    out["deposit"] = match deposit_report {
+        Some(report) => report,
+        None if req.auto_deposit == Some(true) => {
+            json!({"skipped": "the text is not answerable; nothing was deposited"})
+        }
+        None => Value::Null,
+    };
+    Ok((summary, out))
+}
+
+/// Run one graph verb with the vectors [`embed_graph_request`] made for it.
+/// `Ok` holds a one-line summary and the result object.
 pub fn execute_graph(
     graph: &LodGraph,
     op: GraphOp,
     block: &Value,
+    qwen: &QwenVectors,
 ) -> Result<(String, Value), Rejection> {
     let (summary, mut result) = match op {
-        GraphOp::Deposit => deposit(graph, parse(block, op)?, false)?,
+        GraphOp::Deposit => deposit(graph, parse(block, op)?, false, qwen)?,
         GraphOp::Recall => recall(graph, parse(block, op)?)?,
-        GraphOp::Rag => rag(graph, parse(block, op)?)?,
+        GraphOp::Rag => rag(graph, parse(block, op)?, qwen)?,
         GraphOp::Ppr => ppr(graph, parse(block, op)?)?,
         GraphOp::Prune => prune(graph, parse(block, op)?)?,
         GraphOp::Evolve => evolve(graph, parse(block, op)?)?,
         GraphOp::CoarseGrain => coarse_grain(graph, parse(block, op)?)?,
         GraphOp::Zoom => zoom(graph, parse(block, op)?)?,
+        GraphOp::Induce => induce(graph, parse(block, op)?, qwen)?,
+        GraphOp::ExecuteOperator => execute_operator(graph, parse(block, op)?)?,
     };
     result["op"] = json!(op.name());
     result["graph"] = graph_meta(graph);
@@ -531,15 +977,48 @@ pub fn execute_graph(
 /// Load the operator seed file into `graph` as one transaction. The file has the
 /// `graph_deposit` shape and may also carry `axiomatic` nodes. Any bad node or
 /// edge fails the whole load and leaves the graph unchanged. The report carries
-/// the file's blake3 `digest`.
-pub fn load_seed(graph: &LodGraph, path: &Path) -> Result<Value, String> {
+/// the file's blake3 `digest`. With the native Qwen backend, seed payloads
+/// get Qwen embeddings like a `graph_deposit`; an embedding failure fails
+/// the load.
+pub fn load_seed(
+    graph: &LodGraph,
+    path: &Path,
+    semantic: Option<&SemanticBackend>,
+) -> Result<Value, String> {
     let text = std::fs::read_to_string(path)
         .map_err(|e| format!("read graph seed {}: {e}", path.display()))?;
     let value: Value = serde_json::from_str(&text)
         .map_err(|e| format!("graph seed {} is not JSON: {e}", path.display()))?;
     let spec: DepositSpec = DepositSpec::deserialize(&value)
         .map_err(|e| format!("graph seed {}: {e}", path.display()))?;
-    let (_, mut report) = deposit(graph, spec, true)
+    let texts = deposit_texts(&spec);
+    let qwen = if texts.is_empty() {
+        QwenVectors::default()
+    } else {
+        match deposit_embedder(graph, GraphOp::Deposit, &spec, semantic) {
+            Err(QwenEmbedFault::Skip(skipped)) => skipped,
+            Err(QwenEmbedFault::Reject(rejection)) => {
+                return Err(format!(
+                    "graph seed {}: {}",
+                    path.display(),
+                    rejection.detail
+                ))
+            }
+            Ok(native) => {
+                let (index, texts): (Vec<usize>, Vec<String>) = texts.into_iter().unzip();
+                let vectors = native.embed_texts_blocking(&texts).map_err(|e| {
+                    format!("graph seed {}: Qwen embedding failed: {e}", path.display())
+                })?;
+                QwenVectors {
+                    embedder: Some(native.embedder_id()),
+                    pooling: Some(native.pooling().as_str().to_string()),
+                    nodes: index.into_iter().zip(vectors).collect(),
+                    ..QwenVectors::default()
+                }
+            }
+        }
+    };
+    let (_, mut report) = deposit(graph, spec, true, &qwen)
         .map_err(|r| format!("graph seed {}: {}", path.display(), r.detail))?;
     report["digest"] = json!(blake3::hash(text.as_bytes()).to_hex().to_string());
     Ok(report)
@@ -549,6 +1028,7 @@ fn deposit(
     graph: &LodGraph,
     spec: DepositSpec,
     allow_axiomatic: bool,
+    qwen: &QwenVectors,
 ) -> Result<(String, Value), Rejection> {
     if spec.nodes.is_empty() && spec.edges.is_empty() {
         return Err(invalid("graph_deposit needs at least one node or edge"));
@@ -606,11 +1086,25 @@ fn deposit(
             .with_hdc_fingerprint(hdc)
             .with_prior(n.confidence)
             .with_aliases(n.aliases.iter().map(String::as_str));
-        if let Some(embedding) = &n.embedding {
-            node = node.with_embedding(embedding.clone());
+        match (n.embedding.as_ref(), qwen.nodes.get(&i)) {
+            (Some(embedding), _) => {
+                // A caller-supplied embedding declares no model identity: its
+                // provenance is the caller's own business.
+                node = node.with_embedding(embedding.clone());
+            }
+            (None, Some(embedding)) => {
+                node = node.with_embedding(embedding.clone());
+                if let Some(embedder) = &qwen.embedder {
+                    node = node.with_embedder_space(embedder.clone());
+                }
+            }
+            (None, None) => {}
         }
         if placement == Placement::Embedding {
             node = node.placed_by_embedding();
+        }
+        if let Some(signature) = &n.operator {
+            node = node.with_operator(signature.clone());
         }
         match &n.payload {
             Some(text) => {
@@ -692,20 +1186,22 @@ fn deposit(
         flush.csr_edges
     );
     let deposited: Vec<Value> = node_ids.iter().map(|&id| node_json(graph, id)).collect();
-    Ok((
-        summary,
-        json!({
-            "nodes": deposited,
-            "edge_tickets": tickets,
-            "alias_link_edges": alias_link_edges,
-            "flush": {
-                "merged_edges": flush.merged_edges,
-                "csr_nodes": flush.csr_nodes,
-                "csr_edges": flush.csr_edges,
-                "pending_edges": flush.pending_edges,
-            },
-        }),
-    ))
+    let mut out = json!({
+        "nodes": deposited,
+        "edge_tickets": tickets,
+        "alias_link_edges": alias_link_edges,
+        "flush": {
+            "merged_edges": flush.merged_edges,
+            "csr_nodes": flush.csr_nodes,
+            "csr_edges": flush.csr_edges,
+            "pending_edges": flush.pending_edges,
+        },
+    });
+    qwen.report(&mut out, "qwen_embedded_nodes", json!(qwen.nodes.len()));
+    if let Some(dim) = qwen.nodes.values().next().map(Vec::len) {
+        out["qwen_vector_dim"] = json!(dim);
+    }
+    Ok((summary, out))
 }
 
 fn recall(graph: &LodGraph, spec: RecallSpec) -> Result<(String, Value), Rejection> {
@@ -731,7 +1227,7 @@ fn recall(graph: &LodGraph, spec: RecallSpec) -> Result<(String, Value), Rejecti
     ))
 }
 
-fn rag(graph: &LodGraph, spec: RagSpec) -> Result<(String, Value), Rejection> {
+fn rag(graph: &LodGraph, spec: RagSpec, qwen: &QwenVectors) -> Result<(String, Value), Rejection> {
     if spec.top_k == 0 || spec.top_k > MAX_RAG_TOP_K {
         return Err(invalid(format!("top_k must be 1..={MAX_RAG_TOP_K}")));
     }
@@ -743,11 +1239,30 @@ fn rag(graph: &LodGraph, spec: RagSpec) -> Result<(String, Value), Rejection> {
             "max_iters must be at most {MAX_PPR_ITERS}"
         )));
     }
-    let (text, vector) = (spec.query_text.as_deref(), spec.query_vector.as_deref());
+    let text = spec.query_text.as_deref();
+    let (vector, vector_source) = match (spec.query_vector.as_deref(), qwen.query.as_deref()) {
+        (Some(v), _) => (Some(v), Some("caller")),
+        (None, Some(v)) => (Some(v), Some("qwen")),
+        (None, None) => (None, None),
+    };
+    // A caller-supplied `query_vector` declares no model identity; only the
+    // Qwen-embedded query does (`qwen.embedder`).
+    let query_embedder = match vector_source {
+        Some("qwen") => qwen.embedder.as_deref(),
+        _ => None,
+    };
     let (result, query) = match (text.is_some() || vector.is_some(), &spec.coord, spec.hdc) {
         (true, None, None) => (
             graph
-                .hybrid_rag_search_query(text, vector, spec.top_k, crag_margin, alpha, max_iters)
+                .hybrid_rag_search_query(
+                    text,
+                    vector,
+                    query_embedder,
+                    spec.top_k,
+                    crag_margin,
+                    alpha,
+                    max_iters,
+                )
                 .map_err(graph_rejection)?,
             json!({
                 "kind": match (text, vector) {
@@ -758,6 +1273,7 @@ fn rag(graph: &LodGraph, spec: RagSpec) -> Result<(String, Value), Rejection> {
                 "projector": text.map(|_| PROJECTOR_VERSION),
                 "dense_projector": vector.map(|_| DENSE_PROJECTOR_VERSION),
                 "vector_dim": vector.map(<[f32]>::len),
+                "vector_source": vector_source,
             }),
         ),
         (false, Some(c), Some(hdc)) => (
@@ -788,45 +1304,28 @@ fn rag(graph: &LodGraph, spec: RagSpec) -> Result<(String, Value), Rejection> {
         searchable_nodes,
         diffusion,
     } = result;
-    let hits: Vec<Value> = hits
-        .into_iter()
-        .map(|h| {
-            json!({
-                "node": h.node_id,
-                "entity_id": h.entity_id,
-                "label": h.label,
-                "status": status_name(h.status),
-                "band": band_level(h.band),
-                "confidence": h.confidence,
-                "ppr_score": h.ppr_score,
-                "anchor_distance": h.anchor_distance,
-                "via": if h.anchor_distance.is_some() { "anchor" } else { "diffusion" },
-                "matched": h.anchor_match.map(|m| match m {
-                    AnchorMatch::Primary => "primary",
-                    AnchorMatch::Alias(_) => "alias",
-                    AnchorMatch::Embedding => "embedding",
-                }),
-                "matched_alias": match h.anchor_match {
-                    Some(AnchorMatch::Alias(i)) => h.aliases.get(i).cloned(),
-                    _ => None,
-                },
-                "aliases": h.aliases,
-                "payload_digest": h.payload.as_ref().map(|_| digest_hex(&h.payload_digest)),
-                "timestamp_ns": h.payload.as_ref().map(|_| h.timestamp_ns),
-                "payload": h.payload,
-                "source_uri": h.source_uri,
-            })
-        })
-        .collect();
+
+    // P0-2: two hits that refute each other must never both reach the caller
+    // as confirmed premises.
+    let (hits, conflict_resolved, unresolved_conflict, tied_conflicts, excluded) =
+        resolve_falsifies_conflicts(hits);
+    // P1-2: fold each surviving hit's payload to what `token_budget` allows.
+    let (hits, tokens_used, token_budget_dropped_hits) =
+        apply_token_budget(graph, hits, spec.token_budget, &excluded);
+
+    // `anchors` is the unfiltered set from `hybrid_rag_search`; every anchor's
+    // node_id is also in `hits` before filtering (see `HybridRagResult::hits`'s
+    // doc comment), so the same Falsifies-conflict exclusion set applies here.
     let anchors: Vec<Value> = anchors
         .iter()
+        .filter(|&&(id, _)| !excluded.contains(&id))
         .map(|&(id, distance)| {
             let mut v = node_json(graph, id);
             v["distance"] = json!(distance);
             v
         })
         .collect();
-    let diffusion = diffusion.map(|d| {
+    let diffusion_json = diffusion.as_ref().map(|d| {
         json!({
             "alpha": d.alpha,
             "max_iters": d.max_iters,
@@ -834,22 +1333,267 @@ fn rag(graph: &LodGraph, spec: RagSpec) -> Result<(String, Value), Rejection> {
             "iterations": d.iterations,
             "residual": d.residual,
             "converged": d.converged,
+            "quality": d.quality.as_str(),
         })
     });
-    Ok((
-        summary,
-        json!({
-            "query": query,
-            "hits": hits,
-            "anchors": anchors,
-            "stage1_candidates": stage1_candidates,
-            "searchable_nodes": searchable_nodes,
-            "distance_normalization": "per_track_max",
-            "diffusion": diffusion,
-            "top_k": spec.top_k,
-            "crag_margin": crag_margin,
+    let diffusion_quality = diffusion.as_ref().map(|d| d.quality);
+    let mut out = json!({
+        "query": query,
+        "hits": hits,
+        "anchors": anchors,
+        "stage1_candidates": stage1_candidates,
+        "searchable_nodes": searchable_nodes,
+        "distance_normalization": "per_track_max",
+        "diffusion": diffusion_json,
+        "top_k": spec.top_k,
+        "crag_margin": crag_margin,
+        "conflict_resolved": conflict_resolved,
+        "unresolved_conflict": unresolved_conflict,
+        "tied_conflicts": tied_conflicts,
+        // `null` when no anchor was found, so no diffusion ran.
+        "diffusion_quality": diffusion_quality.map(DiffusionQuality::as_str),
+    });
+    qwen.report(&mut out, "qwen_embedded", json!(qwen.query.is_some()));
+    // A diffusion that did not converge is never handed back looking normal.
+    if let Some(d) = diffusion.filter(|d| d.quality == DiffusionQuality::Degraded) {
+        tracing::warn!(
+            iterations = d.iterations,
+            max_iters = d.max_iters,
+            residual = d.residual,
+            tolerance = d.tolerance,
+            "graph_rag: PPR diffusion degraded; hits ranked by an unconverged iterate"
+        );
+        out["non_converged_warning"] = json!("PPR residual exceeded tolerance");
+    }
+    if let Some(budget) = spec.token_budget {
+        out["token_budget"] = json!(budget);
+        out["estimated_tokens_used"] = json!(tokens_used);
+        out["selection_strategy"] = json!("lod_budget_fit");
+        out["token_budget_dropped_hits"] = json!(token_budget_dropped_hits);
+    }
+    Ok((summary, out))
+}
+
+/// Drop the losing side of every `Falsifies` conflict among `hits`, so the
+/// response never carries two nodes that refute each other as if both were
+/// confirmed. Equal confidence cannot be resolved by this rule: both sides
+/// are dropped and `unresolved_conflict` is raised instead of guessing which
+/// one a downstream reasoner should trust; the dropped pair is still recorded
+/// in `tied_conflicts` so a caller can see which entities were lost and why.
+///
+/// Each `Falsifies` edge is judged on its own two endpoints' confidence, not
+/// on the whole conflict graph at once; a node already excluded by one
+/// conflict can still cause another node to be excluded by a separate one.
+///
+/// The returned `HashSet<u32>` of excluded node_ids is the same exclusion set
+/// applied to `hits`; callers must apply it to any other view derived from
+/// the same unfiltered node set (e.g. `anchors`) so a losing/falsified node
+/// never leaks out through a different field.
+fn resolve_falsifies_conflicts(
+    hits: Vec<RagHit>,
+) -> (Vec<RagHit>, Vec<Value>, bool, Vec<Value>, HashSet<u32>) {
+    // Unordered pairs, once each, from the conflict edges the search read
+    // under its own lock.
+    let mut seen: HashSet<(u32, u32)> = HashSet::new();
+    let conflicts: Vec<(u32, u32)> = hits
+        .iter()
+        .flat_map(|h| {
+            h.conflict_edges.iter().map(move |e| {
+                let other = e.counterpart_node_id;
+                (h.node_id.min(other), h.node_id.max(other))
+            })
+        })
+        .filter(|pair| seen.insert(*pair))
+        .collect();
+    if conflicts.is_empty() {
+        return (hits, Vec::new(), false, Vec::new(), HashSet::new());
+    }
+    let by_id: HashMap<u32, &RagHit> = hits.iter().map(|h| (h.node_id, h)).collect();
+    const CONFIDENCE_EPS: f32 = 1e-6;
+    let mut excluded: HashSet<u32> = HashSet::new();
+    let mut unresolved_conflict = false;
+    let mut conflict_resolved = Vec::new();
+    let mut tied_conflicts = Vec::new();
+    for (a, b) in conflicts {
+        let ha = by_id[&a];
+        let hb = by_id[&b];
+        if (ha.confidence - hb.confidence).abs() <= CONFIDENCE_EPS {
+            unresolved_conflict = true;
+            excluded.insert(a);
+            excluded.insert(b);
+            tied_conflicts.push(json!({
+                "a": ha.entity_id,
+                "b": hb.entity_id,
+                "edge": "Falsifies",
+            }));
+        } else if ha.confidence > hb.confidence {
+            excluded.insert(b);
+            conflict_resolved.push(json!({
+                "winner": ha.entity_id,
+                "loser": hb.entity_id,
+                "edge": "Falsifies",
+            }));
+        } else {
+            excluded.insert(a);
+            conflict_resolved.push(json!({
+                "winner": hb.entity_id,
+                "loser": ha.entity_id,
+                "edge": "Falsifies",
+            }));
+        }
+    }
+    let kept = hits
+        .into_iter()
+        .filter(|h| !excluded.contains(&h.node_id))
+        .collect();
+    (
+        kept,
+        conflict_resolved,
+        unresolved_conflict,
+        tied_conflicts,
+        excluded,
+    )
+}
+
+/// Estimated LLM tokens in `text`: `ceil(chars / 4)`. This is a budgeting
+/// approximation, not a model-specific tokenizer; `estimated_tokens_used` in
+/// the response is always computed with this same estimate, so it is internally
+/// consistent even though it is not the exact count any particular model
+/// would charge.
+fn estimate_tokens(text: &str) -> usize {
+    text.chars().count().div_ceil(4)
+}
+
+/// One `graph_rag` hit as JSON. With `summary`, the payload, its source and
+/// timestamp come from that `CoarseGrain` ancestor instead of `h`'s own node,
+/// and the hit is tagged `payload_band: "summary"`; so are its identity and
+/// trust: `entity_id`, `confidence` (the lesser of `h`'s and the summary's,
+/// never overstating trust in the substituted text) and `status` all come
+/// from the summary node itself, not from `h`. `node` stays `h.node_id`
+/// unconditionally: it names the graph-internal node actually recalled,
+/// regardless of which payload variant was chosen. PPR score, anchor
+/// distance/match, aliases and `band` (the hit's own LOD level, 0..=3;
+/// a separate key from `payload_band` — reusing `band` here would silently
+/// overwrite that field with a string) still describe `h` itself.
+fn hit_json(h: &RagHit, summary: Option<&LodNode>, excluded: &HashSet<u32>) -> Value {
+    let (payload, source_uri, timestamp_ns, payload_digest) = match summary {
+        Some(s) => (
+            s.payload.as_deref(),
+            s.source_uri.as_deref(),
+            s.timestamp_ns,
+            &s.payload_digest,
+        ),
+        None => (
+            h.payload.as_deref(),
+            h.source_uri.as_deref(),
+            h.timestamp_ns,
+            &h.payload_digest,
+        ),
+    };
+    let (entity_id, confidence, status) = match summary {
+        Some(s) => (s.entity_id, h.confidence.min(s.confidence), s.status),
+        None => (h.entity_id, h.confidence, h.status),
+    };
+    let mut v = json!({
+        "node": h.node_id,
+        "entity_id": entity_id,
+        "label": h.label,
+        "status": status_name(status),
+        "band": band_level(h.band),
+        "confidence": confidence,
+        "ppr_score": h.ppr_score,
+        "anchor_distance": h.anchor_distance,
+        "via": if h.anchor_distance.is_some() { "anchor" } else { "diffusion" },
+        "matched": h.anchor_match.map(|m| match m {
+            AnchorMatch::Primary => "primary",
+            AnchorMatch::Alias(_) => "alias",
+            AnchorMatch::Embedding => "embedding",
         }),
-    ))
+        "matched_alias": match h.anchor_match {
+            Some(AnchorMatch::Alias(i)) => h.aliases.get(i).cloned(),
+            _ => None,
+        },
+        "aliases": h.aliases,
+        "payload_digest": payload.map(|_| digest_hex(payload_digest)),
+        "timestamp_ns": payload.map(|_| timestamp_ns),
+        "payload": payload,
+        "source_uri": source_uri,
+        "conflict_edges": h.conflict_edges.iter().map(|e| json!({
+            "counterpart_entity_id": e.counterpart_entity_id,
+            "direction": e.direction.as_str(),
+            "weight": e.weight,
+            "edge": "Falsifies",
+            // false: the counterpart lost the conflict and is not in `hits`.
+            "counterpart_kept": !excluded.contains(&e.counterpart_node_id),
+        })).collect::<Vec<Value>>(),
+    });
+    if summary.is_some() {
+        v["payload_band"] = json!("summary");
+    }
+    v
+}
+
+/// Fold `hits` (already ranked by relevance, most relevant first) to fit
+/// `token_budget`: a greedy budget fold, most-relevant-first, two variants
+/// per hit. Each hit takes its own detailed payload if the remaining budget
+/// covers it; short of that, its [`LodGraph::coarse_grain_summary_of`]
+/// ancestor's payload if one exists, actually carries a payload, and fits;
+/// failing both, the hit is dropped rather than silently truncated, and its
+/// entity is reported in `token_budget_dropped_hits` so a caller can see
+/// exactly what it lost rather than wondering why a result is thinner than
+/// expected.
+///
+/// A summary node with no payload of its own (today, every summary a
+/// `graph_coarse_grain` call creates: it names a cluster but carries no text)
+/// is never substituted in: that would silently blank evidence out instead of
+/// condensing it. Nor is a `Falsified` summary ever substituted in, even if it
+/// carries a payload: that would surface a refuted node's text next to the
+/// original hit's own confidence as if it were trustworthy. Either case is
+/// treated the same as "no usable summary" and falls through to `dropped`.
+///
+/// `token_budget: None` keeps every hit's detailed payload, unchanged from
+/// before this field existed.
+fn apply_token_budget(
+    graph: &LodGraph,
+    hits: Vec<RagHit>,
+    token_budget: Option<usize>,
+    excluded: &HashSet<u32>,
+) -> (Vec<Value>, usize, Vec<u64>) {
+    let Some(budget) = token_budget else {
+        return (
+            hits.iter().map(|h| hit_json(h, None, excluded)).collect(),
+            0,
+            Vec::new(),
+        );
+    };
+    let mut remaining = budget;
+    let mut tokens_used = 0usize;
+    let mut out = Vec::with_capacity(hits.len());
+    let mut dropped = Vec::new();
+    for hit in &hits {
+        let detail_tokens = hit.payload.as_deref().map(estimate_tokens).unwrap_or(0);
+        if detail_tokens <= remaining {
+            remaining -= detail_tokens;
+            tokens_used += detail_tokens;
+            out.push(hit_json(hit, None, excluded));
+            continue;
+        }
+        let summary = graph
+            .coarse_grain_summary_of(hit.node_id)
+            .filter(|id| !excluded.contains(id))
+            .and_then(|id| graph.get_node(id))
+            .filter(|s| s.status != EpistemicStatus::Falsified);
+        match summary.as_ref().and_then(|s| s.payload.as_deref()) {
+            Some(text) if estimate_tokens(text) <= remaining => {
+                let tokens = estimate_tokens(text);
+                remaining -= tokens;
+                tokens_used += tokens;
+                out.push(hit_json(hit, summary.as_ref(), excluded));
+            }
+            _ => dropped.push(hit.entity_id),
+        }
+    }
+    (out, tokens_used, dropped)
 }
 
 fn rag_summary(result: &HybridRagResult) -> String {
@@ -859,11 +1603,7 @@ fn rag_summary(result: &HybridRagResult) -> String {
             "graph_rag: {} hit(s) from {} anchor(s); PPR {} after {} iteration(s)",
             result.hits.len(),
             result.anchors.len(),
-            if d.converged {
-                "converged"
-            } else {
-                "NOT converged"
-            },
+            d.quality.as_str(),
             d.iterations
         ),
     }
@@ -897,6 +1637,7 @@ fn ppr(graph: &LodGraph, spec: PprSpec) -> Result<(String, Value), Rejection> {
     let ranking = graph
         .query_ppr(&seeds, alpha, max_iters, tolerance)
         .map_err(graph_rejection)?;
+    let quality = DiffusionQuality::assess(ranking.converged, ranking.residual, tolerance);
     let results: Vec<Value> = ranking
         .ranked
         .iter()
@@ -913,18 +1654,28 @@ fn ppr(graph: &LodGraph, spec: PprSpec) -> Result<(String, Value), Rejection> {
         ranking.iterations,
         ranking.converged
     );
-    Ok((
-        summary,
-        json!({
-            "results": results,
-            "alpha": alpha,
-            "max_iters": max_iters,
-            "tolerance": tolerance,
-            "iterations": ranking.iterations,
-            "residual": ranking.residual,
-            "converged": ranking.converged,
-        }),
-    ))
+    let mut out = json!({
+        "results": results,
+        "alpha": alpha,
+        "max_iters": max_iters,
+        "tolerance": tolerance,
+        "iterations": ranking.iterations,
+        "residual": ranking.residual,
+        "converged": ranking.converged,
+        "diffusion_quality": quality.as_str(),
+    });
+    // A diffusion that did not converge is never handed back looking normal.
+    if quality == DiffusionQuality::Degraded {
+        tracing::warn!(
+            iterations = ranking.iterations,
+            max_iters,
+            residual = ranking.residual,
+            tolerance,
+            "graph_ppr: PPR diffusion degraded; scores are an unconverged iterate"
+        );
+        out["non_converged_warning"] = json!("PPR residual exceeded tolerance");
+    }
+    Ok((summary, out))
 }
 
 /// The report of one evolution as JSON. Labels and statuses are read from
@@ -1204,5 +1955,59 @@ fn zoom(graph: &LodGraph, spec: ZoomSpec) -> Result<(String, Value), Rejection> 
             "dry_run": dry_run,
             "applied": !dry_run,
         }),
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ExecuteOperatorSpec {
+    node_id: u64,
+    nonce: Option<String>,
+    input: Value,
+}
+fn execute_operator(
+    graph: &LodGraph,
+    spec: ExecuteOperatorSpec,
+) -> Result<(String, Value), Rejection> {
+    let node_id = u32::try_from(spec.node_id).map_err(|_| invalid("node_id exceeds u32"))?;
+    let nonce = spec
+        .nonce
+        .as_deref()
+        .map(|text| {
+            if text.len() != 64 || !text.bytes().all(|b| b.is_ascii_hexdigit()) {
+                return Err(invalid(
+                    "nonce must be exactly 64 hexadecimal characters (32 bytes)",
+                ));
+            }
+            let mut bytes = [0u8; 32];
+            for (i, byte) in bytes.iter_mut().enumerate() {
+                *byte = u8::from_str_radix(&text[i * 2..i * 2 + 2], 16)
+                    .map_err(|_| invalid("invalid nonce hex"))?;
+            }
+            Ok(bytes)
+        })
+        .transpose()?;
+    let encoded = serde_json::to_vec(&json!({"node_id": node_id, "input": spec.input}))
+        .map_err(|e| invalid(e.to_string()))?;
+    let input = gen_zero_lod::OperatorInput {
+        node_id,
+        parameters: spec.input,
+        nonce,
+        context_digest: *blake3::hash(&encoded).as_bytes(),
+    };
+    let execution = graph
+        .execute_operator(node_id, &input)
+        .map_err(graph_rejection)?;
+    if execution.signature.operator_kind == gen_zero_lod::OperatorKind::HardDcm {
+        tracing::warn!(
+            node_id,
+            persistent_graph = graph.is_persistent(),
+            "operator replay protection is process-local; nonce history does not survive restart"
+        );
+    }
+    let result = serde_json::to_value(execution).map_err(|e| invalid(e.to_string()))?;
+    Ok((
+        format!("graph_execute_operator: node {node_id} executed"),
+        result,
     ))
 }

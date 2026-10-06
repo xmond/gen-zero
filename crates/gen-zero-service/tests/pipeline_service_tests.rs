@@ -1021,3 +1021,362 @@ async fn http_auto_reflect_revocation_survives_durable_engine_restart() {
     assert_ne!(status, StatusCode::OK, "{body}");
     assert!(body.to_string().contains("NoFeasibleAction"), "{body}");
 }
+
+// An explicit test constraint, exercised against the real numerical dynamics.
+// This is not a claimed production-domain precondition or a trained capability.
+struct InitialStateOnly;
+impl gen_zero_planner::StateActionMask for InitialStateOnly {
+    fn allowed_actions(&self, state: &[f32], candidates: &[u32]) -> Vec<u32> {
+        if state.iter().map(|x| x * x).sum::<f32>() < 0.01 {
+            candidates.to_vec()
+        } else {
+            Vec::new()
+        }
+    }
+}
+
+fn engine_with_explicit_test_constraint() -> Arc<PolymorphicZeroEngine> {
+    Arc::new(
+        PolymorphicZeroEngine::new()
+            .with_semantic(None)
+            .with_world_model(Arc::new(gen_zero_planner::MaskedDynamics::new(
+                gen_zero_worldmodel::LatentDynamicsWorldModel::default(),
+                Arc::new(InitialStateOnly),
+            ))),
+    )
+}
+
+#[tokio::test]
+async fn http_search_reports_deep_mask_dead_ends_without_trajectory() {
+    let engine = engine_with_explicit_test_constraint();
+    for mode in ["mcts", "mpc_cem"] {
+        let (status, body) = post(
+            &engine,
+            "/v1/pipeline/decide",
+            json!({
+                "state": zeros(), "candidates": [1, 2], "mode": mode,
+                "entropy": 0.0, "return_trajectory": false,
+            }),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{mode}: {body}");
+        assert_eq!(
+            meta_pipeline(&body)["decision"]["has_dead_end"],
+            true,
+            "{body}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn http_simulation_refuses_masked_action_at_depth_one() {
+    let engine = engine_with_explicit_test_constraint();
+    let (status, body) = post(
+        &engine,
+        "/v1/pipeline/simulate",
+        json!({
+            "state": zeros(), "actions": [1, 2], "horizon": 2,
+        }),
+    )
+    .await;
+    assert_ne!(status, StatusCode::OK, "{body}");
+    assert!(body.to_string().contains("state mask"), "{body}");
+}
+
+#[tokio::test]
+async fn zero_message_reports_deep_dead_end_and_refuses_illegal_replay() {
+    let engine = engine_with_explicit_test_constraint();
+    let (status, body) = post(
+        &engine,
+        "/message",
+        json!({"pipeline": {
+            "op": "decide", "state": zeros(), "candidates": [1, 2],
+            "mode": "mcts", "entropy": 0.0, "return_trajectory": false,
+        }}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        meta_pipeline(&body)["decision"]["has_dead_end"],
+        true,
+        "{body}"
+    );
+    let (status, body) = post(
+        &engine,
+        "/message",
+        json!({"pipeline": {
+            "op": "simulate", "state": zeros(), "actions": [1, 2], "horizon": 2,
+        }}),
+    )
+    .await;
+    assert_ne!(status, StatusCode::OK, "{body}");
+    assert!(body.to_string().contains("state mask"), "{body}");
+}
+
+// ------------------------------------------------------------ causal triad modes
+
+/// Target 6 is OR over three branches; 3 -> 4 -> 6 has the best net reward.
+fn branchy_dag() -> Value {
+    json!({
+        "parents": {"2": [1], "4": [3], "6": [2, 4, 5]},
+        "is_or": {"6": true},
+        "cost": {"1": 1, "2": 2, "3": 4, "4": 1, "5": 2, "6": 1},
+        "value": {"2": 3.0, "3": 9.0, "4": 1.0},
+        "target": 6,
+        "budget": 30
+    })
+}
+
+#[tokio::test]
+async fn http_decide_runs_both_triad_modes_with_the_lod_layout() {
+    let e = engine();
+    for (mode, engine_name, shards) in [
+        ("causal_triad", "CausalTriadPipeline", 1),
+        ("tournament_triad", "TournamentTriadPipeline", 4),
+    ] {
+        let (status, body) = post(
+            &e,
+            "/v1/pipeline/decide",
+            json!({"state": zeros(), "candidates": [1, 2, 3, 4, 5, 6], "mode": mode,
+                   "entropy": 0.2, "return_trajectory": true, "horizon": 8,
+                   "causal_dag": branchy_dag(),
+                   "causal_triad": {"seed": 9, "n_samples": 256}}),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{mode}: {body}");
+        let d = &meta_pipeline(&body)["decision"];
+        assert_eq!(d["mode"], mode);
+        assert_eq!(d["engine"], engine_name);
+        let t = &d["triad"];
+        assert_eq!(t["shards"], shards);
+        assert_eq!(t["energy_alpha"], 2.0);
+        assert_eq!(t["chosen_path"], json!([3, 4, 6]), "{mode}: {t}");
+        assert_eq!(d["action"], 3);
+        // The trajectory replays the committed plan, not a greedy continuation.
+        assert_eq!(d["trajectory"]["steps_simulated"], 3);
+        assert_eq!(d["trajectory"]["trajectory"][1]["action"], 4);
+        let lod = &t["lod"];
+        assert_eq!(lod["atoms"], 6);
+        assert_eq!(lod["or_clusters"], 1);
+        assert_eq!(lod["checkpoints"], json!([]));
+        assert_eq!(lod["mandatory_floor"], 1);
+        assert_eq!(lod["goal_distance_used_in_choice"], false);
+        assert_eq!(lod["chosen_goal_distance"].as_array().unwrap().len(), 3);
+    }
+}
+
+#[tokio::test]
+async fn http_triad_refusals_are_explicit() {
+    let e = engine();
+    let base = |extra: Value| {
+        let mut b = json!({"state": zeros(), "candidates": [1, 2, 3, 4, 5, 6],
+                           "mode": "causal_triad", "entropy": 0.2});
+        for (k, v) in extra.as_object().unwrap() {
+            b[k] = v.clone();
+        }
+        b
+    };
+    for (body, status, code) in [
+        // A triad mode without a DAG: no fallback to another engine.
+        (base(json!({})), 400, "InvalidParams"),
+        // Run options alone are refused, not ignored.
+        (
+            base(json!({"causal_triad": {"seed": 1}})),
+            400,
+            "InvalidParams",
+        ),
+        // The unported robust arbitration is an unknown field.
+        (
+            base(json!({"causal_dag": branchy_dag(), "causal_triad": {"robust": {}}})),
+            400,
+            "InvalidParams",
+        ),
+    ] {
+        let (s, b) = post(&e, "/v1/pipeline/decide", body).await;
+        assert_eq!(s.as_u16(), status, "{b}");
+        assert_eq!(b["error"]["code"], code, "{b}");
+    }
+    // A DAG on a non-triad mode is refused.
+    let mut wrong = base(json!({"causal_dag": branchy_dag()}));
+    wrong["mode"] = json!("mcts");
+    let (s, b) = post(&e, "/v1/pipeline/decide", wrong).await;
+    assert_eq!(s, StatusCode::BAD_REQUEST, "{b}");
+
+    // Every branch head is a policy hard stop: the Lod pre-check names them (422).
+    let (s, b) = post(
+        &engine_prohibiting(&[1, 3, 5]),
+        "/v1/pipeline/decide",
+        base(json!({"causal_dag": branchy_dag(), "causal_triad": {"seed": 1}})),
+    )
+    .await;
+    assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY, "{b}");
+    assert_eq!(b["error"]["code"], "CausalInfeasible", "{b}");
+    assert!(b.to_string().contains("[1, 3, 5]"), "{b}");
+
+    // Over budget on arrival (time_used == budget 30): infeasible, 422, in both modes.
+    for mode in ["causal_triad", "tournament_triad"] {
+        let mut late = base(
+            json!({"causal_dag": branchy_dag(), "causal_triad": {"time_used": 30, "seed": 1}}),
+        );
+        late["mode"] = json!(mode);
+        let (s, b) = post(&e, "/v1/pipeline/decide", late).await;
+        assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY, "{mode}: {b}");
+        assert_eq!(b["error"]["code"], "CausalInfeasible", "{mode}: {b}");
+        assert!(
+            b.to_string().contains("time_used 30 leaves no budget"),
+            "{b}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn mcp_pipeline_tool_lists_and_runs_the_triad_modes() {
+    let server = McpServer::new();
+    let list = frame(
+        &server,
+        json!({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}),
+    )
+    .await;
+    let tools = list["result"]["tools"].as_array().unwrap();
+    let pipeline = tools.iter().find(|t| t["name"] == "pipeline").unwrap();
+    let props = &pipeline["inputSchema"]["properties"];
+    for mode in ["causal_triad", "tournament_triad"] {
+        assert!(props["mode"]["enum"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(mode)));
+    }
+    assert!(props["causal_dag"].is_object() && props["causal_triad"].is_object());
+    let call = frame(
+        &server,
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {
+            "name": "pipeline",
+            "arguments": {"op": "decide", "state": zeros(), "candidates": [1, 2, 3, 4, 5, 6],
+                "mode": "tournament_triad", "entropy": 0.2, "causal_dag": branchy_dag(),
+                "causal_triad": {"seed": 4, "n_samples": 256, "shards": 2}},
+        }}),
+    )
+    .await;
+    assert_eq!(call["result"]["isError"], false, "{call}");
+    let t = &call["result"]["_meta"]["pipeline"]["decision"]["triad"];
+    assert_eq!(t["shards"], 2);
+    assert_eq!(t["chosen_path"], json!([3, 4, 6]), "{t}");
+}
+
+fn chain_dag() -> Value {
+    json!({
+        "parents": {"2": [1], "3": [2], "4": [3], "5": [4], "6": [1], "7": [5, 6]},
+        "is_or": {"7": true},
+        "cost": {"1": 1, "2": 1, "3": 1, "4": 1, "5": 1, "6": 5, "7": 1},
+        "target": 7,
+        "budget": 8
+    })
+}
+
+#[tokio::test]
+async fn http_triad_robust_spec_round_trips_and_bad_specs_are_refused() {
+    let e = engine();
+    let coin = json!({"extra_pmf": [0.5, 0.5], "fatigue_frac": null, "fatigue_extra": 0});
+    for mode in ["causal_triad", "tournament_triad"] {
+        let body = |robust: Value| {
+            json!({"state": zeros(), "candidates": [1, 2, 3, 4, 5, 6, 7], "mode": mode,
+                   "entropy": 0.2, "causal_dag": chain_dag(),
+                   "causal_triad": {"seed": 3, "n_samples": 128, "energy_alpha": 0.0,
+                                    "robust": robust}})
+        };
+        let (status, resp) = post(
+            &e,
+            "/v1/pipeline/decide",
+            body(json!({"model": coin, "reorder": false})),
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{mode}: {resp}");
+        let t = &meta_pipeline(&resp)["decision"]["triad"];
+        assert_eq!(t["chosen_path"], json!([1, 6, 7]), "{mode}: {t}");
+        assert_eq!(t["robust"]["objective"], "p_success");
+        assert_eq!(t["robust"]["p_success"], 0.5);
+        assert_eq!(t["robust"]["nominal_path"], json!([1, 2, 3, 4, 5, 7]));
+        assert_eq!(t["robust"]["nominal_p_success"], 22.0 / 64.0);
+        assert_eq!(t["robust"]["posterior_kappa"], Value::Null);
+
+        for (bad, why) in [
+            (json!({"model": coin, "typo": 1}), "unknown key"),
+            (
+                json!({"model": {"extra_pmf": [2.0], "fatigue_frac": null, "fatigue_extra": 0}}),
+                "pmf",
+            ),
+            (
+                json!({"model": {"extra_pmf": [0.5, 0.5], "fatigue_frac": null, "fatigue_extra": 0,
+                              "kappa": 2.0}, "observations": [{"nominal_cost": 1, "observed_cost": 10, "time_before": 0}]}),
+                "residual",
+            ),
+        ] {
+            let (status, resp) = post(&e, "/v1/pipeline/decide", body(bad)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{mode} {why}: {resp}");
+        }
+    }
+    // Without a robust spec the triad block says so explicitly.
+    let (status, resp) = post(
+        &e,
+        "/v1/pipeline/decide",
+        json!({"state": zeros(), "candidates": [1, 2, 3, 4, 5, 6, 7], "mode": "causal_triad",
+               "entropy": 0.2, "causal_dag": chain_dag(),
+               "causal_triad": {"seed": 3, "n_samples": 128, "energy_alpha": 0.0}}),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{resp}");
+    let t = &meta_pipeline(&resp)["decision"]["triad"];
+    assert_eq!(t["chosen_path"], json!([1, 2, 3, 4, 5, 7]));
+    assert_eq!(t["robust"], Value::Null);
+}
+
+#[tokio::test]
+async fn robust_probe_posterior_and_phase_are_shared_by_http_and_mcp() {
+    let e = engine();
+    let server = McpServer::new();
+    let body = json!({"op":"decide", "state":zeros(), "candidates":[1,2,3,4,5,6,7],
+        "mode":"causal_triad", "entropy":0.2, "causal_dag":chain_dag(),
+        "causal_triad":{"seed":3,"n_samples":128,"energy_alpha":0.0,
+            "robust":{"model":{"extra_pmf":[0.5,0.5],"fatigue_frac":0.5,"fatigue_extra":1,"kappa":2.0},
+                "probe":true,"observations":[{"nominal_cost":1,"observed_cost":2,"time_before":0}]}}});
+    let (status, http) = post(&e, "/v1/pipeline", body.clone()).await;
+    assert_eq!(status, StatusCode::OK, "{http}");
+    for name in ["pipeline", "zero"] {
+        let arguments = if name == "pipeline" {
+            body.clone()
+        } else {
+            json!({"action":"pipeline","pipeline":body})
+        };
+        let call = frame(
+            &server,
+            json!({"jsonrpc":"2.0","id":90,"method":"tools/call",
+            "params":{"name":name,"arguments":arguments}}),
+        )
+        .await;
+        assert_eq!(call["result"]["isError"], false, "{call}");
+        let h = &meta_pipeline(&http)["decision"];
+        let m = &call["result"]["_meta"]["pipeline"]["decision"];
+        assert_eq!(h["triad"]["chosen_path"], m["triad"]["chosen_path"]);
+        assert_eq!(h["triad"]["robust"], m["triad"]["robust"]);
+        let r = &m["triad"]["robust"];
+        assert_eq!(r["probe_action"], m["action"]);
+        assert_eq!(r["n_observed"], 1);
+        assert_eq!(r["posterior_kappa"], 3.0);
+        assert_eq!(r["extra_pmf"], json!([1.0 / 3.0, 2.0 / 3.0]));
+        assert!((r["disturbance_moments"]["variance"].as_f64().unwrap() - 2.0 / 9.0).abs() < 1e-14);
+        assert_eq!(r["clock_phase"]["theta_clock"], 0.0);
+        assert_eq!(r["clock_phase"]["fatigued"], false);
+        assert_eq!(r["fatigue_at"], 4);
+    }
+    let mut bad = body;
+    bad["causal_triad"]["robust"]["observations"][0]["observed_cost"] = json!(99);
+    let call = frame(
+        &server,
+        json!({"jsonrpc":"2.0","id":91,"method":"tools/call",
+        "params":{"name":"pipeline","arguments":bad}}),
+    )
+    .await;
+    assert_eq!(call["result"]["isError"], true, "{call}");
+    assert!(call.to_string().contains("residual"), "{call}");
+}
+

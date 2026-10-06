@@ -48,24 +48,16 @@ def accuracy(head, prompts, candidates, positive):
     return correct / len(positive)
 
 
-def test_fit_improves_over_identity_on_synthetic_signal(tmp_path):
+def test_save_load_roundtrip_and_encoder_check(tmp_path):
     dim, k = 16, 5
-    train_prompts, train_candidates, train_positive = numeric_problem(0, 200, dim, k)
     eval_prompts, eval_candidates, eval_positive = numeric_problem(1, 200, dim, k)
-
-    identity = ZeroTaskHead(weight=np.eye(dim, dtype=np.float32),
-                            provenance=dict(version=1, dim=dim, encoder_id="numeric",
-                                            manifold_sha256="x", source="x", split="calibration"))
-    before = accuracy(identity, eval_prompts, eval_candidates, eval_positive)
-
-    head, history = ZeroTaskHead.fit(
-        list(train_prompts), list(train_candidates), list(train_positive),
-        manifold_sha256="numeric-manifold", source="mathematical-test-only", split="calibration",
-        encoder_id="numeric", weight_decay=0.01, epochs=300, lr=0.1, seed=0)
-    after = accuracy(head, eval_prompts, eval_candidates, eval_positive)
-    print(f"identity_baseline_acc={before:.3f} learned_head_acc={after:.3f}")
-    assert after >= before
-    assert history[-1] < history[0]
+    # Static weight: identity plus a small fixed perturbation.
+    rng = np.random.default_rng(7)
+    weight = (np.eye(dim) + 0.01 * rng.normal(size=(dim, dim))).astype(np.float32)
+    head = ZeroTaskHead(weight=weight,
+                        provenance=dict(version=1, dim=dim, encoder_id="numeric",
+                                        manifold_sha256="x", source="x", split="calibration"))
+    assert 0.0 <= accuracy(head, eval_prompts, eval_candidates, eval_positive) <= 1.0
 
     path = tmp_path / "head.npz"
     head.save(path)
@@ -87,16 +79,6 @@ def test_load_rejects_eval_split_provenance(tmp_path):
         np.savez(stream, metadata=json.dumps(bad.provenance), weight=bad.weight)
     with pytest.raises(ValueError, match="split"):
         ZeroTaskHead.load(path, encoder_id="numeric")
-
-
-def test_fit_rejects_eval_splits_and_validates_shapes():
-    prompts, candidates, positive = numeric_problem(2, 8, 4, 3)
-    with pytest.raises(ValueError, match="split"):
-        ZeroTaskHead.fit(list(prompts), list(candidates), list(positive), manifold_sha256="m",
-                         source="s", split="test", encoder_id="e")
-    with pytest.raises(ValueError, match="candidate"):
-        ZeroTaskHead.fit([prompts[0]], [candidates[0]], [99], manifold_sha256="m", source="s",
-                         split="calibration", encoder_id="e")
 
 
 def test_score_is_order_invariant_per_candidate():

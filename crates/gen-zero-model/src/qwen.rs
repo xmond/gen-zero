@@ -36,7 +36,7 @@ use candle_core::quantized::{gguf_file, QMatMul};
 use candle_core::{DType, Device, Module, Tensor, D};
 use std::fs::File;
 use std::io::{BufReader, Read};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Longest sequence (past + new tokens) any call may build. Longer input is
 /// refused, never truncated. Same bound as the Python runtime this replaces.
@@ -179,13 +179,18 @@ impl KvCache {
     }
 }
 
+/// Attention projections that accept a merged LoRA delta.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LoraTarget {
+    QProj,
+    VProj,
+}
+
 /// Qwen2 decoder with tied (or separate) output head. Immutable after load,
 /// so one instance serves concurrent requests.
 pub struct QwenModel {
     cfg: QwenConfig,
     format: WeightFormat,
-    #[allow(dead_code)]
-    source: PathBuf,
     embed: Tensor,
     layers: Vec<Layer>,
     norm: Tensor,
@@ -236,10 +241,6 @@ impl QwenModel {
 
     pub fn format(&self) -> &WeightFormat {
         &self.format
-    }
-
-    pub fn source(&self) -> &Path {
-        &self.source
     }
 
     pub fn device(&self) -> &Device {
@@ -368,7 +369,6 @@ impl QwenModel {
         Ok(Self {
             cfg,
             format: WeightFormat::Gguf { dtype },
-            source: path.to_path_buf(),
             embed,
             layers,
             norm,
@@ -468,7 +468,6 @@ impl QwenModel {
         Ok(Self {
             cfg,
             format: WeightFormat::SafetensorsF32,
-            source: dir.to_path_buf(),
             embed,
             layers,
             norm,
@@ -477,6 +476,48 @@ impl QwenModel {
             sin,
             device,
         })
+    }
+
+    /// Fold a LoRA update into one attention projection, `W += delta`, where
+    /// `delta = (alpha / rank) * B @ A` has the weight's `[out, in]` shape.
+    /// Exact for inference (LoRA without dropout is linear). Only full
+    /// precision safetensors weights can be patched; quantized GGUF weights
+    /// are refused rather than dequantized behind the caller's back.
+    pub fn merge_linear_delta(
+        &mut self,
+        layer: usize,
+        target: LoraTarget,
+        delta: &Tensor,
+    ) -> Result<(), ModelError> {
+        let n = self.layers.len();
+        let l = self.layers.get_mut(layer).ok_or_else(|| {
+            ModelError::QwenLoad(format!("LoRA delta for layer {layer}, model has {n}"))
+        })?;
+        let slot = match target {
+            LoraTarget::QProj => &mut l.q,
+            LoraTarget::VProj => &mut l.v,
+        };
+        let QMatMul::Tensor(w) = slot else {
+            return Err(ModelError::QwenLoad(format!(
+                "layer {layer} {target:?} is quantized; LoRA merge needs f32 safetensors weights"
+            )));
+        };
+        if w.dims() != delta.dims() {
+            return Err(ModelError::QwenLoad(format!(
+                "layer {layer} {target:?}: weight {:?} vs LoRA delta {:?}",
+                w.dims(),
+                delta.dims()
+            )));
+        }
+        let merged = w
+            .add(
+                &delta
+                    .to_dtype(w.dtype())
+                    .map_err(candle_err("lora delta dtype"))?,
+            )
+            .map_err(candle_err("lora merge"))?;
+        *slot = QMatMul::Tensor(merged);
+        Ok(())
     }
 
     /// Causal mask for `t` new tokens after `past` cached ones: 0 where a

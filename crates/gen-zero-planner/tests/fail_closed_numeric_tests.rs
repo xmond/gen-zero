@@ -124,6 +124,7 @@ fn decide_request<'a>(state: &'a FullLatent, candidates: &'a [ActionId]) -> Deci
         entropy: gen_zero_core::NormalizedEntropy::ZERO,
         return_trajectory: false,
         horizon: 2,
+        causal_triad: None,
     }
 }
 

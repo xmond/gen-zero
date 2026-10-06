@@ -97,22 +97,30 @@ text retrieval over payload-carrying nodes.
     implies. Both keep the coarse-grain order. Checkpoints restore bands and
     parents.
   - Retrieval: `hybrid_rag_search(coord, hdc, top_k, crag_margin, ppr_alpha,
-    ppr_iters)` runs three stages under one read lock: Hamming prefilter to
-    `4 * top_k` live nodes, product-geodesic rerank (with the CRAG neighbor
-    expansion) to `top_k` anchors, then per-track normalization of each
-    anchor distance by the maximum distance among that track's recalled
-    anchors (a zero maximum leaves all distances at zero), followed by PPR
-    seeded with `1 / (1 + normalized_distance)`. The normalization is
-    candidate-relative (`distance_normalization: per_track_max`), not semantic
-    calibration; with one nonzero candidate its normalized distance is `1`.
-    Returned `anchor_distance` values are dimensionless. Hits are every anchor plus up to `top_k` nodes
+    ppr_iters)` runs three stages under one read lock on the lexical/chart
+    track only: Hamming prefilter to `4 * top_k` live nodes, product-geodesic
+    rerank (with the CRAG neighbor expansion) to `top_k` anchors, then
+    per-track normalization of each anchor distance by the maximum distance
+    among that track's recalled anchors (a zero maximum leaves all distances
+    at zero), followed by PPR seeded with `1 / (1 + normalized_distance)`. The
+    normalization is candidate-relative (`distance_normalization:
+    per_track_max`), not semantic calibration; with one nonzero candidate its
+    normalized distance is `1`. Returned `anchor_distance` values are
+    dimensionless. Hits are every anchor plus up to `top_k` nodes
     reached only by diffusion, ordered by PPR score, each with its confidence,
     payload, `source_uri`, `timestamp_ns` and digest. Internal reflection
     evidence is excluded from general recall, anchors and diffusion hits.
-    `hybrid_rag_search_query(text?, vector?, ...)` projects a query text
-    (`LodGraph::project_text`), a query vector (`LodGraph::project_dense`) or
-    both with the graph's own projector first. With both, each track gives up
-    to `top_k` anchors (at most `3 * top_k` hits).
+    `hybrid_rag_search_query(text?, vector?, embedder?, ...)` projects a query
+    text (`LodGraph::project_text`), a query vector (`LodGraph::project_dense`)
+    or both with the graph's own projector first. The vector track's stage 1
+    and 2 differ from the chart track's: its Hamming prefilter keeps at least
+    `DENSE_RERANK_POOL` (256) candidates, not `4 * top_k`, and it reranks that
+    pool by the exact angle between the raw query vector and each node's raw
+    embedding, not product-geodesic distance. With both text and vector, each
+    track gives up to `top_k` anchors (at most `3 * top_k` hits). `embedder`
+    is the caller's declared identity of the model that made the query vector;
+    when it disagrees with the graph's locked `embedder_space`, the query is
+    refused rather than silently compared across models.
   - Anchors: a node is measured by its closest anchor. Text and coordinate
     queries see its own coordinate and one lexical projection per alias
     (`LodNode::aliases`, at most 16); vector queries see only the dense
@@ -120,14 +128,19 @@ text retrieval over payload-carrying nodes.
     `HybridRagResult::searchable_nodes` counts the nodes a query could be
     compared with. `RagHit::anchor_match` names the anchor that won. A node
     with `Placement::Embedding` takes the dense projection as its coordinate.
-    All embeddings of one graph have one dimension, fixed by the first.
+    All embeddings of one graph have one dimension, fixed by the first, and if
+    a node declares `LodNode::embedder_space` (the model identity behind its
+    embedding), the graph locks that too, from the first node to declare one;
+    a later embedding declaring a different identity is refused even at the
+    same dimension, since two models can embed different semantic spaces at
+    the same width.
   - Alias links: at insert, a node is linked by two `Semantic` edges (one each
     way, weight 1) to every earlier node holding the same alias (same tokens,
     any case and spacing; at most 64 holders per alias). PPR follows every edge
     type in the edge's direction, so a query that anchors one of them reaches
     the other after the next flush.
   - Limits: the lexical
-    projection puts a translation ("valve closure" / "关闭主阀") as far away as
+    projection puts a translation ("valve closure" / "закрыть главный клапан") as far away as
     an unrelated text, so such a pair is found only through an alias, an edge
     or the dense track. The dense track accepts vectors from an external model
     but this crate holds no model and adds no learned semantics or cross-model

@@ -30,7 +30,7 @@ sys.path.insert(0, str(REPO / "python"))
 ART = REPO / "benchmarks" / "artifacts" / "zero"
 PROMPTS = [
     "Which of the following best explains why the sky appears blue during the day on Earth?",
-    "如果一个物体的质量增加一倍而受力不变，它的加速度会怎样变化？",
+    "If an object's mass doubles while the force stays constant, how does its acceleration change?",
     "def f(xs):\n    return sorted(xs)[-1]\nprint(f([3, 9, 2]))",
 ]
 

@@ -58,4 +58,47 @@ pub enum StorageError {
 
     #[error("Reflex trace blob corrupt: {0}")]
     CorruptBlob(String),
+
+    #[error("Durable refusal store schema drift on table {table}: expected columns {expected:?}, got {actual:?}")]
+    DurableSchemaMismatch {
+        table: &'static str,
+        expected: Vec<String>,
+        actual: Vec<String>,
+    },
+
+    #[error("Durable refusal trace not found: {0}")]
+    DurableTraceNotFound(String),
+
+    #[error(
+        "Durable refusal trace {trace_id} is not in the expected arbitration state: expected {expected}, got {actual}"
+    )]
+    InvalidArbitrationState {
+        trace_id: String,
+        expected: &'static str,
+        actual: String,
+    },
+
+    #[error("Durable refusal trace {0} is already consumed")]
+    TraceAlreadyConsumed(String),
+
+    #[error("Durable patch not found: {0}")]
+    DurablePatchNotFound(String),
+
+    #[error("Durable patch {0} has already been rolled back")]
+    PatchAlreadyRolledBack(String),
+
+    #[error("Durable patch {patch_id} is not ACTIVE (status {status})")]
+    PatchNotActive { patch_id: String, status: String },
+
+    #[error("Invalid canary metric request: {0}")]
+    InvalidCanaryMetric(String),
+
+    #[error("Invalid patch commit: {0}")]
+    InvalidPatchCommit(String),
+
+    #[error("Unrecognized arbitration status string: {0:?}")]
+    InvalidArbitrationStatusString(String),
+
+    #[error("Durable refusal store mutex poisoned")]
+    LockPoisoned,
 }

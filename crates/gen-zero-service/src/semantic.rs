@@ -171,6 +171,12 @@ mod causal_prior_tests {
     }
 }
 
+/// Most tokens one request may send through [`NativeQwen::embed_texts`]. On a
+/// loaded 24-core host one token of embedding cost about 11 ms (a 64 KiB
+/// payload, 13389 tokens, took 148 s), so this bounds one call to under a
+/// minute of one scorer slot. The startup seed is not bounded.
+pub const MAX_EMBED_TOKENS_PER_CALL: usize = 4096;
+
 /// Settings of the in-process scorer.
 #[derive(Clone, Debug)]
 pub struct NativeConfig {
@@ -258,7 +264,77 @@ impl NativeQwen {
             "model": self.info(),
             "simd": gen_zero_model::qwen::SIMD_KERNELS,
             "load_ms": self.load_ms,
+            "pooling": self.pooling().as_str(),
         })
+    }
+
+    /// The pooling every production dense embedding call ([`Self::embed`],
+    /// [`Self::embed_texts`]) uses: length-normalized mean, best for
+    /// document/long-text retrieval (see [`gen_zero_model::PoolingMode::Mean`]).
+    pub fn pooling(&self) -> gen_zero_model::PoolingMode {
+        gen_zero_model::PoolingMode::Mean
+    }
+
+    /// Id of the vectors [`Self::embed_texts`] returns.
+    pub fn embedder_id(&self) -> String {
+        self.scorer.embedder_id_for(self.pooling())
+    }
+
+    /// Width of every vector [`Self::embed`] returns (896 for Qwen2.5-0.5B).
+    pub fn embedding_dim(&self) -> usize {
+        self.info().hidden_size
+    }
+
+    /// Unit-norm mean-pooled final hidden state of `text`
+    /// ([`QwenSemanticScorer::embed`]), within [`MAX_EMBED_TOKENS_PER_CALL`].
+    pub async fn embed(&self, text: &str) -> Result<Vec<f32>, BridgeError> {
+        let mut vectors = self.embed_texts(vec![text.to_string()]).await?;
+        vectors
+            .pop()
+            .ok_or_else(|| BridgeError::Native("no vector for one text".into()))
+    }
+
+    /// [`Self::embed`] for every text, in order, under one scorer slot. All
+    /// texts together may hold at most [`MAX_EMBED_TOKENS_PER_CALL`] tokens;
+    /// more is refused before any forward pass, never cut.
+    pub async fn embed_texts(&self, texts: Vec<String>) -> Result<Vec<Vec<f32>>, BridgeError> {
+        let pooling = self.pooling();
+        let pooled = self
+            .run(move |s| {
+                let ids = texts
+                    .iter()
+                    .map(|t| s.encode(t))
+                    .collect::<Result<Vec<_>, _>>()?;
+                let tokens: usize = ids.iter().map(Vec::len).sum();
+                if tokens > MAX_EMBED_TOKENS_PER_CALL {
+                    return Ok(Err(tokens));
+                }
+                ids.iter()
+                    .map(|i| s.embed_ids_with_pooling(i, pooling))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map(Ok)
+            })
+            .await?;
+        pooled.map_err(|tokens| BridgeError::EmbedBudget {
+            tokens,
+            max: MAX_EMBED_TOKENS_PER_CALL,
+        })
+    }
+
+    /// [`Self::embed_texts`] on the calling thread, for startup work that runs
+    /// before any request (the graph seed). It takes a scorer slot without
+    /// waiting and fails as overloaded when none is free.
+    pub fn embed_texts_blocking(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, BridgeError> {
+        let _permit = self
+            .slots
+            .try_acquire()
+            .map_err(|_| BridgeError::Overloaded { waited_ms: 0 })?;
+        let pooling = self.pooling();
+        texts
+            .iter()
+            .map(|t| self.scorer.embed_with_pooling(t, pooling))
+            .collect::<Result<_, _>>()
+            .map_err(|e| BridgeError::Native(e.to_string()))
     }
 
     /// Run one CPU-bound scorer call off the async executor, after a slot is free.
@@ -322,6 +398,27 @@ impl SemanticBackend {
                 })
             }
             Self::Remote(client) => json!({"kind": "python_http", "endpoint": client.endpoint()}),
+        }
+    }
+
+    /// The in-process scorer when it can embed text; the Python bridge has
+    /// no text embedder.
+    pub fn embedder(&self) -> Option<&NativeQwen> {
+        match self {
+            Self::Native(native) => Some(native),
+            Self::Remote(_) => None,
+        }
+    }
+
+    /// Dense embedding of `text` ([`NativeQwen::embed`]). The Python bridge
+    /// refuses: it exposes no text embedding.
+    pub async fn embed(&self, text: &str) -> Result<Vec<f32>, BridgeError> {
+        match self {
+            Self::Native(native) => native.embed(text).await,
+            Self::Remote(client) => Err(BridgeError::NoEmbedder(format!(
+                "the Python bridge at {}",
+                client.endpoint()
+            ))),
         }
     }
 

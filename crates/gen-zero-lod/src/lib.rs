@@ -8,26 +8,39 @@
 //! with rollback, discrete and soft relation semirings, and retrieval: a
 //! lexical text-to-chart projector, a dense-vector-to-chart projector for
 //! embeddings an external model made, payload-carrying nodes with aliases, and
-//! a three-stage hybrid search (HDC prefilter, geodesic rerank, PPR diffusion).
+//! a three-stage hybrid search (HDC prefilter, geodesic rerank, PPR diffusion),
+//! and the causal AND/OR DAG laid out on the four bands with the closure
+//! potential the planner's causal triad steers by ([`causal_lod`]), and the
+//! causal operator contract binding nodes to hard tools and soft operators
+//! behind a precondition, nonce and postcondition gate ([`operator`]).
 
 #![allow(clippy::manual_is_multiple_of)]
 
+pub mod builtin_operator;
+pub mod causal_lod;
 pub mod error;
 pub mod graph;
 pub mod manifold;
 pub mod node;
+pub mod operator;
 pub mod ppr;
 pub mod projection;
 pub mod semiring;
 pub mod weighted;
 
+pub use causal_lod::{
+    CausalCluster, CausalLod, CausalLodContext, CausalLodError, CausalLodSummary, CausalMaskSource,
+    CausalMilestone, CausalPotential, ClusterKind, MilestoneKind, MAX_CAUSAL_ATOMS,
+    SYNTHETIC_ENTITY_BASE,
+};
 pub use error::LodError;
 pub use graph::{
-    AdaptedBlock, AnchorMatch, BufferedEdge, CsrGraph, EdgeType, FixedPointReport, FlushReport,
-    GraphCheckpoint, HybridRagResult, LodGraph, PprRanking, RagDiffusion, RagHit, ReflectionReport,
+    AdaptedBlock, AnchorMatch, BufferedEdge, ConflictDirection, ConflictEdge, CsrGraph,
+    DiffusionQuality, EdgeType, FixedPointReport, FlushReport, GraphCheckpoint, GraphState,
+    HybridRagResult, LodGraph, PprRanking, RagDiffusion, RagHit, ReflectionReport,
     ReflectionRevocation, StatusTransition, ADMISSION_BETA, ADMISSION_GAMMA, ALIAS_LINK_WEIGHT,
-    DEFAULT_FALSIFICATION_GAIN, HYBRID_PPR_TOLERANCE, MAX_ALIAS_HOLDERS, MAX_FIXED_POINT_STEPS,
-    MAX_GRAPH_NODES,
+    DEFAULT_FALSIFICATION_GAIN, DENSE_RERANK_POOL, HYBRID_PPR_TOLERANCE, MAX_ALIAS_HOLDERS,
+    MAX_FIXED_POINT_STEPS, MAX_GRAPH_NODES,
 };
 pub use manifold::{
     ContainmentCriteria, ContainmentScore, Digest, Epochs, FiberId, GeometryParams, Layout,
@@ -39,6 +52,11 @@ pub use node::{
     payload_digest, scale_from_depth, ChartAnchor, EpistemicStatus, LodBand, LodNode, Placement,
     ZoomDirection, MAX_ALIASES, MAX_ALIAS_BYTES, MAX_EMBEDDING_DIM, MAX_PAYLOAD_BYTES,
     MAX_SOURCE_URI_BYTES, MIN_EMBEDDING_DIM,
+};
+pub use operator::{
+    CausalOperator, OperatorExecution, OperatorInput, OperatorKind, OperatorOutput,
+    OperatorSignature, PostconditionReport, MAX_OPERATOR_NAME_BYTES, MAX_OPERATOR_SPACE_BYTES,
+    MAX_OPERATOR_VERSION_BYTES, MAX_REGISTERED_OPERATORS, MAX_SPENT_NONCES,
 };
 pub use ppr::{compute_ppr_csr, PprScores};
 pub use projection::{
