@@ -3,6 +3,8 @@
 //! Quantized micro-kernel fleet, Mixture of Vectors (MoV) vector fusion,
 //! Fallback Watchdog, and bounded-RAM LRU Fleet Scheduler.
 
+#![allow(deprecated)]
+
 pub mod core_type;
 pub mod error;
 pub mod mov;

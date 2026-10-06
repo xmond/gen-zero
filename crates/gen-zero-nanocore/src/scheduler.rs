@@ -1,5 +1,7 @@
 //! gen-zero-nanocore Fleet Scheduler with bounded RAM budget and LRU eviction.
 
+#![allow(deprecated)]
+
 use crate::core_type::{DomainId, NanoCoreInstance};
 use crate::error::NanoCoreError;
 use parking_lot::RwLock;
