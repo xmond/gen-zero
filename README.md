@@ -300,23 +300,6 @@ The algorithms and formal proofs behind Gen-Zero are documented in a series of f
 | 4 | [Equivariant Choice Head](https://gen-zero.ai/papers/Paper4_Equivariant_Choice_Head_Interactive.html) | Permutation-invariant candidate heads that eliminate positional ordering bias. |
 | 5 | [Semantic Risk Gating](https://gen-zero.ai/papers/Paper5_Semantic_Risk_Gating_Interactive.html) | Fail-closed decision boundaries and entropy-calibrated risk escalation. |
 
----
-
-## 🔒 Security & Anti-Leakage Gate
-
-To prevent accidental inclusion of proprietary model binaries, private keys, or training scripts into the public repository, Gen-Zero includes an automated static gatekeeper:
-
-```bash
-# Run the anti-leakage static security linter
-python3 scripts/anti_leakage_lint.py --respect-gitignore
-
-# Install the pre-push safety hook locally
-python3 scripts/anti_leakage_lint.py --install-hook
-```
-
-This gate runs automatically on every pull request via GitHub Actions ([`.github/workflows/anti_leakage_gate.yml`](.github/workflows/anti_leakage_gate.yml)), enforcing zero leakage of non-public intellectual property.
-
----
 
 ## 📄 License
 
