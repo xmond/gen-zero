@@ -24046,7 +24046,7 @@
     {
       "file": "crates/gen-zero-service/src/uds.rs",
       "declared_modules": [],
-      "public_symbols": 9
+      "public_symbols": 14
     },
     {
       "file": "crates/gen-zero-service/src/worldsim.rs",
