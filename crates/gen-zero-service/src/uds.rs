@@ -232,6 +232,7 @@ pub struct UdsClient;
 
 #[cfg(not(unix))]
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct UdsSocketGuard(PathBuf);
 
 #[cfg(not(unix))]
