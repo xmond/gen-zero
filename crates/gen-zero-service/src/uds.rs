@@ -5,19 +5,24 @@
 //!
 //! JSON-RPC notifications get no reply frame, as on stdio. The server never
 //! sends a zero-length frame.
-use crate::{error::ServiceError, server::shutdown_signal, McpServer};
+use crate::{error::ServiceError, McpServer};
 use std::{
     future::Future,
     path::{Path, PathBuf},
     sync::Arc,
 };
+
+pub const MAX_UDS_FRAME_BYTES: usize = 2 * 1024 * 1024;
+
+#[cfg(unix)]
+use crate::server::shutdown_signal;
+#[cfg(unix)]
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{UnixListener, UnixStream},
 };
 
-pub const MAX_UDS_FRAME_BYTES: usize = 2 * 1024 * 1024;
-
+#[cfg(unix)]
 fn check_frame_length(length: usize) -> std::io::Result<()> {
     if length == 0 || length > MAX_UDS_FRAME_BYTES {
         return Err(std::io::Error::new(
@@ -28,6 +33,7 @@ fn check_frame_length(length: usize) -> std::io::Result<()> {
     Ok(())
 }
 
+#[cfg(unix)]
 async fn write_frame(stream: &mut UnixStream, body: &[u8]) -> std::io::Result<()> {
     check_frame_length(body.len())?;
     stream.write_all(&(body.len() as u32).to_be_bytes()).await?;
@@ -35,8 +41,10 @@ async fn write_frame(stream: &mut UnixStream, body: &[u8]) -> std::io::Result<()
 }
 
 /// A connected client channel.
+#[cfg(unix)]
 pub struct UdsClient(UnixStream);
 
+#[cfg(unix)]
 impl UdsClient {
     pub async fn connect(path: impl AsRef<Path>) -> std::io::Result<Self> {
         Ok(Self(UnixStream::connect(path).await?))
@@ -63,9 +71,11 @@ impl UdsClient {
 /// Removes the socket file when dropped, so a normal shutdown, an accept
 /// error, or a cancelled serve future leaves no file behind. A killed process
 /// leaves the file; the next [`bind_uds`] removes it.
+#[cfg(unix)]
 #[derive(Debug)]
 pub struct UdsSocketGuard(PathBuf);
 
+#[cfg(unix)]
 impl Drop for UdsSocketGuard {
     fn drop(&mut self) {
         match std::fs::remove_file(&self.0) {
@@ -82,6 +92,7 @@ impl Drop for UdsSocketGuard {
 /// dead server is removed with a warning. A socket that still accepts
 /// connections, or a path that is not a socket, is refused: replacing either
 /// would take over another server or destroy an unrelated file.
+#[cfg(unix)]
 pub fn bind_uds(path: &Path) -> Result<(UnixListener, UdsSocketGuard), ServiceError> {
     use std::os::unix::fs::{FileTypeExt, PermissionsExt};
     match std::fs::symlink_metadata(path) {
@@ -120,6 +131,7 @@ pub fn bind_uds(path: &Path) -> Result<(UnixListener, UdsSocketGuard), ServiceEr
     Ok((listener, guard))
 }
 
+#[cfg(unix)]
 impl McpServer {
     /// Serve MCP on a Unix socket until Ctrl-C or SIGTERM. The socket file is
     /// removed on return.
@@ -208,5 +220,44 @@ impl McpServer {
             }
             write_frame(&mut stream, response.as_bytes()).await?;
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Non-Unix fallback stubs (Windows, etc.)
+// ---------------------------------------------------------------------------
+
+#[cfg(not(unix))]
+pub struct UdsClient;
+
+#[cfg(not(unix))]
+#[derive(Debug)]
+pub struct UdsSocketGuard(PathBuf);
+
+#[cfg(not(unix))]
+pub fn bind_uds(_path: &Path) -> Result<((), UdsSocketGuard), ServiceError> {
+    Err(ServiceError::SafetyRejected(
+        "Unix domain socket (UDS) transport is only supported on Unix platforms".into(),
+    ))
+}
+
+#[cfg(not(unix))]
+impl McpServer {
+    /// Serve MCP on a Unix socket (unsupported on non-Unix platforms).
+    pub async fn run_uds(self: Arc<Self>, _path: impl AsRef<Path>) -> Result<(), ServiceError> {
+        Err(ServiceError::SafetyRejected(
+            "Unix domain socket (UDS) transport is only supported on Unix platforms".into(),
+        ))
+    }
+
+    /// Serve MCP on a Unix socket until shutdown (unsupported on non-Unix platforms).
+    pub async fn run_uds_until(
+        self: Arc<Self>,
+        _path: impl AsRef<Path>,
+        _shutdown: impl Future<Output = ()>,
+    ) -> Result<(), ServiceError> {
+        Err(ServiceError::SafetyRejected(
+            "Unix domain socket (UDS) transport is only supported on Unix platforms".into(),
+        ))
     }
 }

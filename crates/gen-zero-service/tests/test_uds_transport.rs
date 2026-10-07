@@ -1,3 +1,4 @@
+#![cfg(unix)]
 //! UDS transport over a real socket: MCP handshake, malformed frames sent as
 //! raw bytes to the server, and socket file lifecycle.
 use gen_zero_service::{
