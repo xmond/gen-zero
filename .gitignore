@@ -74,3 +74,6 @@ htmlcov/
 __pycache__/
 *.pyc
 *.pyo
+
+# agent-loop scratch state (triage, patrol and nightly-review runs)
+.agent-loop/

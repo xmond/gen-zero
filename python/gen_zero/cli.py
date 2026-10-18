@@ -38,7 +38,6 @@ from gen_zero.mcp.server import (
     execute_zero_route,
     execute_zero_imagine,
     execute_zero_stream,
-    execute_zero_grep,
     resolve_endpoint,
     resolve_api_token,
 )
@@ -201,7 +200,6 @@ def cmd_route(args: argparse.Namespace) -> int:
 
     timing = data.get("timing_ms", 0.0)
     total = data.get("total_input_tools", len(tools_data))
-    pruned_names = data.get("pruned_tool_names", [])
     pruned_tools = data.get("pruned_tools", [])
 
     print(f"{c['BOLD']}{c['CYAN']}[Gen-Zero Router]{c['RESET']} Pruned {total} tools down to {len(pruned_tools)} in {c['GREEN']}{timing}ms{c['RESET']}")
@@ -707,6 +705,56 @@ def cmd_manifold_fuse(args: argparse.Namespace) -> int:
 
 
 # ---------------------------------------------------------------------------
+# Subcommand: manifold-infer (batched readout of a compiled causal codebook)
+# ---------------------------------------------------------------------------
+def cmd_manifold_infer(args: argparse.Namespace) -> int:
+    c = _colors(args.no_color)
+    import numpy as np
+    from gen_zero.causal.compiled_manifold_runtime import CompiledManifoldRuntime
+
+    try:
+        runtime = CompiledManifoldRuntime.load(args.codebook)
+        sec = runtime.section(args.task)
+        with np.load(args.features, allow_pickle=False) as data:
+            X = np.asarray(_load_block(data, args.block, args.features), dtype=np.float32)
+            C = (np.asarray(_load_block(data, args.cf_block, args.features), dtype=np.float32)
+                 if args.cf_block else None)
+        if not args.projected:
+            # Raw features go through the section's own compiled PCA basis.
+            X = (X - sec.x_mean) @ sec.x_basis()
+            if C is not None:
+                if sec.c_basis_q is None:
+                    raise ValueError(f"task {args.task!r} has no counterfactual basis")
+                C = (C - sec.c_mean) @ sec.c_basis()
+        results = runtime.infer_batch(args.task, X, C)
+        predictions = [r.prediction for r in results]
+        report: Dict[str, Any] = {
+            "codebook": args.codebook, "payload_sha256": runtime.payload_sha256,
+            "task": args.task, "rows": len(results), "k": sec.k,
+            "predictions": predictions,
+            "class_counts": [int(v) for v in np.bincount(predictions, minlength=sec.k)],
+        }
+        if args.label_key:
+            with np.load(args.features, allow_pickle=False) as data:
+                y = np.asarray(_load_block(data, args.label_key, args.features))
+            if y.shape != (len(results),):
+                raise ValueError(f"labels must have shape ({len(results)},), got {y.shape}")
+            report["accuracy"] = float(np.mean(np.asarray(predictions) == y))
+    except Exception as e:
+        sys.stderr.write(f"{c['RED']}Error: {e}{c['RESET']}\n")
+        return 1
+    if args.json:
+        print(json.dumps(report, indent=2))
+        return 0
+    print(f"{c['BOLD']}{c['CYAN']}[Gen-Zero Manifold Infer]{c['RESET']}")
+    print(f"  {c['BOLD']}Task:{c['RESET']}   {report['task']} (k={report['k']}, rows={report['rows']})")
+    print(f"  {c['BOLD']}Counts:{c['RESET']} {report['class_counts']}")
+    if "accuracy" in report:
+        print(f"  {c['BOLD']}Acc:{c['RESET']}    {report['accuracy']:.4f}")
+    return 0
+
+
+# ---------------------------------------------------------------------------
 # Subcommand: status / version
 # ---------------------------------------------------------------------------
 def _load_cad_items(args: argparse.Namespace) -> List[tuple]:
@@ -739,7 +787,8 @@ def cmd_cad(args: argparse.Namespace) -> int:
             if args.numa_pin:
                 raise ValueError("--numa-pin requires --gguf (NUMA pinning is only supported for GGUF)")
             from gen_zero.causal.cad_engine import CADEngine
-            engine = CADEngine.from_hf(args.hf_model, tokenizer_path=args.hf_tokenizer, head_path=args.head, alpha=args.alpha)
+            engine = CADEngine.from_hf(args.hf_model, tokenizer_path=args.hf_tokenizer, head_path=args.head,
+                                       alpha=args.alpha, adaptive=args.adaptive)
             results = [engine.classify(q, ctx).to_dict() for q, ctx in items]
         else:
             if args.hf_tokenizer:
@@ -748,12 +797,12 @@ def cmd_cad(args: argparse.Namespace) -> int:
                 from gen_zero.causal.gguf_parallel_pool import GGUFParallelPool
                 with GGUFParallelPool(args.gguf, workers=args.workers, threads_per_worker=args.threads,
                                       n_ctx=args.n_ctx, head_path=args.head, numa_pin=args.numa_pin,
-                                      use_mmap=not args.numa_pin, alpha=args.alpha) as pool:
+                                      use_mmap=not args.numa_pin, alpha=args.alpha, adaptive=args.adaptive) as pool:
                     results = pool.classify_batch(items)
             else:
                 from gen_zero.causal.cad_engine import CADEngine
                 engine = CADEngine.from_gguf(args.gguf, head_path=args.head, n_ctx=args.n_ctx,
-                                             n_threads=args.threads, alpha=args.alpha)
+                                             n_threads=args.threads, alpha=args.alpha, adaptive=args.adaptive)
                 results = [engine.classify(q, ctx).to_dict() for q, ctx in items]
     except Exception as e:
         sys.stderr.write(f"{c['RED']}Error: {type(e).__name__}: {e}{c['RESET']}\n")
@@ -765,6 +814,161 @@ def cmd_cad(args: argparse.Namespace) -> int:
         mode = "calibrated" if r["calibrated"] else "UNCALIBRATED (no --head)"
         probs = " ".join(f"{k}={v:.3f}" for k, v in r["probabilities"].items())
         print(f"{c['BOLD']}{r['label']}{c['RESET']}  {probs}  margin={r['margin']:.3f}  [{mode}]  {question[:60]}")
+    return 0
+
+
+def cmd_layerwise_mcts(args: argparse.Namespace) -> int:
+    """Run layerwise MCTS early exit on a local Qwen2 checkpoint (Qwen2.5-1.5B is the target)."""
+    try:
+        import torch
+        from transformers import AutoModelForCausalLM
+        from gen_zero.causal.qwen_inter_layer_mcts import (
+            MctsLayerwiseQwenRunner, VerbalizerProbe, decoder_layers,
+        )
+
+        if not args.hf_model:
+            raise ValueError("--hf-model (or GENZERO_LAYERWISE_HF_MODEL) must name a local Qwen2 "
+                             "checkpoint directory, e.g. Qwen2.5-1.5B-Instruct")
+        model_path = Path(args.hf_model)
+        if not model_path.is_dir():
+            raise ValueError(f"model directory does not exist: {model_path}")
+        if not args.input_ids or not args.label_token_ids:
+            raise ValueError("--input-ids and --label-token-ids are required")
+        token_ids = json.loads(args.input_ids)
+        groups = json.loads(args.label_token_ids)
+
+        def _is_token_row(row: object) -> bool:
+            return isinstance(row, list) and bool(row) and all(
+                isinstance(x, int) and not isinstance(x, bool) and x >= 0 for x in row)
+
+        if not _is_token_row(token_ids):
+            raise ValueError("--input-ids must be a nonempty JSON array of token ids")
+        if not isinstance(groups, list) or len(groups) < 2 or not all(_is_token_row(g) for g in groups):
+            raise ValueError("--label-token-ids must contain at least two nonempty token-id arrays")
+        if not (0 < args.ffn_keep_ratio <= 1):
+            raise ValueError("--ffn-keep-ratio must be finite and in (0, 1]")
+        candidate_rows: list = []
+        if args.candidates:
+            candidate_rows = json.loads(Path(args.candidates).read_text(encoding="utf-8"))
+            if not isinstance(candidate_rows, list) or not candidate_rows or not all(
+                    _is_token_row(row) for row in candidate_rows):
+                raise ValueError("--candidates must be a nonempty JSON array of token-id arrays")
+        # Read and check the anchor file before loading the model: an empty or one-row file
+        # would otherwise slip past the calibration gates below.
+        anchor_rows: list = []
+        labels: list = []
+        if args.anchors:
+            anchor_data = json.loads(Path(args.anchors).read_text(encoding="utf-8"))
+            if not isinstance(anchor_data, dict):
+                raise ValueError("--anchors must be a JSON object with input_ids and labels")
+            anchor_rows = anchor_data.get("input_ids")
+            labels = anchor_data.get("labels")
+            if not isinstance(anchor_rows, list) or not isinstance(labels, list):
+                raise ValueError("--anchors needs input_ids and labels arrays")
+            if len(anchor_rows) != len(labels) or len(anchor_rows) < 2:
+                raise ValueError(f"--anchors needs at least 2 rows with one label each; got "
+                                 f"{len(anchor_rows)} input_ids and {len(labels)} labels")
+            if not all(_is_token_row(row) for row in anchor_rows):
+                raise ValueError("--anchors input_ids must be nonempty arrays of token ids")
+            if any(isinstance(y, bool) or not isinstance(y, int) or not 0 <= y < len(groups)
+                   for y in labels):
+                raise ValueError("--anchors labels must index --label-token-ids")
+        model = AutoModelForCausalLM.from_pretrained(str(model_path), local_files_only=True).eval()
+        probe = VerbalizerProbe(model, groups)
+        total = len(decoder_layers(model))
+        if total < 2:
+            raise ValueError("layerwise MCTS needs at least two decoder layers")
+        if total >= 16 and not args.anchors:
+            raise ValueError("--anchors is required for models with >= 16 layers to calibrate intermediate-layer probe statistics")
+        if args.checkpoints is not None:
+            checkpoints = json.loads(args.checkpoints)
+            if not isinstance(checkpoints, list) or not checkpoints or not all(isinstance(x, int) for x in checkpoints):
+                raise ValueError("--checkpoints must be a nonempty JSON array of layer indices")
+        elif total >= 16:
+            # Deep models: the mid-layer readout is only usable in the last quarter, so read
+            # L-8, L-6, L-4, L-2 (the certificate needs two readings before an exit).
+            checkpoints = [total - 8, total - 6, total - 4, total - 2]
+        else:
+            # Every second layer from the middle on: the certificate needs two readings.
+            checkpoints = list(range(max(0, total // 2 - 2), total - 1, 2))
+        min_exit_layer = args.min_exit_layer
+        if min_exit_layer is None and total >= 16:
+            min_exit_layer = int(0.75 * total)
+        runner_kwargs = dict(tau=args.tau, gamma=args.gamma, min_exit_layer=min_exit_layer,
+                             mcts_margin_min=args.mcts_margin_min)
+        runner = MctsLayerwiseQwenRunner(model, probe, checkpoints=checkpoints, **runner_kwargs)
+        # An empty memory is invalid. A labeled anchor file is required before enabling it.
+        anchors = [torch.tensor([row], dtype=torch.long) for row in anchor_rows]
+        if args.mcts_layer_weights and not anchors:
+            raise ValueError("--mcts-layer-weights requires --anchors")
+        if args.ffn_keep_ratio < 1:
+            if not anchors:
+                raise ValueError("--ffn-keep-ratio below 1 requires --anchors")
+            # Prune first: probe stats, memories and layer weights must be fitted on the
+            # sliced forward pass that predict runs, as in the benchmark suite.
+            runner.fit_ffn_pruning(anchors, list(range(total)), keep_ratio=args.ffn_keep_ratio)
+        if anchors:
+            # Every layer the run reads needs anchor probe stats: the checkpoints, the last
+            # layer, and the pruning cut when candidates are scored.
+            fit_layers = [*runner.checkpoints, total - 1]
+            if args.candidates:
+                fit_layers.append(args.shallow_layers - 1)
+            runner.fit_memories(anchors, labels, layers=fit_layers,
+                                fit_mcts_layer_weights=args.mcts_layer_weights)
+        decision = runner.predict(torch.tensor([token_ids], dtype=torch.long))
+        result = {
+            "layers_executed": decision.layers_executed,
+            "total_layers": total,
+            "early_exited": decision.early_exit,
+            "exit_layer": decision.exit_layer,
+            "predicted_index": decision.label,
+            "probs": [float(v) for v in decision.probs],
+            "checkpoints": runner.checkpoints,
+            "min_exit_layer": runner.min_exit_layer,
+            "model_path": str(model_path),
+            "layer_weights": {str(k): v for k, v in runner.layer_weights.items()},
+            "ffn_channels_executed": decision.ffn_channels_executed,
+            "ffn_dense_channels": decision.ffn_dense_channels,
+            "ffn_macs_executed": decision.ffn_macs_executed,
+            "ffn_dense_macs": decision.ffn_dense_macs,
+            "memory_entries": sum(len(item[0]) for item in runner.memories.values()),
+            "memory_lambda": {str(k): v[1] for k, v in runner.memories.items()},
+            "memory_anchor_count": len(anchors),
+            "probe_stats": {str(k): {"mean": m[0].tolist(), "std": sd[0].tolist()}
+                            for k, (m, sd) in runner.probe_stats.items()},
+        }
+        if decision.early_exit:
+            result["certificate"] = {"prob_gap": decision.margin, "tail_bound": decision.threshold,
+                                     "drift": decision.drift, "gamma_hat": decision.gamma_hat,
+                                     "mcts_visit_margin": decision.mcts_margin}
+        if candidate_rows:
+            rows = [torch.tensor([row], dtype=torch.long) for row in candidate_rows]
+            pruned = runner.score_candidates_mcts_pruned(
+                rows, args.target_label, args.shallow_layers, args.top_m,
+            )
+            result["pruning"] = {
+                "predicted_index": pruned.best, "survivors": pruned.survivors,
+                "layers_executed": pruned.layers_executed, "full_layers": pruned.full_layers,
+            }
+    except Exception as exc:
+        sys.stderr.write(f"Error: {type(exc).__name__}: {exc}\n")
+        return 1
+    if args.json:
+        print(json.dumps(result, ensure_ascii=False))
+        return 0
+    c = _colors(args.no_color)
+    exit_note = "early exit" if result["early_exited"] else "full depth"
+    print(f"{c['BOLD']}{c['CYAN']}[Gen-Zero Layerwise MCTS]{c['RESET']} {result['model_path']}")
+    print(f"  {c['BOLD']}Label:{c['RESET']}  {result['predicted_index']}  probs="
+          f"{[round(p, 4) for p in result['probs']]}")
+    print(f"  {c['BOLD']}Layers:{c['RESET']} {result['layers_executed']}/{result['total_layers']} "
+          f"({exit_note} at layer {result['exit_layer']})")
+    print(f"  {c['BOLD']}FFN:{c['RESET']}    {result['ffn_channels_executed']}/"
+          f"{result['ffn_dense_channels']} channels, anchors={result['memory_anchor_count']}")
+    if "pruning" in result:
+        pr = result["pruning"]
+        print(f"  {c['BOLD']}Prune:{c['RESET']}  best={pr['predicted_index']} survivors={pr['survivors']} "
+              f"layers={pr['layers_executed']}/{pr['full_layers']}")
     return 0
 
 
@@ -990,6 +1194,19 @@ Examples:
     p_fuse.add_argument("-o", "--output", help="Save the fused/encoded output matrix as .npy")
     p_fuse.add_argument("--json", action="store_true", help="Output a JSON summary instead of a human-readable one")
 
+    # manifold-infer
+    p_minf = subparsers.add_parser(
+        "manifold-infer", help="Batched fixed-point readout of a compiled causal codebook (.bin)")
+    p_minf.add_argument("--codebook", required=True, help="Path to a knowledge_compiler causal_codebook.bin")
+    p_minf.add_argument("--task", required=True, help="Task id inside the codebook")
+    p_minf.add_argument("--features", required=True, help="Path to .npz feature store")
+    p_minf.add_argument("--block", required=True, help="Feature array key")
+    p_minf.add_argument("--cf-block", help="Optional counterfactual feature array key (paired tasks)")
+    p_minf.add_argument("--label-key", help="Optional integer label key; reports accuracy")
+    p_minf.add_argument("--projected", action="store_true",
+                        help="Features are already in the compact projected space")
+    p_minf.add_argument("--json", action="store_true", help="Output raw JSON report")
+
     # harness
     p_harness = subparsers.add_parser("harness", help="Automated host capability discovery and setup")
     harness_subparsers = p_harness.add_subparsers(dest="harness_action", help="Harness actions")
@@ -1008,11 +1225,34 @@ Examples:
     p_cad.add_argument("--input", help="JSONL file of {question, context} records (batch mode)")
     p_cad.add_argument("--head", help="User-supplied calibration head JSON (gen_zero.cad_head.v1); omit for uncalibrated scores")
     p_cad.add_argument("--alpha", type=float, default=0.5, help="Prior weight in delta = cond - alpha*prior (uncalibrated mode; default 0.5)")
+    p_cad.add_argument("--adaptive", action="store_true", help="Use Jensen-Shannon evidence weighting for uncalibrated CAD")
     p_cad.add_argument("--workers", type=int, default=1, help="Worker processes (>1 uses the parallel GGUF pool)")
     p_cad.add_argument("--threads", type=int, default=max(1, (os.cpu_count() or 2) // 2), help="Compute threads per worker")
     p_cad.add_argument("--n-ctx", type=int, default=2048, help="Context window in tokens")
     p_cad.add_argument("--numa-pin", action="store_true", help="Pin each worker to exclusive cores of one NUMA node (Linux)")
     p_cad.add_argument("--json", action="store_true", help="Output raw JSON result")
+
+    p_layer = subparsers.add_parser("layerwise-mcts", help="Run layerwise Qwen MCTS inference on a local HF checkpoint")
+    p_layer.add_argument("--hf-model", default=os.environ.get("GENZERO_LAYERWISE_HF_MODEL"),
+                         help="Local Qwen2 checkpoint directory, e.g. Qwen2.5-1.5B-Instruct (env GENZERO_LAYERWISE_HF_MODEL)")
+    p_layer.add_argument("--input-ids", default=os.environ.get("GENZERO_LAYERWISE_INPUT_IDS"),
+                         help="JSON array of prompt token ids (env GENZERO_LAYERWISE_INPUT_IDS)")
+    p_layer.add_argument("--label-token-ids", default=os.environ.get("GENZERO_LAYERWISE_LABEL_TOKEN_IDS"),
+                         help="JSON array of per-label token-id arrays (env GENZERO_LAYERWISE_LABEL_TOKEN_IDS)")
+    p_layer.add_argument("--anchors", help="JSON file with labeled input_ids and labels for episodic memory")
+    p_layer.add_argument("--candidates", help="JSON file of candidate token-id arrays to prune")
+    p_layer.add_argument("--target-label", type=int, default=0, help="Label index the candidates are ranked by")
+    p_layer.add_argument("--shallow-layers", type=int, default=1, help="Layers every candidate runs before pruning")
+    p_layer.add_argument("--top-m", type=int, default=1, help="Candidates kept for the deep layers")
+    p_layer.add_argument("--checkpoints", help="JSON array of checkpoint layers (default: L-8, L-6, L-4, L-2 for >= 16 layers, else every second layer from the middle)")
+    p_layer.add_argument("--min-exit-layer", type=int, help="Earliest exit layer (default: int(0.75 * layers) for >= 16 layers, else max(2, layers // 2))")
+    p_layer.add_argument("--mcts-margin-min", type=float, default=0.2, help="Minimum MCTS visit-share margin to exit")
+    p_layer.add_argument("--tau", type=float, default=1.0, help="Scale of the remaining-depth tail bound")
+    p_layer.add_argument("--gamma", type=float, default=0.5, help="Contraction floor in (0, 0.95)")
+    p_layer.add_argument("--mcts-layer-weights", action="store_true", help="Fit MCTS layer weights on --anchors")
+    p_layer.add_argument("--ffn-keep-ratio", type=float, default=1.0,
+                         help="Fraction of SwiGLU channels kept per layer, fitted on --anchors (default 1.0 = dense)")
+    p_layer.add_argument("--json", action="store_true", help="Output raw JSON result")
 
     subparsers.add_parser("status", help="Check engine connectivity, model status, and latency")
 
@@ -1060,10 +1300,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         return cmd_candidate_prior(args)
     elif args.subcommand == "manifold-fuse":
         return cmd_manifold_fuse(args)
+    elif args.subcommand == "manifold-infer":
+        return cmd_manifold_infer(args)
     elif args.subcommand == "harness":
         return cmd_harness(args)
     elif args.subcommand == "cad":
         return cmd_cad(args)
+    elif args.subcommand == "layerwise-mcts":
+        return cmd_layerwise_mcts(args)
     elif args.subcommand == "status":
         return cmd_status(args)
     else:

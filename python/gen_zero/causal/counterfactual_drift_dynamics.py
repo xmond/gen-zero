@@ -39,6 +39,7 @@ from typing import Optional, Sequence, Tuple
 import numpy as np
 
 from ..manifold import MasterClosedFormSolver
+from .dynamics_calibrator import select_regularization
 from .annealed_langevin_engine import AnnealedLangevinDynamicsEngine, LangevinResult
 from .continuous_causal_reasoning_expert import (
     ContinuousCausalReasoningResult,
@@ -346,22 +347,31 @@ def fit_counterfactual_drift_dynamics(
     codebook = simplex_codebook(n_classes, dim)
     t = codebook[y]
 
-    # Leave-one-out selection of the ridge strength on calibration rows only.
-    best_lam, best_acc = None, -1.0
-    loo_table = {}
-    for lam in ridge_grid:
-        hits = 0
-        for i in range(n):
-            keep = np.arange(n) != i
-            m = MasterClosedFormSolver().fit(z[keep], t[keep], lambda_reg=lam, fit_intercept=False).T
-            pred = int(np.argmin(np.linalg.norm(codebook - (m @ z[i])[None, :], axis=1)))
-            hits += int(pred == y[i])
-        acc = hits / n
-        loo_table[str(lam)] = acc
-        if acc > best_acc:
-            best_lam, best_acc = float(lam), acc
+    # Leave-one-out selection of the ridge strength on calibration rows only. The LOO
+    # model must be the deployed model: same intercept mode and the same effective
+    # penalty. MasterClosedFormSolver's adaptive scaling turns lambda_reg into
+    # lambda_reg * ||Z^T Z||_F / sqrt(p); the scale is computed once on all rows and the
+    # deployed solve below reuses that effective value with adaptive scaling off.
+    fit_intercept = False
+    spectral = float(np.linalg.norm(z.T @ z)) / np.sqrt(z.shape[1])
+    if not (np.isfinite(spectral) and spectral > 0):
+        raise ValueError("calibration features have a zero or non-finite Gram norm")
+    effective = {spectral * float(lam): float(lam) for lam in ridge_grid}
+
+    def loo_accuracy(loo_prediction):
+        d2 = (np.sum(loo_prediction ** 2, axis=1)[:, None]
+              + np.sum(codebook ** 2, axis=1)[None, :]
+              - 2 * loo_prediction @ codebook.T)
+        return float(np.mean(np.argmin(d2, axis=1) == y))
+
+    choice = select_regularization(z, t, tuple(effective), fit_intercept=fit_intercept,
+                                   score=loo_accuracy)
+    best_lam_eff = choice["ridge_lambda"]
+    best_lam, best_acc = effective[best_lam_eff], choice["score"]
+    loo_table = {str(effective[lam_eff]): acc for lam_eff, acc in choice["table"].items()}
     # (dim, p_total): h* = M z; Cholesky solve that raises on ill-conditioned systems.
-    m = MasterClosedFormSolver().fit(z, t, lambda_reg=best_lam, fit_intercept=False).T
+    m = MasterClosedFormSolver().fit(z, t, lambda_reg=best_lam_eff, fit_intercept=fit_intercept,
+                                     adaptive_spectral_scaling=False).T
     a = a_decay * np.eye(dim)
     i_minus_a = np.eye(dim) - a
     px = zx.shape[1]
@@ -378,7 +388,8 @@ def fit_counterfactual_drift_dynamics(
         "source": source, "split": split, "encoder_id": encoder_id,
         "training_sha256": digest.hexdigest(), "samples": int(n),
         "sample_ids": ids.tolist(), "classes": int(n_classes),
-        "ridge_lambda": best_lam, "ridge_loo_accuracy": best_acc,
+        "ridge_lambda": best_lam, "ridge_lambda_effective": best_lam_eff,
+        "ridge_fit_intercept": fit_intercept, "ridge_loo_accuracy": best_acc,
         "ridge_loo_table": loo_table, "a_decay": a_decay,
         "a_note": "A is set contractive (a_decay * I), not learned: the fixed point "
                   "h* = (I-A)^-1 (B x + W_c c) is invariant to A given M, so with this "
@@ -389,4 +400,5 @@ def fit_counterfactual_drift_dynamics(
     dyn = CounterfactualDriftDynamics(A=a, B=b, W_c=w_c, codebook=codebook, x_mean=x_mean,
                                       x_basis=x_basis, c_mean=c_mean, c_basis=c_basis,
                                       provenance=provenance)
-    return dyn, {"ridge_lambda": best_lam, "ridge_loo_accuracy": best_acc, "loo_table": loo_table}
+    return dyn, {"ridge_lambda": best_lam, "ridge_lambda_effective": best_lam_eff,
+                 "ridge_loo_accuracy": best_acc, "loo_table": loo_table}

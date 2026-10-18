@@ -24,7 +24,6 @@ from .deq_thinking import (
     DEQThinkingBlock,
     DEQThinkingFunction,
     DEQThinkingModule,
-    _np_solve_fixed_point,
 )
 
 from .manifold_anchor_distiller import ManifoldAnchorDistiller
@@ -59,6 +58,16 @@ from .verbalizer_extractor import (
     VerbalizerSpec,
     candidate_groups,
 )
+from .qwen_inter_layer_mcts import (
+    EpisodicManifoldMemory,
+    MctsLayerwiseQwenRunner,
+    QwenInterLayerHook,
+    QwenSparseFfnHook,
+    VerbalizerProbe,
+    score_ffn_channels,
+    select_top_ffn_channels,
+    select_memory_lambda,
+)
 
 __all__ = [
     "CADEngine",
@@ -74,6 +83,14 @@ __all__ = [
     "LlamaCppVerbalizerExtractor",
     "VerbalizerSpec",
     "candidate_groups",
+    "EpisodicManifoldMemory",
+    "MctsLayerwiseQwenRunner",
+    "QwenInterLayerHook",
+    "QwenSparseFfnHook",
+    "VerbalizerProbe",
+    "score_ffn_channels",
+    "select_top_ffn_channels",
+    "select_memory_lambda",
     "ManifoldAnchorDistiller",
     "NanocoreAnchorBridge",
     "ShuffledStateBenchmark",

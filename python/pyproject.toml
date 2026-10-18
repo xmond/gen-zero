@@ -69,6 +69,9 @@ dev = [
     "pytest-asyncio>=0.21.0",
     # Core neural-dynamics tests exercise the training script metrics.
     "scikit-learn>=1.2.0",
+    # Layerwise-MCTS and CAD tests build real Qwen2 models; `gen-zero layerwise-mcts` needs it too.
+    "transformers>=4.35.0",
+    "huggingface_hub>=0.19.0",
     "ruff>=0.1.0",
 ]
 

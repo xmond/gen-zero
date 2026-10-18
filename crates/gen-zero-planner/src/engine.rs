@@ -326,6 +326,9 @@ struct MctsNode {
     children: smallvec::SmallVec<[usize; 16]>,
     visits: usize,
     value_sum: f64,
+    /// Dynamics-filtered actions for this node's state, computed at most once.
+    /// `WorldModelDynamics::allowed_actions` is deterministic by contract.
+    allowed: Option<smallvec::SmallVec<[ActionId; 16]>>,
 }
 
 impl MctsNode {
@@ -338,8 +341,21 @@ impl MctsNode {
             children: smallvec::SmallVec::new(),
             visits: 0,
             value_sum: 0.0,
+            allowed: None,
         }
     }
+}
+
+/// Stop only for a single feasible root action after the principal path has
+/// reached the horizon. With multiple actions, remaining visits can change the
+/// returned entropy even when they cannot change the winning action.
+fn root_decided(
+    root_action_count: usize,
+    simulations_done: usize,
+    remaining: usize,
+    settle_sims: usize,
+) -> bool {
+    remaining > 0 && root_action_count == 1 && simulations_done >= settle_sims
 }
 
 /// Back up each node's return-to-go; the root has no incoming edge.
@@ -415,6 +431,7 @@ impl PlanningEngine for MctsEngine {
         let mut nodes = Vec::with_capacity(reserve);
         let mut states = Vec::with_capacity(reserve.min(64));
         nodes.push(MctsNode::new(None, 0.0, false));
+        nodes[0].allowed = Some(root_actions.iter().copied().collect());
         states.push(state.clone());
         let mut path = Vec::with_capacity(self.horizon.saturating_add(1));
         let gamma = f64::from(self.discount);
@@ -429,7 +446,11 @@ impl PlanningEngine for MctsEngine {
             // missing action at the selected node, never a root-state replay.
             while depth < self.horizon && !nodes[current].done && !nodes[current].dead_end {
                 budget.check()?;
-                let node_actions = world_model.allowed_actions(&states[current], &valid_actions)?;
+                if nodes[current].allowed.is_none() {
+                    let computed = world_model.allowed_actions(&states[current], &valid_actions)?;
+                    nodes[current].allowed = Some(computed.into_iter().collect());
+                }
+                let node_actions = nodes[current].allowed.clone().unwrap_or_default();
                 if node_actions.is_empty() {
                     nodes[current].dead_end = true;
                     encountered_dead_end = true;
@@ -528,6 +549,15 @@ impl PlanningEngine for MctsEngine {
                 if !nodes[root_child].done {
                     budget.candidate(nodes[root_child].action.expect("root edge"), self.name())?;
                 }
+            }
+            let done_sims = simulation + 1;
+            if root_decided(
+                root_actions.len(),
+                done_sims,
+                self.max_simulations - done_sims,
+                self.horizon,
+            ) {
+                break;
             }
         }
         if nodes[0].children.is_empty() {
@@ -1893,6 +1923,173 @@ mod tests {
         let calls = model.calls.lock().unwrap();
         assert_eq!(calls.len(), 32);
         assert!(calls.iter().all(|&action| action == ActionId(0)));
+    }
+
+    /// Counts mask queries and transitions; the mask is the identity.
+    struct CountingDynamics {
+        payoffs: Vec<f32>,
+        mask_calls: std::sync::atomic::AtomicUsize,
+        step_calls: std::sync::atomic::AtomicUsize,
+    }
+
+    impl CountingDynamics {
+        fn new(payoffs: &[f32]) -> Self {
+            Self {
+                payoffs: payoffs.to_vec(),
+                mask_calls: Default::default(),
+                step_calls: Default::default(),
+            }
+        }
+    }
+
+    impl WorldModelDynamics for CountingDynamics {
+        type Error = CoreError;
+
+        fn allowed_actions(
+            &self,
+            _state: &FullLatent,
+            candidates: &[ActionId],
+        ) -> Result<Vec<ActionId>, Self::Error> {
+            self.mask_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok(candidates.to_vec())
+        }
+
+        fn step(
+            &self,
+            state: &FullLatent,
+            action: ActionId,
+        ) -> Result<(FullLatent, f32, bool), Self::Error> {
+            self.step_calls
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            Ok((state.clone(), self.payoffs[action.0 as usize], false))
+        }
+
+        fn step_batch(
+            &self,
+            _states: &[FullLatent],
+            _actions: &[ActionId],
+            _next_states: &mut [FullLatent],
+            _rewards: &mut [f32],
+            _dones: &mut [bool],
+        ) -> Result<(), Self::Error> {
+            unreachable!("MCTS uses single transitions")
+        }
+    }
+
+    /// Run MCTS and return (best action, simulations that published a candidate).
+    fn run_counting_mcts(
+        engine: &MctsEngine,
+        model: &CountingDynamics,
+        n_actions: u32,
+    ) -> (ActionId, usize) {
+        let ids: Vec<ActionId> = (0..n_actions).map(ActionId).collect();
+        let names: Vec<&str> = vec!["a"; ids.len()];
+        let frame = LocalActionFrame::new(&names, &ids).unwrap();
+        let sims = std::sync::atomic::AtomicUsize::new(0);
+        let publish = |_: ActionId, _: &'static str| {
+            sims.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        };
+        let marker = AtomicBool::new(false);
+        let mut budget = SearchBudget::new(None).with_dead_end_marker(&marker);
+        budget.publish = Some(&publish);
+        let (action, _) = engine
+            .search(
+                &FullLatent::zeros(),
+                &frame,
+                model,
+                &PolicyGate::default(),
+                &budget,
+            )
+            .unwrap();
+        (action, sims.load(std::sync::atomic::Ordering::SeqCst))
+    }
+
+    #[test]
+    fn mcts_caches_allowed_actions_per_tree_node() {
+        // Equal payoffs: no early stop, every one of the 64 simulations descends.
+        let model = CountingDynamics::new(&[0.5, 0.5]);
+        let engine = MctsEngine {
+            max_simulations: 64,
+            horizon: 2,
+            ..MctsEngine::default()
+        };
+        let (_, sims) = run_counting_mcts(&engine, &model, 2);
+        assert_eq!(sims, 64, "tie must not trigger the early stop");
+        let calls = model.mask_calls.load(std::sync::atomic::Ordering::SeqCst);
+        // Root (preflight) + at most 2 depth-1 nodes + their 2 rollout states.
+        assert!(calls <= 6, "mask queried {calls} times for 64 simulations");
+    }
+
+    #[test]
+    fn mcts_runs_full_budget_with_multiple_root_actions() {
+        let model = CountingDynamics::new(&[1.0, -1.0]);
+        let engine = MctsEngine {
+            max_simulations: 200,
+            horizon: 1,
+            ..MctsEngine::default()
+        };
+        let (action, sims) = run_counting_mcts(&engine, &model, 2);
+        assert_eq!(action, ActionId(0));
+        assert_eq!(sims, 200);
+    }
+
+    #[test]
+    fn mcts_with_one_feasible_root_action_stops_after_the_horizon() {
+        let model = CountingDynamics::new(&[0.3]);
+        let engine = MctsEngine {
+            max_simulations: 100,
+            horizon: 3,
+            ..MctsEngine::default()
+        };
+        let (action, sims) = run_counting_mcts(&engine, &model, 1);
+        assert_eq!(action, ActionId(0));
+        assert_eq!(sims, 3);
+    }
+
+    #[test]
+    fn mcts_two_action_entropy_and_gate_use_full_visit_distribution() {
+        let model = CountingDynamics::new(&[1.0, -1.0]);
+        let engine = MctsEngine {
+            max_simulations: 8,
+            horizon: 1,
+            ..MctsEngine::default()
+        };
+        let actions = [ActionId(0), ActionId(1)];
+        let frame = LocalActionFrame::new(&["a", "b"], &actions).unwrap();
+        let marker = AtomicBool::new(false);
+        let visits = std::sync::Mutex::new([0usize; 2]);
+        let publish = |action: ActionId, _: &'static str| {
+            visits.lock().unwrap()[action.0 as usize] += 1;
+        };
+        let mut budget = SearchBudget::new(None).with_dead_end_marker(&marker);
+        budget.publish = Some(&publish);
+        let (action, entropy) = engine
+            .search(
+                &FullLatent::zeros(),
+                &frame,
+                &model,
+                &PolicyGate::default(),
+                &budget,
+            )
+            .unwrap();
+        let counts = *visits.lock().unwrap();
+        assert_eq!(counts.iter().sum::<usize>(), 8);
+        assert_eq!(action, ActionId(0));
+        let expected = NormalizedEntropy::from_probabilities(&[
+            counts[0] as f32 / 8.0,
+            counts[1] as f32 / 8.0,
+        ]);
+        assert_eq!(entropy, expected);
+        let gate = PolicyGate::default();
+        assert_eq!(
+            gate.evaluate_basic(action, entropy).unwrap().tier,
+            gate.evaluate_basic(action, expected).unwrap().tier
+        );
+        assert_eq!(
+            gate.evaluate_basic(action, entropy).unwrap().tier,
+            PolicyTier::Tier0Proceed
+        );
     }
 
     #[test]

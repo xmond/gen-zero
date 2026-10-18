@@ -233,6 +233,7 @@ impl NativeQwen {
             tokenizer = %info.tokenizer.display(),
             format = ?info.format,
             sha256 = %info.weights_sha256,
+            ffn_pruning = ?info.ffn_pruning,
             simd = gen_zero_model::qwen::SIMD_KERNELS,
             load_ms,
             "native Qwen scorer loaded"

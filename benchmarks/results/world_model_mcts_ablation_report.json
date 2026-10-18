@@ -11,14 +11,14 @@
       "success_rate_pct": 0.0,
       "trap_rate_pct": 100.0,
       "mean_steps": 1,
-      "mean_decision_latency_ms": 0.01056555,
+      "mean_decision_latency_ms": 0.00970588,
       "total_model_calls": 0
     },
     "world_model": {
       "success_rate_pct": 100.0,
       "trap_rate_pct": 0.0,
       "mean_steps": 4.71,
-      "mean_decision_latency_ms": 0.681617912,
+      "mean_decision_latency_ms": 0.5201949055,
       "total_model_calls": 145364
     }
   },
@@ -34,14 +34,14 @@
         "success": false,
         "trap": true,
         "steps": 1,
-        "decision_latency_ms_mean": 0.015099,
+        "decision_latency_ms_mean": 0.018999,
         "model_calls": 0
       },
       "world_model": {
         "success": true,
         "trap": false,
         "steps": 4,
-        "decision_latency_ms_mean": 0.58040225,
+        "decision_latency_ms_mean": 0.51981975,
         "model_calls": 1048
       }
     },
@@ -51,14 +51,14 @@
         "success": false,
         "trap": true,
         "steps": 1,
-        "decision_latency_ms_mean": 0.0155,
+        "decision_latency_ms_mean": 0.0141,
         "model_calls": 0
       },
       "world_model": {
         "success": true,
         "trap": false,
         "steps": 5,
-        "decision_latency_ms_mean": 0.739631,
+        "decision_latency_ms_mean": 0.5958542,
         "model_calls": 1604
       }
     },
@@ -68,14 +68,14 @@
         "success": false,
         "trap": true,
         "steps": 1,
-        "decision_latency_ms_mean": 0.012499,
+        "decision_latency_ms_mean": 0.0107,
         "model_calls": 0
       },
       "world_model": {
         "success": true,
         "trap": false,
         "steps": 4,
-        "decision_latency_ms_mean": 0.635775,
+        "decision_latency_ms_mean": 0.47044549999999996,
         "model_calls": 1048
       }
     },
@@ -85,14 +85,14 @@
         "success": false,
         "trap": true,
         "steps": 1,
-        "decision_latency_ms_mean": 0.012199,
+        "decision_latency_ms_mean": 0.059199,
         "model_calls": 0
       },
       "world_model": {
         "success": true,
         "trap": false,
         "steps": 4,
-        "decision_latency_ms_mean": 0.5728775,
+        "decision_latency_ms_mean": 0.48142025,
         "model_calls": 1048
       }
     },
@@ -102,223 +102,19 @@
         "success": false,
         "trap": true,
         "steps": 1,
-        "decision_latency_ms_mean": 0.012499,
+        "decision_latency_ms_mean": 0.0109,
         "model_calls": 0
       },
       "world_model": {
         "success": true,
         "trap": false,
         "steps": 4,
-        "decision_latency_ms_mean": 0.638925,
+        "decision_latency_ms_mean": 0.498945,
         "model_calls": 1048
       }
     },
     {
       "seed": 5,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.012099,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7248114,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 6,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.011799,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.715812,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 7,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0126,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7317714,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 8,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0114,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7205716,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 9,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0098,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6813932,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 10,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.010399,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7554104,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 11,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.023399,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6691536,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 12,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009399,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7247716,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 13,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009199,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7009128,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 14,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0097,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.93468825,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 15,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.010199,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6890729999999999,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 16,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0113,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6705136,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 17,
       "baseline": {
         "success": false,
         "trap": true,
@@ -330,165 +126,46 @@
         "success": true,
         "trap": false,
         "steps": 5,
-        "decision_latency_ms_mean": 0.688813,
+        "decision_latency_ms_mean": 0.6083142,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 6,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0109,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6075542,
         "model_calls": 1604
       }
     },
     {
-      "seed": 18,
+      "seed": 7,
       "baseline": {
         "success": false,
         "trap": true,
         "steps": 1,
-        "decision_latency_ms_mean": 0.0096,
+        "decision_latency_ms_mean": 0.0246,
         "model_calls": 0
       },
       "world_model": {
         "success": true,
         "trap": false,
         "steps": 5,
-        "decision_latency_ms_mean": 0.6981728,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 19,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.010199,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.5732524999999999,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 20,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0084,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7261316,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 21,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009399,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7029124,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 22,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0097,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.578627,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 23,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.031298,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.57645225,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 24,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0088,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.55730325,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 25,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009099,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.587452,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 26,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0095,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.685273,
+        "decision_latency_ms_mean": 0.5926743999999999,
         "model_calls": 1604
       }
     },
     {
-      "seed": 27,
+      "seed": 8,
       "baseline": {
         "success": false,
         "trap": true,
@@ -500,12 +177,29 @@
         "success": true,
         "trap": false,
         "steps": 5,
-        "decision_latency_ms_mean": 0.7292714,
+        "decision_latency_ms_mean": 0.5651146,
         "model_calls": 1604
       }
     },
     {
-      "seed": 28,
+      "seed": 9,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0091,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5820344,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 10,
       "baseline": {
         "success": false,
         "trap": true,
@@ -517,318 +211,12 @@
         "success": true,
         "trap": false,
         "steps": 5,
-        "decision_latency_ms_mean": 0.7511904,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 29,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0099,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6679538,
+        "decision_latency_ms_mean": 0.607534,
         "model_calls": 1604
       }
     },
     {
-      "seed": 30,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.010099,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7841692,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 31,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.013299,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.660149,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 32,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009699,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.59217675,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 33,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009599,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7093322,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 34,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0103,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.713272,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 35,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009599,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.6277755,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 36,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0103,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.58920175,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 37,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009599,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.58850225,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 38,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0099,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7127519999999999,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 39,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009499,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6793134,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 40,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009799,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.57172775,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 41,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0095,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.56877775,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 42,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.008699,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7141922,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 43,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009099,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7212718,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 44,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0095,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7010926000000001,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 45,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009799,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7123722,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 46,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0094,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.61457575,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 47,
+      "seed": 11,
       "baseline": {
         "success": false,
         "trap": true,
@@ -840,760 +228,12 @@
         "success": true,
         "trap": false,
         "steps": 5,
-        "decision_latency_ms_mean": 0.7028324,
+        "decision_latency_ms_mean": 0.5890944,
         "model_calls": 1604
       }
     },
     {
-      "seed": 48,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009499,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.58985225,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 49,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0093,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7013526,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 50,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0087,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6928528,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 51,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0091,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.737731,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 52,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0095,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6953126000000001,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 53,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0098,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7101722,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 54,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009599,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7218716,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 55,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009399,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.587002,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 56,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0095,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6909928,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 57,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.008799,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7302312,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 58,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009499,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7298514,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 59,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009599,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7058724,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 60,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0098,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.714412,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 61,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0104,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7007926,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 62,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009499,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.5764025,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 63,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.010299,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7334912,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 64,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0093,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7214716,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 65,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0091,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7004326000000001,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 66,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0087,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6823132000000001,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 67,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0086,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6974726,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 68,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0099,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.5726775,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 69,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0096,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.6494745,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 70,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0103,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.8724656000000001,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 71,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.010299,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.8031286,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 72,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.012,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7620502,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 73,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0091,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7287314,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 74,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0099,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7206116,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 75,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009899,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7048924,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 76,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0101,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6978325999999999,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 77,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0094,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.5657525,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 78,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0093,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6801532,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 79,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0099,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.713072,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 80,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0093,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7330912,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 81,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.010199,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6990526,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 82,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0095,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.689013,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 83,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009999,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.57642725,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 84,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0094,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7076524,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 85,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0097,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.715632,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 86,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0107,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7225518,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 87,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0095,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.7119722,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 88,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0093,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.6737734,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 89,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0098,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.582377,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 90,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009599,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.666314,
-        "model_calls": 1604
-      }
-    },
-    {
-      "seed": 91,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.01,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 5,
-        "decision_latency_ms_mean": 0.709152,
-        "model_calls": 1636
-      }
-    },
-    {
-      "seed": 92,
+      "seed": 12,
       "baseline": {
         "success": false,
         "trap": true,
@@ -1605,63 +245,63 @@
         "success": true,
         "trap": false,
         "steps": 5,
-        "decision_latency_ms_mean": 0.7356312,
+        "decision_latency_ms_mean": 0.6323137999999999,
         "model_calls": 1636
       }
     },
     {
-      "seed": 93,
+      "seed": 13,
       "baseline": {
         "success": false,
         "trap": true,
         "steps": 1,
-        "decision_latency_ms_mean": 0.018599,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.585652,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 94,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.009899,
-        "model_calls": 0
-      },
-      "world_model": {
-        "success": true,
-        "trap": false,
-        "steps": 4,
-        "decision_latency_ms_mean": 0.5987264999999999,
-        "model_calls": 1048
-      }
-    },
-    {
-      "seed": 95,
-      "baseline": {
-        "success": false,
-        "trap": true,
-        "steps": 1,
-        "decision_latency_ms_mean": 0.0098,
+        "decision_latency_ms_mean": 0.008999,
         "model_calls": 0
       },
       "world_model": {
         "success": true,
         "trap": false,
         "steps": 5,
-        "decision_latency_ms_mean": 0.7289114,
+        "decision_latency_ms_mean": 0.5856344,
         "model_calls": 1636
       }
     },
     {
-      "seed": 96,
+      "seed": 14,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0093,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.498695,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 15,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5985742,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 16,
       "baseline": {
         "success": false,
         "trap": true,
@@ -1673,29 +313,403 @@
         "success": true,
         "trap": false,
         "steps": 5,
-        "decision_latency_ms_mean": 0.7035322,
-        "model_calls": 1636
+        "decision_latency_ms_mean": 0.5909542,
+        "model_calls": 1604
       }
     },
     {
-      "seed": 97,
+      "seed": 17,
       "baseline": {
         "success": false,
         "trap": true,
         "steps": 1,
-        "decision_latency_ms_mean": 0.023299,
+        "decision_latency_ms_mean": 0.0125,
         "model_calls": 0
       },
       "world_model": {
         "success": true,
         "trap": false,
         "steps": 5,
-        "decision_latency_ms_mean": 0.7035926,
+        "decision_latency_ms_mean": 0.5895744,
         "model_calls": 1604
       }
     },
     {
-      "seed": 98,
+      "seed": 18,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0107,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5770546,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 19,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0092,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.503045,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 20,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.611854,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 21,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0092,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5902742,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 22,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0094,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.48189525,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 23,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.008899,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.48697025,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 24,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0089,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.47664575,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 25,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.01,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.48419524999999997,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 26,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0091,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5821944,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 27,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0092,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5855146,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 28,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0093,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6209738,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 29,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009099,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5797544,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 30,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0093,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.6354138,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 31,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0097,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.5066700000000001,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 32,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0095,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.5021950000000001,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 33,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0092,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5738544,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 34,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0095,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.7010132,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 35,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0116,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.50232,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 36,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009399,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.48159525000000003,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 37,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009699,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.49667025000000004,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 38,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0091,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.629134,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 39,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0091,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5650946,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 40,
       "baseline": {
         "success": false,
         "trap": true,
@@ -1706,8 +720,994 @@
       "world_model": {
         "success": true,
         "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.519895,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 41,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0077,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.410596,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 42,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.008,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
         "steps": 5,
-        "decision_latency_ms_mean": 0.6799732,
+        "decision_latency_ms_mean": 0.522335,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 43,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0084,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.514755,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 44,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0087,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.4981752,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 45,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0078,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.519355,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 46,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0079,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.406971,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 47,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0077,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.514155,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 48,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0087,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.402046,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 49,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0076,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.501455,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 50,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.008,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5035752,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 51,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0079,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5013352,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 52,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.008,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.4829552,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 53,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0097,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5344348,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 54,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.007999,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5296548,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 55,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0078,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.398996,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 56,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0094,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.500855,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 57,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0082,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.508675,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 58,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0076,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.517995,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 59,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0079,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.4958552,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 60,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0101,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.524535,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 61,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0076,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5279948,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 62,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0093,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.398571,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 63,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0084,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.519035,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 64,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.008199,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5314548,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 65,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0088,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.4887752,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 66,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.008,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5083949999999999,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 67,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0079,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5319548000000001,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 68,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.008299,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.43372099999999997,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 69,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0082,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.3985965,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 70,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0077,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.521555,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 71,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.011,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.514055,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 72,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0076,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.4867554,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 73,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0078,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.509275,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 74,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0084,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.517015,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 75,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0104,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5185150000000001,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 76,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0083,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.520235,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 77,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0078,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.41444600000000004,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 78,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.01,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5026752,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 79,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0081,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.507055,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 80,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0092,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.512635,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 81,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0084,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5559748,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 82,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.009,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5469946,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 83,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0081,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.428071,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 84,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0082,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5217148,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 85,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0079,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5223148,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 86,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0084,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5137349999999999,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 87,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0104,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.512075,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 88,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0078,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.514215,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 89,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0079,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.415371,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 90,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0082,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.48911519999999997,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 91,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0082,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5200352,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 92,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0077,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5262148,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 93,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0077,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.416746,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 94,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.008,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 4,
+        "decision_latency_ms_mean": 0.42617099999999997,
+        "model_calls": 1048
+      }
+    },
+    {
+      "seed": 95,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0083,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5697744,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 96,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.01,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.522275,
+        "model_calls": 1636
+      }
+    },
+    {
+      "seed": 97,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0103,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.5317148,
+        "model_calls": 1604
+      }
+    },
+    {
+      "seed": 98,
+      "baseline": {
+        "success": false,
+        "trap": true,
+        "steps": 1,
+        "decision_latency_ms_mean": 0.0079,
+        "model_calls": 0
+      },
+      "world_model": {
+        "success": true,
+        "trap": false,
+        "steps": 5,
+        "decision_latency_ms_mean": 0.4881552,
         "model_calls": 1604
       }
     },
@@ -1717,16 +1717,289 @@
         "success": false,
         "trap": true,
         "steps": 1,
-        "decision_latency_ms_mean": 0.009499,
+        "decision_latency_ms_mean": 0.007599,
         "model_calls": 0
       },
       "world_model": {
         "success": true,
         "trap": false,
         "steps": 4,
-        "decision_latency_ms_mean": 0.5752525,
+        "decision_latency_ms_mean": 0.43862075,
         "model_calls": 1048
       }
     }
-  ]
+  ],
+  "engine_ablation": {
+    "speed": {
+      "task": "DeadlockTorusEnv decisions planned by MctsEngine.plan",
+      "episodes": 100,
+      "simulations_budget": 32,
+      "max_depth": 6,
+      "timing_repeats_per_decision": 3,
+      "configs": {
+        "default": {
+          "note": "engine defaults: PUCT, full budget, no cache"
+        },
+        "early_stop": {
+          "early_stop": true
+        },
+        "cache": {
+          "transposition_cache": true
+        },
+        "early_stop+cache": {
+          "early_stop": true,
+          "transposition_cache": true
+        }
+      },
+      "regimes": {
+        "exact_graph_dict": {
+          "decisions": 471,
+          "metrics": {
+            "default": {
+              "mean_latency_ms": 0.6464850063694267,
+              "median_latency_ms": 0.690093,
+              "mean_transition_calls": 72.3312101910828,
+              "mean_simulations_run": 32,
+              "early_stop_rate_pct": 0.0,
+              "mean_cache_hits": 0,
+              "episode_success_rate_pct": 100.0
+            },
+            "early_stop": {
+              "mean_latency_ms": 0.6156585477707006,
+              "median_latency_ms": 0.652294,
+              "mean_transition_calls": 69.00212314225053,
+              "mean_simulations_run": 24.636942675159236,
+              "early_stop_rate_pct": 78.76857749469214,
+              "mean_cache_hits": 0,
+              "episode_success_rate_pct": 100.0
+            },
+            "cache": {
+              "mean_latency_ms": 0.7457285987261146,
+              "median_latency_ms": 0.781592,
+              "mean_transition_calls": 41.27388535031847,
+              "mean_simulations_run": 32,
+              "early_stop_rate_pct": 0.0,
+              "mean_cache_hits": 38.82165605095541,
+              "episode_success_rate_pct": 100.0
+            },
+            "early_stop+cache": {
+              "mean_latency_ms": 0.7153416454352441,
+              "median_latency_ms": 0.753193,
+              "mean_transition_calls": 40.67091295116773,
+              "mean_simulations_run": 24.636942675159236,
+              "early_stop_rate_pct": 78.76857749469214,
+              "mean_cache_hits": 35.4140127388535,
+              "episode_success_rate_pct": 100.0
+            }
+          },
+          "paired_vs_default": {
+            "early_stop": {
+              "decision_agreement_with_default_pct": 100.0,
+              "median_latency_ratio_vs_default": 0.9051839957723148,
+              "transition_call_ratio_vs_default": 0.9539744041329107,
+              "decisions_faster": 339,
+              "decisions_slower": 131,
+              "sign_test_p_two_sided": 2.6618626201334895e-22
+            },
+            "cache": {
+              "decision_agreement_with_default_pct": 100.0,
+              "median_latency_ratio_vs_default": 1.1453132266399102,
+              "transition_call_ratio_vs_default": 0.5706234589644241,
+              "decisions_faster": 22,
+              "decisions_slower": 449,
+              "sign_test_p_two_sided": 1.1939742501484962e-104
+            },
+            "early_stop+cache": {
+              "decision_agreement_with_default_pct": 100.0,
+              "median_latency_ratio_vs_default": 1.060066902101306,
+              "transition_call_ratio_vs_default": 0.5622871903252319,
+              "decisions_faster": 171,
+              "decisions_slower": 300,
+              "sign_test_p_two_sided": 2.953516581180582e-09
+            }
+          }
+        },
+        "latent_codes_dim4096": {
+          "decisions": 471,
+          "metrics": {
+            "default": {
+              "mean_latency_ms": 14.466788751592357,
+              "median_latency_ms": 14.146562,
+              "mean_transition_calls": 72.3312101910828,
+              "mean_simulations_run": 32,
+              "early_stop_rate_pct": 0.0,
+              "mean_cache_hits": 0,
+              "episode_success_rate_pct": 100.0
+            },
+            "early_stop": {
+              "mean_latency_ms": 13.696671853503185,
+              "median_latency_ms": 14.158162,
+              "mean_transition_calls": 69.00212314225053,
+              "mean_simulations_run": 24.636942675159236,
+              "early_stop_rate_pct": 78.76857749469214,
+              "mean_cache_hits": 0,
+              "episode_success_rate_pct": 100.0
+            },
+            "cache": {
+              "mean_latency_ms": 10.536901777070064,
+              "median_latency_ms": 10.3699,
+              "mean_transition_calls": 41.27388535031847,
+              "mean_simulations_run": 32,
+              "early_stop_rate_pct": 0.0,
+              "mean_cache_hits": 38.82165605095541,
+              "episode_success_rate_pct": 100.0
+            },
+            "early_stop+cache": {
+              "mean_latency_ms": 10.199630278131634,
+              "median_latency_ms": 10.2524,
+              "mean_transition_calls": 40.67091295116773,
+              "mean_simulations_run": 24.636942675159236,
+              "early_stop_rate_pct": 78.76857749469214,
+              "mean_cache_hits": 35.4140127388535,
+              "episode_success_rate_pct": 100.0
+            }
+          },
+          "paired_vs_default": {
+            "early_stop": {
+              "decision_agreement_with_default_pct": 100.0,
+              "median_latency_ratio_vs_default": 0.9787813128200354,
+              "transition_call_ratio_vs_default": 0.9539744041329107,
+              "decisions_faster": 356,
+              "decisions_slower": 115,
+              "sign_test_p_two_sided": 1.0257833239189345e-29
+            },
+            "cache": {
+              "decision_agreement_with_default_pct": 100.0,
+              "median_latency_ratio_vs_default": 0.7459001501616395,
+              "transition_call_ratio_vs_default": 0.5706234589644241,
+              "decisions_faster": 347,
+              "decisions_slower": 123,
+              "sign_test_p_two_sided": 9.115773245759253e-26
+            },
+            "early_stop+cache": {
+              "decision_agreement_with_default_pct": 100.0,
+              "median_latency_ratio_vs_default": 0.7550688236657297,
+              "transition_call_ratio_vs_default": 0.5622871903252319,
+              "decisions_faster": 373,
+              "decisions_slower": 98,
+              "sign_test_p_two_sided": 8.09156964921782e-39
+            }
+          }
+        }
+      }
+    },
+    "accuracy": {
+      "task": "8-arm distractor-trap tree, noisy eval_fn, MctsEngine",
+      "instances": 200,
+      "seed_start": 0,
+      "chance_level_pct": 12.5,
+      "metric": "optimal root arm hit rate %",
+      "by_root_prior": {
+        "lure": {
+          "8": {
+            "puct_prior": 0.0,
+            "puct_uniform_prior": 15.0,
+            "sequential_halving_prior": 41.5,
+            "mcnemar_vs_puct_prior": {
+              "baseline_only": 0,
+              "sequential_halving_only": 83,
+              "p_exact_two_sided": 2.0679515313825692e-25
+            },
+            "mcnemar_vs_puct_uniform_prior": {
+              "baseline_only": 15,
+              "sequential_halving_only": 68,
+              "p_exact_two_sided": 3.1961254620309685e-09
+            }
+          },
+          "16": {
+            "puct_prior": 0.0,
+            "puct_uniform_prior": 24.5,
+            "sequential_halving_prior": 77.5,
+            "mcnemar_vs_puct_prior": {
+              "baseline_only": 0,
+              "sequential_halving_only": 155,
+              "p_exact_two_sided": 4.3790577010150533e-47
+            },
+            "mcnemar_vs_puct_uniform_prior": {
+              "baseline_only": 12,
+              "sequential_halving_only": 118,
+              "p_exact_two_sided": 4.7043463644266335e-23
+            }
+          },
+          "32": {
+            "puct_prior": 0.0,
+            "puct_uniform_prior": 66.5,
+            "sequential_halving_prior": 84.5,
+            "mcnemar_vs_puct_prior": {
+              "baseline_only": 0,
+              "sequential_halving_only": 169,
+              "p_exact_two_sided": 2.6727647100921956e-51
+            },
+            "mcnemar_vs_puct_uniform_prior": {
+              "baseline_only": 16,
+              "sequential_halving_only": 52,
+              "p_exact_two_sided": 1.4074155775977473e-05
+            }
+          }
+        },
+        "helpful": {
+          "8": {
+            "puct_prior": 100.0,
+            "puct_uniform_prior": 15.0,
+            "sequential_halving_prior": 47.5,
+            "mcnemar_vs_puct_prior": {
+              "baseline_only": 105,
+              "sequential_halving_only": 0,
+              "p_exact_two_sided": 4.930380657631324e-32
+            },
+            "mcnemar_vs_puct_uniform_prior": {
+              "baseline_only": 13,
+              "sequential_halving_only": 78,
+              "p_exact_two_sided": 1.8477591781478763e-12
+            }
+          },
+          "16": {
+            "puct_prior": 100.0,
+            "puct_uniform_prior": 24.5,
+            "sequential_halving_prior": 85.5,
+            "mcnemar_vs_puct_prior": {
+              "baseline_only": 29,
+              "sequential_halving_only": 0,
+              "p_exact_two_sided": 3.725290298461914e-09
+            },
+            "mcnemar_vs_puct_uniform_prior": {
+              "baseline_only": 10,
+              "sequential_halving_only": 132,
+              "p_exact_two_sided": 2.5747366898777346e-28
+            }
+          },
+          "32": {
+            "puct_prior": 100.0,
+            "puct_uniform_prior": 66.5,
+            "sequential_halving_prior": 92.5,
+            "mcnemar_vs_puct_prior": {
+              "baseline_only": 15,
+              "sequential_halving_only": 0,
+              "p_exact_two_sided": 6.103515625e-05
+            },
+            "mcnemar_vs_puct_uniform_prior": {
+              "baseline_only": 8,
+              "sequential_halving_only": 60,
+              "p_exact_two_sided": 5.7477609314866146e-11
+            }
+          }
+        }
+      }
+    },
+    "latent_early_stop": {
+      "task": "random 6-candidate latent problems, default transition",
+      "problems": 100,
+      "simulations_budget": 200,
+      "decision_agreement_pct": 100.0,
+      "early_stop_rate_pct": 94.0,
+      "mean_simulations_run_early_stop": 107.42,
+      "mean_latency_ms_default": 13.51442251,
+      "mean_latency_ms_early_stop": 7.87551441
+    }
+  }
 }

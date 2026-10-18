@@ -31,7 +31,6 @@ from __future__ import annotations
 import hashlib
 import json
 import mmap
-import struct
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Optional
@@ -121,6 +120,10 @@ class CompiledManifoldRuntime:
         self._sections = sections
         self.payload_sha256 = payload_sha256
         self.path = path
+        self._codebook_norms = {
+            task_id: np.einsum('kd,kd->k', sec.codebook, sec.codebook)
+            for task_id, sec in sections.items()
+        }
         self._scratch: Dict[str, Dict[str, np.ndarray]] = {
             task_id: {
                 "drive": np.zeros(sec.dim, dtype=np.float32),
@@ -214,16 +217,16 @@ class CompiledManifoldRuntime:
         sec = self.section(task_id)
         scratch = self._scratch[task_id]
         x_projected = np.asarray(x_projected, dtype=np.float32)
-        if x_projected.shape != (sec.n_components,):
-            raise ValueError(f"x_projected must have shape ({sec.n_components},)")
+        if x_projected.shape != (sec.n_components,) or not np.isfinite(x_projected).all():
+            raise ValueError(f"x_projected must be finite with shape ({sec.n_components},)")
         drive = scratch["drive"]
         np.dot(sec.B, x_projected, out=drive)
         if c_projected is not None:
             if sec.W_c is None:
                 raise ValueError(f"task {task_id!r} has no counterfactual drift map")
             c_projected = np.asarray(c_projected, dtype=np.float32)
-            if c_projected.shape != (sec.cf_components,):
-                raise ValueError(f"c_projected must have shape ({sec.cf_components},)")
+            if c_projected.shape != (sec.cf_components,) or not np.isfinite(c_projected).all():
+                raise ValueError(f"c_projected must be finite with shape ({sec.cf_components},)")
             drive += sec.W_c @ c_projected
         h_star = scratch["h_star"]
         np.dot(sec.inv_i_minus_a, drive, out=h_star)
@@ -242,6 +245,33 @@ class CompiledManifoldRuntime:
             codebook.fixed_point, zero_state, covariance=covariance)
         decision_state = fused + gateway.ambient_to_shared @ tangent
         return RoutedInferenceResult(codebook, weights, fused, chart_weights, tangent, decision_state)
+
+    def infer_batch(self, task_id: str, X: np.ndarray,
+                    C: Optional[np.ndarray] = None) -> list[InferenceResult]:
+        """Infer a matrix of projected features without a (batch, class, dim) buffer."""
+        sec = self.section(task_id)
+        X = np.asarray(X, dtype=np.float32)
+        if X.ndim != 2 or X.shape[1] != sec.n_components or not np.isfinite(X).all():
+            raise ValueError('X must be a finite projected feature matrix')
+        if X.shape[0] == 0:
+            raise ValueError('infer_batch requires at least one sample row')
+        drive = X @ sec.B.T
+        if C is not None:
+            if sec.W_c is None:
+                raise ValueError(f'task {task_id!r} has no counterfactual drift map')
+            C = np.asarray(C, dtype=np.float32)
+            if C.shape != (len(X), sec.cf_components) or not np.isfinite(C).all():
+                raise ValueError('C must be a finite projected counterfactual matrix')
+            drive += C @ sec.W_c.T
+        h = drive @ sec.inv_i_minus_a.T
+        d2 = np.sum(h * h, axis=1)[:, None] + self._codebook_norms[task_id][None, :] - 2 * (h @ sec.codebook.T)
+        # Cancellation in the identity may yield a tiny negative squared distance.
+        np.maximum(d2, 0, out=d2)
+        if not (np.all(np.isfinite(h)) and np.all(np.isfinite(d2))):
+            raise ValueError('non-finite fixed_point or scores in infer_batch')
+        return [InferenceResult(task_id, -d2[i].copy(), int(np.argmin(d2[i])), h[i].copy())
+                for i in range(len(X))]
+
 
 @dataclass(frozen=True)
 class RoutedInferenceResult:

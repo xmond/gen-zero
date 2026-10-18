@@ -26,11 +26,13 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
 
+from gen_zero.causal.latent_mcts import _softmax
 from gen_zero.causal.verbalizer_extractor import (
     DEFAULT_LABELS, HFVerbalizerExtractor, LlamaCppVerbalizerExtractor, VerbalizerExtractor, VerbalizerSpec)
 
@@ -75,10 +77,27 @@ def difference(conditional, unconditional, alpha: float) -> np.ndarray:
     return cond - alpha * prior
 
 
-def _softmax(logits: np.ndarray) -> np.ndarray:
-    z = logits - logits.max(axis=-1, keepdims=True)
-    e = np.exp(z)
-    return e / e.sum(axis=-1, keepdims=True)
+def adaptive_information_scores(conditional, unconditional, alpha: float = DEFAULT_ALPHA) -> np.ndarray:
+    """Public Jensen-Shannon evidence weighting with an uncertainty bonus for maybe."""
+    cond, prior = _check_pair(conditional, unconditional)
+    difference(cond, prior, alpha)  # validates the contrast weight
+    p, q = _softmax(cond), _softmax(prior)
+    mixture = (p + q) / 2
+    tiny = np.finfo(np.float64).tiny
+    js = (np.sum(p * (np.log(np.maximum(p, tiny)) - np.log(np.maximum(mixture, tiny))), axis=-1) +
+          np.sum(q * (np.log(np.maximum(q, tiny)) - np.log(np.maximum(mixture, tiny))), axis=-1)) / (2 * math.log(2))
+    js = np.clip(js, 0.0, 1.0)
+    entropy = -np.sum(p * np.log(np.maximum(p, tiny)), axis=-1) / math.log(len(LABELS))
+    certainty = 1 - entropy
+    effective_alpha = alpha * (1 - js * certainty)
+    scores = cond - effective_alpha[..., None] * prior
+    # Keep the uncertainty adjustment bounded: class logits already encode the
+    # model's tendency to answer maybe, so an unscaled entropy bonus can swamp
+    # affirmative or negative evidence.
+    scores[..., 2] += (1 - js) * entropy / (len(LABELS) ** 2)
+    if not np.isfinite(scores).all():
+        raise ValueError("nonfinite adaptive CAD scores")
+    return scores
 
 
 def extract_causal_features(cond_logits, prior_logits, alpha: float) -> np.ndarray:
@@ -221,7 +240,8 @@ class CADEngine:
 
     def __init__(self, extractor: VerbalizerExtractor, *, template: PromptTemplate = PromptTemplate(),
                  head: CalibrationHead | None = None, alpha: float = DEFAULT_ALPHA,
-                 temperature: float = 1.0, maybe_bias: float = 0.0, delta_clip: float = DEFAULT_DELTA_CLIP):
+                 temperature: float = 1.0, maybe_bias: float = 0.0, delta_clip: float = DEFAULT_DELTA_CLIP,
+                 adaptive: bool = False, cache_priors: bool = True, prior_cache_size: int = 256):
         if len(extractor.groups) != len(LABELS):
             raise ValueError(f"extractor must score exactly {LABELS}")
         self.extractor = extractor
@@ -231,6 +251,15 @@ class CADEngine:
         self.temperature = _checked_float(temperature, "temperature", 1e-3, 10.0)
         self.maybe_bias = _checked_float(maybe_bias, "maybe_bias", -5.0, 5.0)
         self.delta_clip = _checked_float(delta_clip, "delta_clip", 1.0, 1e4)
+        if prior_cache_size < 1:
+            raise ValueError("prior_cache_size must be positive")
+        if adaptive and head is not None:
+            raise ValueError("adaptive CAD cannot be combined with a calibration head")
+        self.adaptive = adaptive
+        self.cache_priors = cache_priors
+        self.prior_cache_size = prior_cache_size
+        self.prior_cache_hits = 0
+        self._prior_cache: OrderedDict[tuple[PromptTemplate, str], tuple[np.ndarray, int]] = OrderedDict()
 
     @classmethod
     def from_gguf(cls, gguf_path, *, head_path=None, template: PromptTemplate = PromptTemplate(),
@@ -256,8 +285,20 @@ class CADEngine:
 
     def raw_logits(self, question: str, context: str):
         """(conditional, prior, total input tokens): the two verbalizer score vectors."""
-        cond, n1 = self.extractor.score(self.template.render(question, context))
-        prior, n2 = self.extractor.score(self.template.render_prior(question))
+        prompt = self.template.render(question, context)
+        key = (self.template, question)
+        cached = self._prior_cache.get(key) if self.cache_priors else None
+        if cached is None:
+            prior, n2 = self.extractor.score(self.template.render_prior(question))
+            if self.cache_priors:
+                self._prior_cache[key] = (prior.copy(), n2)
+                if len(self._prior_cache) > self.prior_cache_size:
+                    self._prior_cache.popitem(last=False)
+        else:
+            prior, n2 = cached[0].copy(), cached[1]
+            self.prior_cache_hits += 1
+            self._prior_cache.move_to_end(key)
+        cond, n1 = self.extractor.score(prompt)
         return cond, prior, n1 + n2
 
     def predict(self, question: str, context: str) -> CADResult:
@@ -274,10 +315,16 @@ class CADEngine:
         return self.uncalibrated_from_logits(cond, prior, n)
 
     def uncalibrated_from_logits(self, cond, prior, tokens: int = 0) -> CADResult:
-        delta = difference(cond, prior, self.alpha)
+        delta = (adaptive_information_scores(cond, prior, self.alpha) if self.adaptive
+                 else difference(cond, prior, self.alpha))
         clipped = bool(np.any(np.abs(delta) > self.delta_clip))
         delta_c = np.clip(delta, -self.delta_clip, self.delta_clip)
-        probs = _scores_to_probs(delta_c, self.maybe_bias, self.temperature)
+        temperature = self.temperature
+        if self.adaptive:
+            p = _softmax(np.asarray(cond, dtype=np.float64))
+            relative_entropy = -float(np.sum(p * np.log(np.maximum(p, np.finfo(np.float64).tiny)))) / math.log(len(LABELS))
+            temperature *= max(0.5, relative_entropy)
+        probs = _scores_to_probs(delta_c, self.maybe_bias, temperature)
         return _result(np.asarray(cond), np.asarray(prior), delta_c, probs, self.alpha, False, clipped, tokens)
 
     def classify(self, question: str, context: str) -> CADResult:

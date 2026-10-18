@@ -27,15 +27,13 @@ The transition flow keeps ``||z||_2 = 1`` (norm conservation) and never increase
 from __future__ import annotations
 
 import time
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Optional, Sequence, Tuple
 
 import numpy as np
 
 from .latent_mcts import (
     ContractiveHamiltonianTransition,
     LatentMctsPlanner,
-    _leaf_value,
-    _softmax,
     _unit,
 )
 
@@ -166,9 +164,30 @@ class BatchContractiveHamiltonianTransition:
         """
         states = np.asarray(states, dtype=np.float64)
         actions = np.asarray(actions, dtype=np.int64)
-        all_next = self.transition_all(states)  # (B, k, dim)
-        B = states.shape[0]
-        return all_next[np.arange(B), actions].copy()
+        if states.ndim != 2 or states.shape[1] != self.dim or actions.shape != (len(states),):
+            raise ValueError("states/actions have incompatible shapes")
+        if not np.all(np.isfinite(states)) or np.any(actions < 0) or np.any(actions >= self.num_actions):
+            raise ValueError("states must be finite and actions in range")
+        u = _unit_batch(states)
+        zero_state = ~np.any(u, axis=1)
+        target = self.targets[actions]
+        if self.rotations is not None:
+            u = _unit_batch(np.einsum("bde,be->bd", self.rotations[actions], u))
+        cosine = np.clip(np.einsum("bd,bd->b", target, u), -1.0, 1.0)
+        tangent = target - cosine[:, None] * u
+        sine = np.linalg.norm(tangent, axis=1)
+        theta = np.arctan2(sine, cosine)
+        next_theta = 2.0 * np.arctan2(
+            np.exp(-self.gamma) * np.sin(theta / 2.0), np.cos(theta / 2.0)
+        )
+        budget = self.max_angle if self.rotations is None else self.max_angle / 2.0
+        angle = np.minimum(budget, np.maximum(0.0, theta - next_theta))
+        raw = np.cos(angle)[:, None] * u + (
+            np.sin(angle) / np.where(sine < _EPS, 1.0, sine)
+        )[:, None] * tangent
+        result = np.where((sine < _EPS)[:, None], u, _unit_batch(raw))
+        result[zero_state] = target[zero_state]
+        return result
 
     # Allow callable use mirroring the scalar interface on a single state.
     def __call__(self, z, action):
@@ -348,31 +367,31 @@ class BatchLatentMctsPlanner:
             path_len = np.zeros(B, dtype=np.int64)
 
             depth = 0
-            while depth < max_depth and np.any(active):
-                q = node_q[arangeB, current]            # (B, k)
-                pri = node_priors[arangeB, current]     # (B, k)
-                vis = node_visits[arangeB, current]     # (B, k)
-                tot = node_total[arangeB, current]       # (B,)
+            while depth < max_depth and active.any():
+                active_idx = self._compact_indices(active)
+                current_active = current[active_idx]
+                q = node_q[active_idx, current_active]
+                pri = node_priors[active_idx, current_active]
+                vis = node_visits[active_idx, current_active]
+                tot = node_total[active_idx, current_active]
                 explore = self.c_puct * pri * np.sqrt(
                     np.maximum(tot, 1)
                 )[:, None] / (1.0 + vis)
-                action = np.argmax(q + explore, axis=1)  # (B,)
+                action = np.argmax(q + explore, axis=1)
 
-                # Record path for active instances at this depth.
-                act_mask = active
-                path_nodes[act_mask, depth] = current[act_mask]
-                path_actions[act_mask, depth] = action[act_mask]
-                path_len[act_mask] = depth + 1
+                path_nodes[active_idx, depth] = current_active
+                path_actions[active_idx, depth] = action
+                path_len[active_idx] = depth + 1
 
-                child = children[arangeB, current, action]  # (B,) 0 = unexpanded
-                expand_mask = active & (child == 0)
-                descend_mask = active & (child != 0)
+                child = children[active_idx, current_active, action]
+                expand_mask = child == 0
+                descend_mask = ~expand_mask
 
                 # --- Expansion: allocate new nodes for expanders. ---
-                if np.any(expand_mask):
-                    bi = self._compact_indices(expand_mask)
-                    parent_idx = current[bi]
-                    act_idx = action[bi]
+                if expand_mask.any():
+                    bi = active_idx[expand_mask]
+                    parent_idx = current_active[expand_mask]
+                    act_idx = action[expand_mask]
                     new_id = node_count[bi].copy()
                     node_count[bi] = new_id + 1
                     z_parent = node_z[bi, parent_idx]                # (e, dim)
@@ -413,27 +432,23 @@ class BatchLatentMctsPlanner:
                     active[bi] = False
 
                 # --- Descent: move to existing child. ---
-                if np.any(descend_mask):
-                    bi = self._compact_indices(descend_mask)
-                    child_idx = child[bi]
+                if descend_mask.any():
+                    bi = active_idx[descend_mask]
+                    child_idx = child[descend_mask]
                     current[bi] = child_idx
                     value[bi] = node_value[bi, child_idx]
                 depth += 1
 
-            # --- Backup: update visits and Q along each instance's path. ---
-            for s in range(max_depth):
-                m = path_len > s
-                if not np.any(m):
-                    continue
-                bi = np.nonzero(m)[0]
-                par = path_nodes[bi, s]
-                act = path_actions[bi, s]
-                node_visits[bi, par, act] += 1
-                node_total[bi, par] += 1
-                old_q = node_q[bi, par, act]
-                v = value[bi]
-                new_visits = node_visits[bi, par, act]
-                node_q[bi, par, act] = old_q + (v - old_q) / new_visits
+            # Nodes on one path are distinct, so all backup edges can be gathered
+            # and updated together without changing per-instance simulation order.
+            bi, level = np.nonzero(np.arange(max_depth)[None, :] < path_len[:, None])
+            par = path_nodes[bi, level]
+            act = path_actions[bi, level]
+            node_visits[bi, par, act] += 1
+            node_total[bi, par] += 1
+            old_q = node_q[bi, par, act]
+            new_visits = node_visits[bi, par, act]
+            node_q[bi, par, act] = old_q + (value[bi] - old_q) / new_visits
 
         root_visits = node_visits[:, 1, :]            # (B, k)
         root_q = node_q[:, 1, :]

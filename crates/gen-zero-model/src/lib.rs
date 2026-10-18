@@ -6,6 +6,9 @@
 
 pub mod choice_head;
 pub mod error;
+pub mod ffn_prune;
+pub mod inter_layer_mcts;
+pub mod latent_mcts;
 pub mod patch;
 pub mod qwen;
 pub mod reflex;
@@ -19,16 +22,29 @@ pub use choice_head::{
     METRIC_NORM_FLOOR,
 };
 pub use error::ModelError;
+pub use ffn_prune::{
+    default_upper_ffn_layers, select_top_ffn_channels, FfnChannelMasks, FfnImportance,
+    FfnPruneReport,
+};
+pub use inter_layer_mcts::{
+    default_hook_layers, fit_layer_weights, InterLayerConfig, InterLayerFitReport,
+    InterLayerMctsRunner, InterLayerMemory, LayerExitDecision,
+};
+pub use latent_mcts::{simplex_etf, LatentMctsPlanner, MctsPlan};
 pub use patch::{ExactFixup, ReflexHeadDelta, ReflexPatch, PATCH_FORMAT};
-pub use qwen::{LoraTarget, QwenConfig, QwenModel, WeightFormat};
+pub use qwen::{
+    FfnWork, HookAction, HookedForward, LayerObservation, LoraTarget, QwenConfig, QwenModel,
+    WeightFormat,
+};
 pub use reflex::{
     ReflexDecision, ReflexHead, ReflexOperator, ReflexOperatorConfig, ReflexPlugin,
     ReflexTelemetry, CONTRACTION_EPS, LAYER_NORM_EPS,
 };
 pub use sanitize::{contains_raw_control_marker, sanitize_control_tokens};
 pub use semantic_qwen::{
-    PoolingMode, QwenModelInfo, QwenSemanticScorer, RiskAssessment, ScoreResult,
-    RISK_ESCALATE_THRESHOLD, RISK_HARD_STOP_THRESHOLD,
+    FfnImportanceSource, FfnPruneOptions, LayerProbe, PoolingMode, QwenModelInfo,
+    QwenSemanticScorer, RiskAssessment, ScoreResult, FFN_KEEP_RATIO_ENV, RISK_ESCALATE_THRESHOLD,
+    RISK_HARD_STOP_THRESHOLD,
 };
 pub use tri_teacher::{
     calibrated_probability, decide_projections, ProjectionHead, TeacherSlot, TeacherWeights,

@@ -43,7 +43,6 @@ use std::sync::Arc;
 #[derive(Deserialize)]
 struct NanocoreAnchorFixture {
     provenance: String,
-    artifact_path: String,
     nanocore_state: Vec<f64>,
 }
 
@@ -176,15 +175,26 @@ fn legacy_fixture_artifact_is_rejected_by_the_python_bridge() {
         .status()
         .map(|status| status.success())
         .unwrap_or(false);
-    if !numpy_available {
-        eprintln!(
-            "skipping legacy_fixture_artifact_is_rejected_by_the_python_bridge: \
-             python3 has no numpy, and gen_zero.causal.nanocore_bridge requires it"
-        );
-        return;
-    }
+    assert!(
+        numpy_available,
+        "python3 with numpy is required for the bridge rejection test"
+    );
 
-    let fixture = load_fixture();
+    // Construct an actual NPZ with a legacy version so the rejection check
+    // does not depend on an optional benchmark artifact in the workspace.
+    let dir = tempfile::tempdir().expect("create legacy artifact directory");
+    let artifact = dir.path().join("legacy.npz");
+    let create = std::process::Command::new("python3")
+        .arg("-c")
+        .arg("import json, numpy as np, sys; np.savez(sys.argv[1], metadata=json.dumps({'format_version': 1}), P=np.eye(2), mu=np.zeros(2), singular_values=np.ones(2))")
+        .arg(&artifact)
+        .output()
+        .expect("create legacy NPZ");
+    assert!(
+        create.status.success(),
+        "{}",
+        String::from_utf8_lossy(&create.stderr)
+    );
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .and_then(Path::parent)
@@ -194,7 +204,7 @@ fn legacy_fixture_artifact_is_rejected_by_the_python_bridge() {
          from gen_zero.causal.nanocore_bridge import NanocoreAnchorBridge; \
          NanocoreAnchorBridge({artifact:?})",
         python_dir = repo_root.join("python").display().to_string(),
-        artifact = repo_root.join(&fixture.artifact_path).display().to_string(),
+        artifact = artifact.display().to_string(),
     );
     let output = std::process::Command::new("python3")
         .arg("-c")

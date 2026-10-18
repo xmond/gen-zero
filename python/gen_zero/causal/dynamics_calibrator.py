@@ -17,6 +17,79 @@ FACTORS = ('U_A', 'V_A', 'U_B', 'V_B')
 MAX_DEPLOYMENT_WORKING_SET_BYTES = 5632  # 5.5 KiB
 
 
+class CentredRidgeGram:
+    """Reusable eigensystem for ridge fits and exact PRESS (leave-one-out) residuals.
+
+    ``fit_intercept=True`` centres X and Y and adds the intercept leverage ``1/n``.
+    ``fit_intercept=False`` uses the raw Gram ``X^T X`` and
+    ``h_ii = x_i^T (X^T X + lambda I)^-1 x_i``: the exact LOO of a no-intercept fit.
+    The flag must match the deployed fit, or the selected ridge is for another model.
+    """
+
+    def __init__(self, features, *, fit_intercept: bool = True):
+        x = np.asarray(features, dtype=np.float64)
+        if x.ndim != 2 or x.shape[0] < 2 or x.shape[1] < 1 or not np.isfinite(x).all():
+            raise ValueError('features must be a finite matrix with at least two rows')
+        self.fit_intercept = bool(fit_intercept)
+        self.mean = x.mean(axis=0) if self.fit_intercept else np.zeros(x.shape[1])
+        self.centered = x - self.mean
+        self.values, basis = np.linalg.eigh(self.centered.T @ self.centered)
+        self.rotated = self.centered @ basis
+        self.basis = basis
+
+    def fit_and_loo(self, targets, ridge_lambda):
+        y = np.asarray(targets, dtype=np.float64)
+        if y.ndim != 2 or y.shape[0] != len(self.centered) or not np.isfinite(y).all():
+            raise ValueError('targets must be a finite matrix with matching rows')
+        if not np.isfinite(ridge_lambda) or ridge_lambda <= 0:
+            raise ValueError('ridge_lambda must be positive finite')
+        n = len(y)
+        y_mean = y.mean(axis=0) if self.fit_intercept else np.zeros(y.shape[1])
+        inv = 1.0 / (np.maximum(self.values, 0) + ridge_lambda)
+        rotated_coef = inv[:, None] * (self.rotated.T @ (y - y_mean))
+        coef = self.basis @ rotated_coef
+        prediction = y_mean + self.centered @ coef
+        leverage = np.sum(self.rotated * self.rotated * inv[None, :], axis=1)
+        if self.fit_intercept:
+            leverage = leverage + 1.0 / n
+        denominator = 1.0 - leverage
+        if np.any(denominator <= 1e-12) or not np.isfinite(denominator).all():
+            raise ValueError('PRESS leverage is singular')
+        return coef, y_mean - self.mean @ coef, (y - prediction) / denominator[:, None]
+
+
+def centred_ridge_exact_loo(features, targets, ridge_lambda, *, fit_intercept: bool = True):
+    """Exact ridge leave-one-out residual; with an intercept it includes leverage 1/n."""
+    return CentredRidgeGram(features, fit_intercept=fit_intercept).fit_and_loo(targets, ridge_lambda)[2]
+
+
+def select_regularization(features, targets, ridge_grid, *, fit_intercept: bool = True, score=None):
+    """Pick the ridge strength by exact PRESS, reusing one Gram eigensystem for the grid.
+
+    ``fit_intercept`` must match the model that will be deployed. ``score(loo_prediction)``
+    is maximised; by default it is minus the LOO mean squared error. The first best wins
+    a tie. Returns the chosen fit (coefficients, intercept, LOO MSE, score) and a table.
+    """
+    gram = CentredRidgeGram(features, fit_intercept=fit_intercept)
+    y = np.asarray(targets, dtype=np.float64)
+    grid = tuple(float(lam) for lam in ridge_grid)
+    if not grid:
+        raise ValueError('ridge_grid must not be empty')
+    best, table = None, {}
+    for lam in grid:
+        coef, intercept, residual = gram.fit_and_loo(y, lam)
+        loo_mse = float(np.mean(residual ** 2))
+        value = -loo_mse if score is None else float(score(y - residual))
+        if not np.isfinite(value):
+            raise ValueError(f'non-finite LOO score for ridge_lambda={lam}')
+        table[lam] = value
+        if best is None or value > best['score']:
+            best = dict(ridge_lambda=lam, loo_mse=loo_mse, score=value,
+                        coefficients=coef, intercept=intercept)
+    best['table'] = table
+    return best
+
+
 class CalibratedDynamics(ParallelRNNLoRAAdapter):
     """Deployment adapter, with no labels accepted by the inference path."""
 
@@ -161,7 +234,7 @@ class CalibratedDynamics(ParallelRNNLoRAAdapter):
 class CausalDynamicsCalibrator:
     """Holds a calibrated adapter built from static, pre-computed factors.
 
-    Inference only: no fitting happens in this package. Factors come from an
+    Inference only: no fitting happens in this class. Factors come from an
     exported artifact or are supplied directly by the caller.
     """
 

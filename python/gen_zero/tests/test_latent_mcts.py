@@ -210,3 +210,119 @@ def test_fitted_operator_integrates_with_planner():
     assert policy.sum() == pytest.approx(1)
     assert all(np.linalg.norm(child.z) == pytest.approx(1)
                for child in planner.last_root.children.values())
+
+
+# ------------------------------------------------------------------ module B acceleration
+#
+# Opt-in root count-dominance early stopping, Sequential Halving at the root and
+# bounded transposition memoization of transition / legal-mask / projection calls.
+
+
+def _backtrack_transition(calls=None):
+    def transition(z, a):
+        if calls is not None:
+            calls.append(a)
+        if a == 0 or np.allclose(z[:3], z[0]):
+            return np.array([0.5, 0.5, 0.5, 0.0])
+        if a == 1:
+            return np.array([0.0, 1.0, 0.0, 0.0])
+        return np.zeros(4)
+    return transition
+
+
+Z0 = np.array([0.6, 0.5, 0.1, 0.0])
+
+
+def test_default_planner_reports_a_full_budget_without_early_stop():
+    _, _, info = LatentMctsPlanner(num_simulations=50).plan(Z0, CANDS, EMB, _backtrack_transition())
+    assert info.get("early_stopped") is False
+    assert info.get("simulations_run") == 50
+    assert info.get("search_strategy") == "puct"
+
+
+def test_count_dominance_early_stop_keeps_the_decision_and_saves_simulations():
+    full_calls, fast_calls = [], []
+    full_planner = LatentMctsPlanner(num_simulations=200)
+    best_full, _, info_full = full_planner.plan(Z0, CANDS, EMB, _backtrack_transition(full_calls))
+    planner = LatentMctsPlanner(num_simulations=200, early_stop=True)
+    best, policy, info = planner.plan(Z0, CANDS, EMB, _backtrack_transition(fast_calls))
+
+    assert best == best_full == 1
+    assert info["early_stopped"] is True
+    assert info["simulations_run"] < 200
+    assert planner.last_root.total_visits == info["simulations_run"]
+    assert len(fast_calls) < len(full_calls)
+    assert policy.sum() == pytest.approx(1.0)
+    visits = np.sort(info["root_visits"])[::-1]
+    assert visits[0] - visits[1] > 200 - info["simulations_run"]
+
+
+def test_count_dominance_early_stop_matches_the_full_search_on_random_problems():
+    rng = np.random.default_rng(11)
+    stopped = 0
+    for _ in range(30):
+        emb = rng.normal(size=(5, 8))
+        z = rng.normal(size=8)
+        cands = list("abcde")
+        best_full, _, _ = LatentMctsPlanner(num_simulations=120).plan(z, cands, emb)
+        best, _, info = LatentMctsPlanner(num_simulations=120, early_stop=True).plan(z, cands, emb)
+        assert best == best_full
+        stopped += info["early_stopped"]
+    assert stopped > 0
+
+
+def test_transposition_cache_cuts_repeated_transitions_without_changing_the_result():
+    plain_calls, cached_calls, plain_legal, cached_legal = [], [], [], []
+
+    def legal(store):
+        def fn(z):
+            store.append(1)
+            return [0, 1, 2]
+        return fn
+
+    plain = LatentMctsPlanner(num_simulations=150).plan(
+        Z0, CANDS, EMB, _backtrack_transition(plain_calls), legal_actions_fn=legal(plain_legal))
+    cached = LatentMctsPlanner(num_simulations=150, transposition_cache=True).plan(
+        Z0, CANDS, EMB, _backtrack_transition(cached_calls), legal_actions_fn=legal(cached_legal))
+
+    assert cached[0] == plain[0]
+    assert np.array_equal(cached[1], plain[1])
+    assert np.array_equal(cached[2]["root_q"], plain[2]["root_q"])
+    assert cached[2]["nodes"] == plain[2]["nodes"]
+    assert cached[2].get("cache_hits", 0) > 0
+    assert len(cached_calls) < len(plain_calls)
+    assert len(cached_legal) < len(plain_legal)
+    assert cached[2]["transition_calls"] == len(cached_calls)
+
+
+def test_sequential_halving_finds_a_low_prior_optimum_that_puct_misses():
+    # The prior favours candidate 0 (an absorbing ambiguous trap); candidate 2 has
+    # the lowest prior but leads to a confident state.
+    z0 = np.array([0.9, 0.3, 0.05, 0.0])
+
+    def transition(z, a):
+        if a == 2 or z[2] > 0.9:
+            return np.array([0.0, 0.0, 1.0, 0.0])
+        return np.array([0.5, 0.5, 0.4, 0.0])
+
+    puct_best, _, _ = LatentMctsPlanner(num_simulations=6).plan(z0, CANDS, EMB, transition)
+    best, _, info = LatentMctsPlanner(num_simulations=6, search_strategy="sequential_halving").plan(
+        z0, CANDS, EMB, transition)
+    assert puct_best != 2
+    assert best == 2
+    assert info["search_strategy"] == "sequential_halving"
+    assert info["root_visits"].min() > 0
+
+
+def test_sequential_halving_respects_the_root_legal_mask():
+    z0 = np.array([0.9, 0.3, 0.05, 0.0])
+    best, policy, info = LatentMctsPlanner(num_simulations=12, search_strategy="sequential_halving").plan(
+        z0, CANDS, EMB, lambda z, a: np.array([0.0, 0.0, 1.0, 0.0]), legal_actions_fn=lambda z: [0, 1])
+    assert best in (0, 1)
+    assert policy[2] == 0.0
+    assert info["root_visits"][2] == 0
+
+
+def test_unknown_latent_search_strategy_fails_closed():
+    with pytest.raises(ValueError, match="search_strategy"):
+        LatentMctsPlanner(search_strategy="greedy")

@@ -170,7 +170,11 @@ pub struct LookaheadResult {
     /// Share of root visits that went to the best action.
     pub confidence: f64,
     pub oracle_calls: usize,
+    /// Simulations actually run (at most `simulations_budget`).
     pub simulations: usize,
+    pub simulations_budget: usize,
+    /// True when the root decision was locked before the budget ran out.
+    pub early_stopped: bool,
 }
 
 struct Node {
@@ -229,6 +233,44 @@ impl Node {
             }
         }
         best.unwrap_or(0)
+    }
+
+    /// True when the root choice can no longer change, so more simulations
+    /// would only spend oracle calls. The policy entropy comes from the fixed
+    /// node priors; confidence and sequence likelihood describe the samples
+    /// collected up to this stop, not a full simulation budget. Two cases:
+    /// * one feasible action, after `settle_sims` simulations (the horizon, so
+    ///   the principal path is expanded to full depth);
+    /// * the most visited action leads the runner-up by more than `remaining`
+    ///   visits and is not worse on mean value: it wins the final count even
+    ///   if every remaining simulation went to the runner-up.
+    fn root_decided(
+        &self,
+        allowed: &[bool],
+        done: usize,
+        remaining: usize,
+        settle_sims: usize,
+    ) -> bool {
+        if remaining == 0 {
+            return false;
+        }
+        let feasible: Vec<usize> = (0..self.priors.len()).filter(|&a| allowed[a]).collect();
+        if feasible.len() == 1 {
+            return done >= settle_sims;
+        }
+        let lead = self.most_visited(allowed);
+        let lead_visits = self.visits[lead] as usize;
+        let second_visits = feasible
+            .iter()
+            .filter(|&&a| a != lead)
+            .map(|&a| self.visits[a] as usize)
+            .max()
+            .unwrap_or(0);
+        lead_visits > second_visits + remaining
+            && feasible
+                .iter()
+                .filter(|&&a| a != lead && self.visits[a] > 0)
+                .all(|&a| self.q(lead) >= self.q(a))
     }
 
     fn most_visited(&self, allowed: &[bool]) -> usize {
@@ -302,7 +344,8 @@ pub async fn run_lookahead<O: PriorOracle>(
     forced.sort_by(|&a, &b| root_noisy_priors[b].total_cmp(&root_noisy_priors[a]));
     let mut forced = forced.into_iter();
 
-    for _ in 0..simulations {
+    let mut simulations_run = 0;
+    for sim in 0..simulations {
         let mut node = 0;
         let mut history: Vec<usize> = Vec::with_capacity(horizon);
         let mut path: Vec<(usize, usize)> = Vec::with_capacity(horizon);
@@ -338,6 +381,15 @@ pub async fn run_lookahead<O: PriorOracle>(
         for (n, a) in path {
             nodes[n].visits[a] += 1;
             nodes[n].value_sum[a] += value;
+        }
+        simulations_run = sim + 1;
+        if nodes[0].root_decided(
+            allowed,
+            simulations_run,
+            simulations - simulations_run,
+            horizon,
+        ) {
+            break;
         }
     }
 
@@ -375,7 +427,9 @@ pub async fn run_lookahead<O: PriorOracle>(
         root_values: (0..k).map(|a| root.q(a)).collect(),
         principal_variation,
         oracle_calls,
-        simulations,
+        simulations: simulations_run,
+        simulations_budget: simulations,
+        early_stopped: simulations_run < simulations,
     })
 }
 
@@ -508,6 +562,61 @@ mod tests {
             assert!(d.iter().all(|&x| (0.0..=1.0).contains(&x)));
             assert!((d.iter().sum::<f64>() - 1.0).abs() < 1e-9, "{alpha}: {d:?}");
         }
+    }
+
+    #[tokio::test]
+    async fn single_feasible_root_action_stops_after_the_horizon() {
+        let oracle = TableOracle {
+            root: vec![0.6, 0.4],
+            after: vec![vec![0.5, 0.5], vec![0.5, 0.5]],
+            calls: AtomicUsize::new(0),
+        };
+        let r = run_lookahead(&oracle, &[false, true], cfg(3, 100))
+            .await
+            .unwrap();
+        assert_eq!(r.best_action, 1);
+        assert!(r.early_stopped);
+        assert_eq!(r.simulations, 3);
+        assert_eq!(r.simulations_budget, 100);
+        assert_eq!(r.principal_variation.len(), 3);
+        // root + one expansion per simulation until the horizon is reached.
+        assert!(r.oracle_calls <= 3, "oracle_calls {}", r.oracle_calls);
+        assert_eq!(r.oracle_calls, oracle.calls.load(Ordering::SeqCst));
+    }
+
+    #[tokio::test]
+    async fn locked_root_leader_stops_before_the_budget_and_keeps_the_choice() {
+        // Action 0 dominates (prior 0.97 and a confident continuation).
+        let oracle = TableOracle {
+            root: vec![0.97, 0.02, 0.01],
+            after: vec![vec![0.98, 0.01, 0.01]; 3],
+            calls: AtomicUsize::new(0),
+        };
+        let r = run_lookahead(&oracle, &[true, true, true], cfg(2, 128))
+            .await
+            .unwrap();
+        assert_eq!(r.best_action, 0);
+        assert!(r.early_stopped, "visits {:?}", r.root_visits);
+        assert!(r.simulations < 128);
+        let lead = r.root_visits[0] as usize;
+        let second = r.root_visits[1].max(r.root_visits[2]) as usize;
+        assert!(lead > second + (128 - r.simulations), "{:?}", r.root_visits);
+    }
+
+    #[tokio::test]
+    async fn tied_root_never_stops_early() {
+        let oracle = TableOracle {
+            root: vec![0.5, 0.5],
+            after: vec![vec![0.5, 0.5]; 2],
+            calls: AtomicUsize::new(0),
+        };
+        // No root noise, equal priors: the visit counts alternate and never
+        // lead by more than one, so the remaining budget is always decisive.
+        let mut tied = cfg(2, 40);
+        tied.root_noise.epsilon = 0.0;
+        let r = run_lookahead(&oracle, &[true, true], tied).await.unwrap();
+        assert!(!r.early_stopped, "visits {:?}", r.root_visits);
+        assert_eq!(r.simulations, 40);
     }
 
     #[tokio::test]

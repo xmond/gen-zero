@@ -45,6 +45,7 @@ class EngineSpec:
     n_threads: int
     use_mmap: bool
     alpha: float = 0.5
+    adaptive: bool = False
     factory: str = GGUF_ENGINE_FACTORY
 
 
@@ -52,7 +53,8 @@ def build_gguf_engine(spec: EngineSpec):
     from gen_zero.causal.cad_engine import CADEngine
 
     return CADEngine.from_gguf(spec.gguf_path, head_path=spec.head_path, n_ctx=spec.n_ctx,
-                               n_threads=spec.n_threads, use_mmap=spec.use_mmap, alpha=spec.alpha)
+                               n_threads=spec.n_threads, use_mmap=spec.use_mmap, alpha=spec.alpha,
+                               adaptive=spec.adaptive)
 
 
 def resolve_factory(path: str):
@@ -111,7 +113,7 @@ class GGUFParallelPool:
 
     def __init__(self, gguf_path, *, workers, threads_per_worker, n_ctx=2048, head_path=None,
                  chunk_size=1, numa_pin=False, use_mmap=True, topology: NumaTopology | None = None,
-                 alpha: float = 0.5, factory: str = GGUF_ENGINE_FACTORY):
+                 alpha: float = 0.5, adaptive: bool = False, factory: str = GGUF_ENGINE_FACTORY):
         if workers < 1 or threads_per_worker < 1 or chunk_size < 1 or n_ctx < 1:
             raise ValueError("workers, threads_per_worker, chunk_size and n_ctx must be positive")
         if not Path(gguf_path).is_file():
@@ -133,7 +135,7 @@ class GGUFParallelPool:
             self.topology = None
             self.placements = [None] * workers
         spec = EngineSpec(str(gguf_path), str(head_path) if head_path else None, n_ctx,
-                          threads_per_worker, use_mmap, alpha=alpha, factory=factory)
+                          threads_per_worker, use_mmap, alpha=alpha, adaptive=adaptive, factory=factory)
         self.spec = spec
         ctx = mp.get_context("spawn")
         self._tasks = ctx.Queue()

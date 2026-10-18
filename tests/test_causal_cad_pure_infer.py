@@ -16,8 +16,6 @@ import json
 import math
 import multiprocessing as mp
 import os
-import subprocess
-import sys
 from pathlib import Path
 
 import numpy as np
@@ -28,6 +26,7 @@ PKG = ROOT / "python" / "gen_zero"
 NEW_MODULES = [
     PKG / "causal" / "cad_engine.py", PKG / "causal" / "verbalizer_extractor.py",
     PKG / "causal" / "numa_affinity.py", PKG / "causal" / "gguf_parallel_pool.py",
+    PKG / "causal" / "qwen_inter_layer_mcts.py",
     PKG / "scripts" / "setup_qwen15b_models.py", ROOT / "examples" / "quickstart_qwen15b_cad.py",
 ]
 
@@ -239,6 +238,78 @@ def test_view_logits_is_a_zero_copy_view_of_the_c_buffer():
 def test_common_prefix_len():
     assert vx.common_prefix_len([1, 2, 3], [1, 2, 9, 9]) == 2
     assert vx.common_prefix_len([], [1]) == 0
+
+
+def test_dynamic_kv_reuses_aligned_question_prefix():
+    class DummyLLM:
+        n_tokens = 0
+        def __init__(self):
+            self.calls = []
+        def eval(self, ids):
+            self.calls.append((self.n_tokens, list(ids)))
+        def reset(self):
+            self.n_tokens = 0
+    ex = object.__new__(vx.LlamaCppVerbalizerExtractor)
+    ex.llm = DummyLLM()
+    ex.n_ctx = 128
+    ex.prefix_ids = list(range(8))
+    ex._cached_ids = []
+    ex.dynamic_reuse = True
+    ex.reused_tokens = 0
+    ex.n_vocab = 3
+    ex.flat_ids = [0, 1, 2]
+    ex.bounds = vx.group_bounds([[0], [1], [2]])
+    ex._encode = lambda text: list(range(32)) + ([40, 41] if text == "first" else [50, 51])
+    buf = (ctypes.c_float * 3)(1, 2, 3)
+    ex.llm._ctx = type("Context", (), {"get_logits": lambda self: ctypes.cast(buf, ctypes.POINTER(ctypes.c_float))})()
+    ex.score("first")
+    ex.score("second")
+    assert ex.llm.calls[-1] == (24, list(range(24, 32)) + [50, 51])
+    assert ex.reused_tokens == 24
+
+
+def test_prior_cache_is_bounded_and_preserves_logits():
+    class CountingExtractor:
+        groups = [[0], [1], [2]]
+        def __init__(self): self.calls = []
+        def score(self, prompt):
+            self.calls.append(prompt)
+            return np.array([float(len(prompt)), 1.0, 0.0]), len(prompt)
+    ex = CountingExtractor()
+    eng = cad.CADEngine(ex, prior_cache_size=1)
+    a = eng.raw_logits("one?", "a")
+    b = eng.raw_logits("one?", "b")
+    assert eng.prior_cache_hits == 1 and len(ex.calls) == 3
+    np.testing.assert_array_equal(a[1], b[1])
+    b[1][0] = -999
+    assert eng.raw_logits("one?", "b")[1][0] != -999
+    eng.raw_logits("two?", "c")
+    eng.raw_logits("one?", "a")
+    assert len(ex.calls) == 8
+
+
+def test_adaptive_information_scores_and_cli_flag():
+    from gen_zero import cli
+    cond = np.array([2.0, 0.0, -1.0])
+    prior = np.array([2.0, 0.0, -1.0])
+    scores = cad.adaptive_information_scores(cond, prior, 0.5)
+    assert scores.shape == (3,) and np.isfinite(scores).all()
+    assert scores[2] > cad.difference(cond, prior, 0.5)[2]
+    assert np.isfinite(cad.adaptive_information_scores([1000, -1000, -1000], [-1000, 1000, -1000])).all()
+    assert cli.build_cli_parser().parse_args(["cad", "--adaptive"]).adaptive
+
+
+def test_adaptive_engine_uses_conditional_entropy_for_temperature(engine):
+    cond = np.array([3.0, 0.0, -1.0])
+    prior = np.zeros(3)
+    adaptive = cad.CADEngine(engine.extractor, adaptive=True).uncalibrated_from_logits(cond, prior)
+    scores = cad.adaptive_information_scores(cond, prior)
+    p = np.exp(cond - cond.max()); p /= p.sum()
+    relative_entropy = -(p * np.log(p)).sum() / math.log(3)
+    temperature = max(0.5, relative_entropy)
+    want = np.exp((scores - scores.max()) / temperature)
+    want /= want.sum()
+    np.testing.assert_allclose(list(adaptive.probabilities.values()), want, atol=1e-12)
 
 
 def test_hf_extractor_logits_to_keep_one_equals_last_row_of_full_logits(tiny):

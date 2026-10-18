@@ -134,6 +134,7 @@ class LlamaCppVerbalizerExtractor:
         threads = n_threads or os.cpu_count() or 1
         self.n_ctx = n_ctx
         self.reused_tokens = 0
+        self.dynamic_reuse = True
         # logits_all=False: llama.cpp keeps only the last position's logits.
         self.llm = Llama(model_path=str(gguf_path), n_ctx=n_ctx, n_batch=n_batch, n_ubatch=n_ubatch,
                          n_threads=threads, n_threads_batch=threads, logits_all=False,
@@ -150,6 +151,7 @@ class LlamaCppVerbalizerExtractor:
         if max(self.flat_ids) >= self.n_vocab:
             raise ValueError("verbalizer id outside the GGUF vocab")
         self.prefix_ids: list[int] = []
+        self._cached_ids: list[int] = []
         if prefix:
             self._lock_prefix(prefix)
 
@@ -173,20 +175,26 @@ class LlamaCppVerbalizerExtractor:
         self.prefix_ids = ids
         self.llm.reset()
         self.llm.eval(ids)
+        self._cached_ids = ids.copy()
 
     def score(self, prompt: str, *, reuse_prefix: bool = True) -> tuple[np.ndarray, int]:
         ids = self._encode(prompt)
         if not 1 <= len(ids) <= self.n_ctx:
             raise ValueError(f"input has {len(ids)} tokens, n_ctx is {self.n_ctx}")
         keep = 0
-        if reuse_prefix and self.prefix_ids:
+        reusable = self._cached_ids if self.dynamic_reuse else self.prefix_ids
+        if reuse_prefix and reusable:
             # A BPE merge across the prefix boundary shortens the match, it never corrupts it.
-            keep = min(common_prefix_len(ids, self.prefix_ids), len(ids) - 1)
+            # A one-token suffix can produce different llama.cpp CPU matmul logits even
+            # with an aligned prefix; leave at least one aligned block for prefill.
+            keep = max(0, min(common_prefix_len(ids, reusable), len(ids) - PREFIX_ALIGN))
             keep = keep // PREFIX_ALIGN * PREFIX_ALIGN
         self.llm.n_tokens = keep  # Llama.eval() drops KV rows from n_tokens onward
+        self._cached_ids = []  # a failed eval must never advertise invalid KV state
         self.llm.eval(ids[keep:])
         row = view_logits(self.llm._ctx.get_logits(), self.n_vocab)
         scores = gather_scores(row, self.flat_ids, self.bounds)
+        self._cached_ids = ids.copy()
         self.reused_tokens += keep
         return scores, len(ids)
 
@@ -232,4 +240,3 @@ class HFVerbalizerExtractor:
                                f"got {out.logits.shape[1]} positions")
         row = out.logits[0, -1].float().numpy()
         return gather_scores(row, self.flat_ids, self.bounds), n
-

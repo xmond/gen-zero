@@ -4332,6 +4332,8 @@ impl PolymorphicZeroEngine {
             },
             "horizon": horizon,
             "simulations": result.simulations,
+            "simulations_budget": result.simulations_budget,
+            "early_stopped": result.early_stopped,
             "oracle_calls": result.oracle_calls,
             "best_action": best,
             "sequence_likelihood": result.sequence_likelihood,
@@ -5779,6 +5781,13 @@ mod tests {
             out.meta
         );
         assert_eq!(out.meta["best_action"], "safe", "{}", out.meta);
+        assert_eq!(out.meta["simulations_budget"], 16, "{}", out.meta);
+        assert_eq!(
+            out.meta["early_stopped"],
+            out.meta["simulations"].as_u64().unwrap() < 16,
+            "{}",
+            out.meta
+        );
 
         // When all candidate actions are revoked, imagine must fail closed.
         engine

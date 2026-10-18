@@ -28,6 +28,72 @@ pub enum QwenAction {
         #[arg(long)]
         text: String,
     },
+    /// Observe model layer changes for a prompt, optionally stopping after a layer.
+    Probe {
+        #[arg(long)]
+        prompt: String,
+        #[arg(long)]
+        exit_after_layer: Option<usize>,
+        /// Keep this fraction of the FFN channels of the upper layers
+        /// (22..28 of 28), physically slicing gate/up/down. Default: 1.0
+        /// (dense), or GENZERO_QWEN_FFN_KEEP_RATIO when that is set; an
+        /// explicit value overrides the variable.
+        #[arg(long)]
+        ffn_keep_ratio: Option<f64>,
+        /// How the kept FFN channels are chosen when --ffn-keep-ratio < 1.
+        #[arg(long, value_enum, default_value_t = FfnImportanceArg::WeightNorm)]
+        ffn_importance: FfnImportanceArg,
+        /// Also fit the inter-layer memories and MCTS layer weights on the 16
+        /// risk demonstrations, then run the heuristic subspace-step early-exit risk
+        /// readout of the prompt over the default hook layers.
+        #[arg(long)]
+        early_exit: bool,
+        /// Hook layers kept with nonzero MCTS weight (with --early-exit).
+        #[arg(long, default_value_t = 4)]
+        top_k_hooks: usize,
+    },
+    /// Cross-fitted BoolQ evaluation of the calibrated MCTS early exit
+    /// (verbalizer logit standardisation, episodic memory, MCTS layer
+    /// weights) on the 28-layer Qwen2.5-1.5B; writes a JSON report.
+    BenchBoolq {
+        #[arg(long)]
+        data: PathBuf,
+        #[arg(long, default_value_t = 100)]
+        n: usize,
+        #[arg(long, default_value_t = 5)]
+        folds: usize,
+        /// Below 1, also run a sparse arm that keeps this fraction of the
+        /// FFN channels of layers 22..28, chosen per fold on training rows.
+        #[arg(long, default_value_t = 0.75)]
+        ffn_keep_ratio: f64,
+        #[arg(long, default_value_t = 22)]
+        min_exit_layer: usize,
+        #[arg(long, default_value_t = 0.25)]
+        tau: f64,
+        #[arg(long, default_value_t = 0.5)]
+        gamma: f64,
+        #[arg(long, default_value_t = 0.05)]
+        mcts_margin_min: f64,
+        #[arg(long, default_value_t = 4)]
+        top_k_hooks: usize,
+        /// Test rows per MCTS-pruned candidate ranking group; 0 skips it.
+        #[arg(long, default_value_t = 5)]
+        prune_group_size: usize,
+        #[arg(long, default_value_t = 21)]
+        prune_shallow_layers: usize,
+        #[arg(long, default_value_t = 2)]
+        prune_top_m: usize,
+        #[arg(long)]
+        output: PathBuf,
+    },
+}
+
+#[derive(clap::ValueEnum, Clone, Copy, Debug)]
+pub enum FfnImportanceArg {
+    /// sqrt(|gate_c| |up_c|) |down_c|, no data needed.
+    WeightNorm,
+    /// Mean |silu(gate) * up| over the risk demonstrations times |down_c|.
+    Activation,
 }
 
 #[derive(Subcommand, Debug)]
@@ -824,11 +890,116 @@ async fn main() -> anyhow::Result<()> {
         Commands::Qwen {
             model,
             tokenizer,
+            action:
+                QwenAction::BenchBoolq {
+                    data,
+                    n,
+                    folds,
+                    ffn_keep_ratio,
+                    min_exit_layer,
+                    tau,
+                    gamma,
+                    mcts_margin_min,
+                    top_k_hooks,
+                    prune_group_size,
+                    prune_shallow_layers,
+                    prune_top_m,
+                    output,
+                },
+        } => {
+            let opts = gen_zero_model::inter_layer_mcts::BoolqBenchOptions {
+                model_path: model,
+                tokenizer_path: tokenizer,
+                data,
+                n,
+                folds,
+                ffn_keep_ratio,
+                ffn_layers: None,
+                hook_layers: None,
+                min_exit_layer,
+                tau,
+                gamma,
+                mcts_margin_min,
+                top_k_hooks,
+                prune_group_size,
+                prune_shallow_layers,
+                prune_top_m,
+            };
+            let report = gen_zero_model::inter_layer_mcts::run_boolq_benchmark(&opts)?;
+            std::fs::write(&output, serde_json::to_string_pretty(&report)?)
+                .with_context(|| format!("write {}", output.display()))?;
+            let brief: serde_json::Map<String, serde_json::Value> = report["arms"]
+                .as_object()
+                .context("report has no arms")?
+                .iter()
+                .map(|(name, arm)| {
+                    let pick = [
+                        "correct",
+                        "n",
+                        "accuracy",
+                        "mean_layers_executed",
+                        "early_exits",
+                        "ffn_mac_reduction_vs_dense28",
+                        "e2e_speedup_vs_full_28_uncalibrated",
+                        "capture_forward_vs_predict_timed_ratio",
+                    ]
+                    .iter()
+                    .map(|k| (k.to_string(), arm[*k].clone()))
+                    .collect::<serde_json::Map<_, _>>();
+                    (name.clone(), serde_json::Value::Object(pick))
+                })
+                .collect();
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "output": output.display().to_string(),
+                    "headline_arm": report["headline_arm"],
+                    "timing_boundary_note": report["timing_boundary_note"],
+                    "arms": brief,
+                    "candidate_pruning": {
+                        "groups": report["candidate_pruning"]["groups"],
+                        "pruned_best_is_yes": report["candidate_pruning"]["pruned_best_is_yes"],
+                        "agrees_with_full_ranking": report["candidate_pruning"]["agrees_with_full_ranking"],
+                        "layers_executed": report["candidate_pruning"]["layers_executed"],
+                        "full_layers": report["candidate_pruning"]["full_layers"],
+                    },
+                    "total_wall_seconds": report["total_wall_seconds"],
+                }))?
+            );
+        }
+        Commands::Qwen {
+            model,
+            tokenizer,
             action,
         } => {
             let started = std::time::Instant::now();
-            let scorer = gen_zero_model::QwenSemanticScorer::load(&model, tokenizer.as_deref())
-                .with_context(|| format!("load native Qwen scorer from {}", model.display()))?;
+            let pruning = match &action {
+                QwenAction::Probe {
+                    ffn_keep_ratio: Some(ratio),
+                    ffn_importance,
+                    ..
+                } => Some(gen_zero_model::FfnPruneOptions::from_keep_ratio(
+                    *ratio,
+                    match ffn_importance {
+                        FfnImportanceArg::WeightNorm => {
+                            gen_zero_model::FfnImportanceSource::WeightNorm
+                        }
+                        FfnImportanceArg::Activation => {
+                            gen_zero_model::FfnImportanceSource::Activation
+                        }
+                    },
+                )?),
+                _ => None,
+            };
+            let scorer = match pruning {
+                Some(pruning) => gen_zero_model::QwenSemanticScorer::load_with_ffn_pruning(
+                    &model,
+                    tokenizer.as_deref(),
+                    pruning,
+                ),
+                None => gen_zero_model::QwenSemanticScorer::load(&model, tokenizer.as_deref()),
+            }
+            .with_context(|| format!("load native Qwen scorer from {}", model.display()))?;
             let load_ms = started.elapsed().as_secs_f64() * 1e3;
             let started = std::time::Instant::now();
             let result = match action {
@@ -853,6 +1024,42 @@ async fn main() -> anyhow::Result<()> {
                     },
                     "classifier": scorer.classifier_id(),
                 }),
+                QwenAction::Probe {
+                    prompt,
+                    exit_after_layer,
+                    early_exit,
+                    top_k_hooks,
+                    ..
+                } => {
+                    let probe = scorer.probe_layers(&prompt, exit_after_layer)?;
+                    let mut out = serde_json::json!({
+                        "prompt": prompt,
+                        "probe": probe,
+                        "ffn_pruning": scorer.info().ffn_pruning,
+                    });
+                    if early_exit {
+                        let config = gen_zero_model::InterLayerConfig {
+                            top_k_hooks,
+                            ..Default::default()
+                        };
+                        let fit_started = std::time::Instant::now();
+                        let (runner, fit) = scorer.fit_risk_inter_layer(&config)?;
+                        let fit_ms = fit_started.elapsed().as_secs_f64() * 1e3;
+                        let exit_started = std::time::Instant::now();
+                        let decision = scorer.risk_early_exit(&runner, &prompt)?;
+                        out["inter_layer"] = serde_json::json!({
+                            "labels": ["safe", "dangerous"],
+                            "fit": fit,
+                            "fit_ms": fit_ms,
+                            "decision": decision,
+                            "decision_ms": exit_started.elapsed().as_secs_f64() * 1e3,
+                        });
+                    }
+                    out
+                }
+                QwenAction::BenchBoolq { .. } => {
+                    anyhow::bail!("bench-boolq runs before the scorer is loaded")
+                }
             };
             let mut out = result;
             out["model"] = serde_json::to_value(scorer.info())?;
