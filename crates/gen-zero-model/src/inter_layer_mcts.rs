@@ -643,7 +643,8 @@ impl VerbalizerLogitStats {
 /// `softmax(beta * K q)^T V`. Raw decoder states share a few huge outlier
 /// dimensions, so uncentred cosines all sit near 1 and the read degrades to
 /// the class prior; `center` (the anchor mean in [`InterLayerMctsRunner::fit_calibrated`])
-/// removes them. The store is a FIFO ring of `capacity` entries.
+/// removes them. The store is a FIFO ring of `capacity` entries; the
+/// calibrated fit centres on the retained anchors.
 ///
 /// With a centre, [`Self::loo_query`] treats it as the mean of the stored
 /// states: entry `i` is read against the mean of the other entries, so the
@@ -861,6 +862,67 @@ impl EpisodicManifoldMemory {
             })
             .collect()
     }
+
+    /// One out-of-fold read per written anchor, in `ids` order, even when
+    /// the FIFO kept only the last `capacity` of them. An anchor still in
+    /// the store gets its [`Self::loo_query`] row (itself masked, centre
+    /// `mu_-i`). An anchor the FIFO already dropped is not in the store, so
+    /// it reads every retained entry, centred on the retained mean. The rows
+    /// stay 1-to-1 with the anchors' labels and base probabilities. Both
+    /// row kinds are out-of-fold (no row reads its own entry), but a dropped
+    /// anchor's read sees one more entry and the full retained centre.
+    pub fn loo_query_for_all_anchors(
+        &self,
+        hidden: &[Vec<f64>],
+        ids: &[usize],
+    ) -> Result<Vec<Vec<f64>>, ModelError> {
+        if hidden.len() != ids.len() {
+            return Err(ModelError::QwenInput(
+                "hidden and ids must have the same length".into(),
+            ));
+        }
+        if self.is_empty() {
+            return Err(ModelError::Inference("memory is empty".into()));
+        }
+        let retained: BTreeMap<usize, usize> = self
+            .ids
+            .iter()
+            .enumerate()
+            .map(|(j, &id)| (id, j))
+            .collect();
+        let in_store = ids.iter().any(|id| retained.contains_key(id));
+        let loo = if in_store {
+            self.loo_query()?
+        } else {
+            Vec::new()
+        };
+        let dropped = match &self.center {
+            None => None,
+            Some(_) => {
+                let m = self.raw.len() as f64;
+                let mu: Vec<f64> = (0..self.dim)
+                    .map(|j| self.raw.iter().map(|r| r[j]).sum::<f64>() / m)
+                    .collect();
+                let keys = self
+                    .raw
+                    .iter()
+                    .map(|r| self.encode_with(r, Some(&mu)))
+                    .collect::<Result<Vec<_>, _>>()?;
+                Some((mu, keys))
+            }
+        };
+        hidden
+            .iter()
+            .zip(ids)
+            .map(|(h, id)| match (retained.get(id), &dropped) {
+                (Some(&j), _) => Ok(loo[j].clone()),
+                (None, None) => self.read(&self.encode(h)?, None),
+                (None, Some((mu, keys))) => {
+                    self.read_keys(keys, &self.encode_with(h, Some(mu))?, None)
+                }
+            })
+            .collect()
+    }
 }
 
 /// Memory mixing weights tried by [`select_memory_lambda`]: 0.1 to 1.0.
@@ -875,6 +937,13 @@ pub struct LambdaCandidate {
     pub se: f64,
     pub gain_over_null: Option<f64>,
     pub gain_over_null_se: Option<f64>,
+    /// Gain over the uniform `1/K` row mixed at the same `lambda`.
+    pub gain_over_uniform: f64,
+    pub gain_over_uniform_se: f64,
+    /// Gain over the leave-one-out Laplace prior mixed at the same
+    /// `lambda`; set together with `gain_over_null`.
+    pub gain_over_laplace: Option<f64>,
+    pub gain_over_laplace_se: Option<f64>,
     pub passed: bool,
 }
 
@@ -903,6 +972,13 @@ fn mean_se(gain: &[f64]) -> (f64, f64) {
 /// saturated base probe gains from mixing in anything, so the first test
 /// alone would accept a memory that carries no more than the label
 /// frequencies.
+///
+/// The memory must also beat the uniform row `1/K` mixed at the same
+/// `lambda` (always), and, with `null_probs`, the leave-one-out Laplace
+/// prior `(count_c - [c = y_i] + 1) / (n - 1 + K)`. On balanced labels the
+/// leave-one-out prior puts `< 1/2` on the true label, so a constant
+/// `[0.5, 0.5]` memory beats it while carrying no information; against the
+/// uniform row its gain is exactly 0 and it fails.
 pub fn select_memory_lambda(
     base_probs: &[Vec<f64>],
     memory_probs: &[Vec<f64>],
@@ -951,6 +1027,32 @@ pub fn select_memory_lambda(
     let mixed = |other: &[Vec<f64>], lam: f64, i: usize| {
         (1.0 - lam) * base_probs[i][labels[i]] + lam * other[i][labels[i]]
     };
+    let uniform = vec![vec![1.0 / k as f64; k]; n];
+    let mut counts = vec![0.0; k];
+    for &y in labels {
+        counts[y] += 1.0;
+    }
+    let laplace: Vec<Vec<f64>> = labels
+        .iter()
+        .map(|&y| {
+            (0..k)
+                .map(|c| (counts[c] - if c == y { 1.0 } else { 0.0 } + 1.0) / (n - 1 + k) as f64)
+                .collect()
+        })
+        .collect();
+    // Paired gain of the memory mixture over `other` mixed at `lam`.
+    let excess_over = |other: &[Vec<f64>], lam: f64, what: &str| {
+        let excess: Vec<f64> = (0..n)
+            .map(|i| ln(mixed(memory_probs, lam, i)) - ln(mixed(other, lam, i)))
+            .collect();
+        let (em, es) = mean_se(&excess);
+        if !(em.is_finite() && es.is_finite()) {
+            return Err(ModelError::Inference(format!(
+                "non-finite out-of-fold gain over the {what}"
+            )));
+        }
+        Ok((em, es, em > 0.0 && em > se_mult * es))
+    };
     let mut report = LambdaReport {
         n,
         lambda: 0.0,
@@ -965,28 +1067,28 @@ pub fn select_memory_lambda(
         if !(mean.is_finite() && se.is_finite()) {
             return Err(ModelError::Inference("non-finite out-of-fold gain".into()));
         }
-        let mut passed = mean > 0.0 && mean > se_mult * se;
+        let (um, us, uniform_ok) = excess_over(&uniform, lam, "uniform row")?;
+        let mut passed = mean > 0.0 && mean > se_mult * se && uniform_ok;
         let mut candidate = LambdaCandidate {
             lambda: lam,
             mean_gain: mean,
             se,
             gain_over_null: None,
             gain_over_null_se: None,
+            gain_over_uniform: um,
+            gain_over_uniform_se: us,
+            gain_over_laplace: None,
+            gain_over_laplace_se: None,
             passed: false,
         };
         if let Some(null) = null_probs {
-            let excess: Vec<f64> = (0..n)
-                .map(|i| ln(mixed(memory_probs, lam, i)) - ln(mixed(null, lam, i)))
-                .collect();
-            let (em, es) = mean_se(&excess);
-            if !(em.is_finite() && es.is_finite()) {
-                return Err(ModelError::Inference(
-                    "non-finite out-of-fold gain over the null".into(),
-                ));
-            }
-            passed = passed && em > 0.0 && em > se_mult * es;
+            let (em, es, null_ok) = excess_over(null, lam, "null")?;
+            let (lm, ls, laplace_ok) = excess_over(&laplace, lam, "Laplace prior")?;
+            passed = passed && null_ok && laplace_ok;
             candidate.gain_over_null = Some(em);
             candidate.gain_over_null_se = Some(es);
+            candidate.gain_over_laplace = Some(lm);
+            candidate.gain_over_laplace_se = Some(ls);
         }
         candidate.passed = passed;
         report.candidates.push(candidate);
@@ -1301,6 +1403,10 @@ impl InterLayerMctsRunner {
         let mut prev_feature: Option<Vec<f64>> = None;
         let mut cum_z: Option<Vec<f64>> = None;
         let mut cum_w = 0.0;
+        // Feature and top-1 label of the last checkpoint with weight
+        // > WEIGHT_EPS: a zero-weight checkpoint is no observation, so it is
+        // no reference for the step `delta` or for stability.
+        let mut prev_top: Option<usize> = None;
         let mut trace: Vec<CheckpointTrace> = Vec::new();
         let mut exit: Option<(f64, f64, f64, f64, f64)> = None;
         let out = model.forward_with_hook(&[ids.to_vec()], &mut |obs| {
@@ -1309,7 +1415,13 @@ impl InterLayerMctsRunner {
                 return Ok(HookAction::Continue);
             }
             let feature = to_f64(model.final_norm_last(obs.residual)?);
-            let prev = prev_feature.replace(feature.clone());
+            let layer_w = self.layer_weights.get(&layer).copied().unwrap_or(0.0);
+            let weighted_ok = self.layer_weights.is_empty() || layer_w > WEIGHT_EPS;
+            let prev = if weighted_ok {
+                prev_feature.replace(feature.clone())
+            } else {
+                None
+            };
             let (z, mem) = match self.memories.get(&layer) {
                 Some(mem) => (mem.predict(&feature)?, Some(mem)),
                 None => (self.probe_logits(&feature)?, None),
@@ -1318,7 +1430,7 @@ impl InterLayerMctsRunner {
                 z
             } else {
                 let w = self.layer_weights.get(&layer).copied().unwrap_or(0.0);
-                if w > 0.0 && layer != last {
+                if w > WEIGHT_EPS && layer != last {
                     cum_w += w;
                     let acc = cum_z.get_or_insert_with(|| vec![0.0; z.len()]);
                     for (a, v) in acc.iter_mut().zip(&z) {
@@ -1338,7 +1450,10 @@ impl InterLayerMctsRunner {
             check_finite("checkpoint probabilities", &probs)?;
             let gap = top2_gap(&probs);
             let top = argmax(&probs);
-            let stable = trace.last().is_some_and(|t| argmax(&t.probs) == top);
+            let stable = weighted_ok && prev_top == Some(top);
+            if weighted_ok {
+                prev_top = Some(top);
+            }
             let delta = match (mem, prev.as_deref()) {
                 (Some(m), Some(p)) => Some(m.projected_delta(&feature, p)?),
                 _ => None,
@@ -1357,8 +1472,6 @@ impl InterLayerMctsRunner {
                 stable,
                 mcts_margin: None,
             };
-            let layer_w = self.layer_weights.get(&layer).copied().unwrap_or(0.0);
-            let weighted_ok = self.layer_weights.is_empty() || layer_w > 0.0;
             let mut action = HookAction::Continue;
             if let (Some(b), Some(m)) = (bound, mem) {
                 if layer < last && layer >= self.min_exit_layer && stable && weighted_ok && gap > b
@@ -1448,10 +1561,162 @@ impl Default for CalibratedConfig {
     }
 }
 
+impl CalibratedConfig {
+    /// The checks that need no model, so callers can fail before any
+    /// forward pass. The memory keeps at least 2 entries: with one, the
+    /// leave-one-out read of that entry has nothing left to read.
+    pub fn validate(&self) -> Result<(), ModelError> {
+        if !(self.tau.is_finite() && self.tau >= 0.0) {
+            return Err(ModelError::QwenInput("tau must be finite and >= 0".into()));
+        }
+        if !(self.gamma > 0.0 && self.gamma < GAMMA_MAX) {
+            return Err(ModelError::QwenInput(format!(
+                "gamma must be in (0, {GAMMA_MAX})"
+            )));
+        }
+        if !(0.0..1.0).contains(&self.mcts_margin_min) {
+            return Err(ModelError::QwenInput(
+                "mcts_margin_min must be in [0, 1)".into(),
+            ));
+        }
+        if self.memory_capacity < 2 {
+            return Err(ModelError::QwenInput(format!(
+                "memory_capacity must be >= 2, got {}",
+                self.memory_capacity
+            )));
+        }
+        if !(self.memory_beta.is_finite() && self.memory_beta > 0.0) {
+            return Err(ModelError::QwenInput(
+                "memory_beta must be finite and > 0".into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
 const GAMMA_MAX: f64 = 0.95;
 const DRIFT_EPS: f64 = 1e-6;
+/// A hook weight at or below this adds nothing to the weighted readout, so
+/// that checkpoint is no new observation for the exit rule.
+const WEIGHT_EPS: f64 = 1e-12;
 /// Search temperature of the calibrated layer-weight MCTS (Python value).
 const CALIBRATED_WEIGHT_TEMPERATURE: f64 = 0.25;
+
+/// One checkpoint of the calibrated weighted readout.
+#[derive(Clone, Debug)]
+struct CheckpointEval {
+    probs: Vec<f64>,
+    gap: f64,
+    /// `2 tau g / (1 - g) * drift`; `None` unless this checkpoint is at
+    /// least the second effective one.
+    bound: Option<f64>,
+    drift: Option<f64>,
+    gamma_hat: Option<f64>,
+    stable: bool,
+}
+
+impl CheckpointEval {
+    /// The drift part of the exit rule: the top-1 label held since the
+    /// previous effective checkpoint and its gap beats the tail bound.
+    fn passes_bound(&self) -> bool {
+        self.stable && self.bound.is_some_and(|b| self.gap > b)
+    }
+}
+
+/// Running state of the calibrated weighted readout along one pass.
+///
+/// With weights, only a checkpoint of weight `> WEIGHT_EPS` is an
+/// observation: it moves the weighted logit mean, counts in
+/// `effective_steps` and updates the drift history. A zero-weight
+/// checkpoint leaves the mean unchanged, so its drift would be 0 and its
+/// bound 0; it must not count as evidence of convergence. The first
+/// effective checkpoint only seeds the history, so the exit rule needs two.
+#[derive(Clone, Debug)]
+struct WeightedExitTracker {
+    weighted: bool,
+    gamma: f64,
+    tau: f64,
+    cum_w: f64,
+    cum_z: Option<Vec<f64>>,
+    prev: Option<(Vec<f64>, Option<f64>)>,
+    effective_steps: usize,
+}
+
+impl WeightedExitTracker {
+    fn new(weighted: bool, gamma: f64, tau: f64) -> Self {
+        Self {
+            weighted,
+            gamma,
+            tau,
+            cum_w: 0.0,
+            cum_z: None,
+            prev: None,
+            effective_steps: 0,
+        }
+    }
+
+    /// Fold in one checkpoint of weight `w`, trajectory logits `traj` and
+    /// instant distribution `instant`. `exit_checkpoint` is false at the
+    /// last layer, which reads the readout but feeds no exit rule.
+    fn observe(
+        &mut self,
+        w: f64,
+        traj: &[f64],
+        instant: Vec<f64>,
+        exit_checkpoint: bool,
+    ) -> Result<CheckpointEval, ModelError> {
+        let effective = !self.weighted || w > WEIGHT_EPS;
+        if self.weighted && effective {
+            self.cum_w += w;
+            let acc = self.cum_z.get_or_insert_with(|| vec![0.0; traj.len()]);
+            for (a, v) in acc.iter_mut().zip(traj) {
+                *a += w * v;
+            }
+        }
+        let probs = match &self.cum_z {
+            Some(acc) if self.weighted && self.cum_w > 0.0 => {
+                softmax(&acc.iter().map(|a| a / self.cum_w).collect::<Vec<_>>())
+            }
+            _ => instant,
+        };
+        check_finite("checkpoint probabilities", &probs)?;
+        let mut eval = CheckpointEval {
+            gap: top2_gap(&probs),
+            probs,
+            bound: None,
+            drift: None,
+            gamma_hat: None,
+            stable: false,
+        };
+        if !(effective && exit_checkpoint) {
+            return Ok(eval);
+        }
+        self.effective_steps += 1;
+        let prev_drift = match self.prev.take() {
+            None => None,
+            Some((prev_probs, prev_drift)) => {
+                let drift = eval
+                    .probs
+                    .iter()
+                    .zip(&prev_probs)
+                    .map(|(a, b)| (a - b).abs())
+                    .fold(0.0, f64::max);
+                let g = match prev_drift {
+                    None => self.gamma,
+                    Some(d) => (drift / d.max(DRIFT_EPS)).max(self.gamma).min(GAMMA_MAX),
+                };
+                eval.bound = Some(2.0 * self.tau * g / (1.0 - g) * drift);
+                eval.drift = Some(drift);
+                eval.gamma_hat = Some(g);
+                eval.stable = argmax(&prev_probs) == argmax(&eval.probs);
+                Some(drift)
+            }
+        };
+        debug_assert!(eval.bound.is_none() || self.effective_steps >= 2);
+        self.prev = Some((eval.probs.clone(), prev_drift));
+        Ok(eval)
+    }
+}
 
 /// Last-position states of one full pass at the hook layers.
 #[derive(Clone, Debug)]
@@ -1605,6 +1870,7 @@ impl InterLayerMctsRunner {
         label_groups: &[Vec<u32>],
         config: &CalibratedConfig,
     ) -> Result<(Self, CalibratedFitReport), ModelError> {
+        config.validate()?;
         let num_layers = model.config().num_layers;
         let k = label_groups.len();
         let n = anchors.len();
@@ -1615,19 +1881,6 @@ impl InterLayerMctsRunner {
         }
         if let Some(bad) = labels.iter().find(|&&y| y >= k) {
             return Err(ModelError::QwenInput(format!("anchor label {bad} >= {k}")));
-        }
-        if !(config.tau.is_finite() && config.tau >= 0.0) {
-            return Err(ModelError::QwenInput("tau must be finite and >= 0".into()));
-        }
-        if !(config.gamma > 0.0 && config.gamma < GAMMA_MAX) {
-            return Err(ModelError::QwenInput(format!(
-                "gamma must be in (0, {GAMMA_MAX})"
-            )));
-        }
-        if !(0.0..1.0).contains(&config.mcts_margin_min) {
-            return Err(ModelError::QwenInput(
-                "mcts_margin_min must be in [0, 1)".into(),
-            ));
         }
         let hook_layers = config
             .hook_layers
@@ -1682,8 +1935,11 @@ impl InterLayerMctsRunner {
                     "layer {layer}: ragged anchor states"
                 )));
             }
+            // The FIFO keeps the last `memory_capacity` anchors; centre on
+            // those, the same centre the out-of-fold reads use.
+            let kept = &raw[n.saturating_sub(config.memory_capacity)..];
             let center: Vec<f64> = (0..dim)
-                .map(|j| raw.iter().map(|r| r[j]).sum::<f64>() / n as f64)
+                .map(|j| kept.iter().map(|r| r[j]).sum::<f64>() / kept.len() as f64)
                 .collect();
             let mut memory = EpisodicManifoldMemory::new(
                 dim,
@@ -1698,7 +1954,7 @@ impl InterLayerMctsRunner {
                 .iter()
                 .map(|r| softmax(r))
                 .collect();
-            let memory_loo = memory.loo_query()?;
+            let memory_loo = memory.loo_query_for_all_anchors(&raw, &ids)?;
             let (lambda, gate) = select_memory_lambda(
                 &base,
                 &memory_loo,
@@ -1846,7 +2102,8 @@ impl InterLayerMctsRunner {
 
     /// The Python `predict`: weighted trajectory of the calibrated readout,
     /// exit at a checkpoint `>= min_exit_layer` once the top-1 label held
-    /// over two checkpoints, its gap beats the drift tail bound and the
+    /// over two effective checkpoints (weight `> WEIGHT_EPS`, see
+    /// [`WeightedExitTracker`]), its gap beats the drift tail bound and the
     /// MCTS confirms it with a visit margin above `mcts_margin_min`.
     fn predict_calibrated(
         &self,
@@ -1856,9 +2113,8 @@ impl InterLayerMctsRunner {
     ) -> Result<LayerExitDecision, ModelError> {
         let last = self.num_layers - 1;
         let hooks: BTreeSet<usize> = self.hook_layers.iter().copied().collect();
-        let mut cum_w = 0.0;
-        let mut cum_z: Option<Vec<f64>> = None;
-        let mut prev: Option<(Vec<f64>, Option<f64>)> = None;
+        let mut tracker =
+            WeightedExitTracker::new(!self.layer_weights.is_empty(), cal.gamma, self.tau);
         let mut trace: Vec<CheckpointTrace> = Vec::new();
         let mut exit: Option<(f64, f64, f64, f64)> = None;
         let out = model.forward_with_hook(&[ids.to_vec()], &mut |obs| {
@@ -1869,67 +2125,26 @@ impl InterLayerMctsRunner {
             let raw = residual_last(obs.residual)?;
             let normed = to_f64(model.final_norm_last(obs.residual)?);
             let (instant, z) = self.calibrated_probs(cal, layer, &raw, &normed)?;
-            let probs = if self.layer_weights.is_empty() {
-                instant
-            } else {
-                let w = self.layer_weights.get(&layer).copied().unwrap_or(0.0);
-                if w > 0.0 {
-                    cum_w += w;
-                    let acc = cum_z.get_or_insert_with(|| vec![0.0; z.len()]);
-                    for (a, v) in acc.iter_mut().zip(&z) {
-                        *a += w * v;
-                    }
-                }
-                match &cum_z {
-                    Some(acc) if cum_w > 0.0 => {
-                        softmax(&acc.iter().map(|a| a / cum_w).collect::<Vec<_>>())
-                    }
-                    _ => instant,
-                }
-            };
-            check_finite("checkpoint probabilities", &probs)?;
-            let gap = top2_gap(&probs);
-            let top = argmax(&probs);
+            let w = self.layer_weights.get(&layer).copied().unwrap_or(0.0);
+            let eval = tracker.observe(w, &z, instant, layer < last)?;
             let mut row = CheckpointTrace {
                 layer,
-                probs: probs.clone(),
-                gap,
-                bound: None,
-                delta: None,
-                gamma_hat: None,
-                stable: false,
+                probs: eval.probs.clone(),
+                gap: eval.gap,
+                bound: eval.bound,
+                delta: eval.drift,
+                gamma_hat: eval.gamma_hat,
+                stable: eval.stable,
                 mcts_margin: None,
             };
             let mut action = HookAction::Continue;
-            if layer < last {
-                if let Some((prev_probs, prev_drift)) = prev.take() {
-                    let drift = probs
-                        .iter()
-                        .zip(&prev_probs)
-                        .map(|(a, b)| (a - b).abs())
-                        .fold(0.0, f64::max);
-                    let g = match prev_drift {
-                        None => cal.gamma,
-                        Some(d) => (drift / d.max(DRIFT_EPS)).max(cal.gamma).min(GAMMA_MAX),
-                    };
-                    let bound = 2.0 * self.tau * g / (1.0 - g) * drift;
-                    let stable = argmax(&prev_probs) == top;
-                    row.bound = Some(bound);
-                    row.delta = Some(drift);
-                    row.gamma_hat = Some(g);
-                    row.stable = stable;
-                    let weighted_ok = self.layer_weights.is_empty() || cum_w > 0.0;
-                    if layer >= self.min_exit_layer && stable && gap > bound && weighted_ok {
-                        let (best, margin, value) = self.mcts_margin(&probs)?;
-                        row.mcts_margin = Some(margin);
-                        if best == top && margin > self.mcts_margin_min {
-                            exit = Some((bound, drift, margin, value));
-                            action = HookAction::Exit;
-                        }
-                    }
-                    prev = Some((probs, Some(drift)));
-                } else {
-                    prev = Some((probs, None));
+            if layer < last && layer >= self.min_exit_layer && eval.passes_bound() {
+                let (best, margin, value) = self.mcts_margin(&eval.probs)?;
+                row.mcts_margin = Some(margin);
+                if best == argmax(&eval.probs) && margin > self.mcts_margin_min {
+                    let (bound, drift) = (eval.bound.unwrap_or(0.0), eval.drift.unwrap_or(0.0));
+                    exit = Some((bound, drift, margin, value));
+                    action = HookAction::Exit;
                 }
             }
             trace.push(row);
@@ -1968,6 +2183,35 @@ impl InterLayerMctsRunner {
             active_hook_weights: self.layer_weights.clone(),
             checkpoints: trace,
         })
+    }
+
+    /// The calibrated weighted readout after the last layer from one capture
+    /// pass, never exiting: what [`Self::predict`] returns when no
+    /// checkpoint exits. `equal_weight` replaces the MCTS layer weights with
+    /// `1 / |hooks|` on every hook layer (the no-MCTS ablation).
+    pub fn full_depth_readout(
+        &self,
+        states: &HookStates,
+        equal_weight: bool,
+    ) -> Result<Vec<f64>, ModelError> {
+        let cal = self.calibrated.as_ref().ok_or_else(|| {
+            ModelError::QwenInput("full_depth_readout needs a calibrated runner".into())
+        })?;
+        let equal = 1.0 / self.hook_layers.len() as f64;
+        let weighted = equal_weight || !self.layer_weights.is_empty();
+        let mut tracker = WeightedExitTracker::new(weighted, cal.gamma, self.tau);
+        let mut probs = None;
+        for &layer in &self.hook_layers {
+            let (raw, normed) = states.layer(layer)?;
+            let (instant, z) = self.calibrated_probs(cal, layer, raw, normed)?;
+            let w = if equal_weight {
+                equal
+            } else {
+                self.layer_weights.get(&layer).copied().unwrap_or(0.0)
+            };
+            probs = Some(tracker.observe(w, &z, instant, false)?.probs);
+        }
+        probs.ok_or_else(|| ModelError::Inference("no hook layer was read".into()))
     }
 
     /// Rank `candidates` (token rows) by the probability of `target_label`.
@@ -2150,6 +2394,10 @@ pub struct BoolqBenchOptions {
     pub prune_group_size: usize,
     pub prune_shallow_layers: usize,
     pub prune_top_m: usize,
+    /// FIFO size of each hook layer's episodic memory; may be below the
+    /// training rows per fold (see
+    /// [`EpisodicManifoldMemory::loo_query_for_all_anchors`]).
+    pub memory_capacity: usize,
 }
 
 struct BoolqRow {
@@ -2339,6 +2587,9 @@ fn down_column_norms(model: &QwenModel, layer: usize) -> Result<Vec<f64>, ModelE
 /// Meaning of the per-arm speed ratio, written into the BoolQ report.
 pub const TIMING_BOUNDARY_NOTE: &str = "e2e_speedup_vs_full_28_uncalibrated is a compatibility name only; it equals capture_forward_vs_predict_timed_ratio = (sum of dense 28-layer capture forward seconds, no tokenizer) / (sum of the arm's per-row predict_timed seconds, chat template + tokenizer + runner.predict). It excludes model load, the per-fold fit and the sparse arm's pruned reload, so it is a local per-row timing ratio, not a full end-to-end speed-up.";
 
+/// Meaning of the two no-exit ablation arms, written into the BoolQ report.
+pub const ABLATION_NOTE: &str = "multihook_weighted_full28_no_early_exit = the fold's fitted runner with its MCTS hook weights, read after layer 27 with early exit disabled (InterLayerMctsRunner::full_depth_readout(states, false)); multihook_equal_weight_full28 = the same calibrated per-layer readouts averaged in logit space with weight 1/|hooks| on every hook layer (no MCTS weights, no early exit). Both reuse the dense capture pass, so their timing fields are those of full_28_uncalibrated. full_28_calibrated reads only layer 27, so mcts_multihook_dense_ffn vs multihook_weighted_full28_no_early_exit isolates the early exit and multihook_weighted_full28_no_early_exit vs multihook_equal_weight_full28 isolates the MCTS hook weights.";
+
 fn predict_timed(
     runner: &InterLayerMctsRunner,
     model: &QwenModel,
@@ -2408,6 +2659,16 @@ pub fn run_boolq_benchmark(opts: &BoolqBenchOptions) -> Result<serde_json::Value
             "--ffn-keep-ratio must be in (0, 1]".into(),
         ));
     }
+    // Every config check that needs no model runs before the load and the
+    // dense capture, so a bad setting cannot cost a full pass first.
+    let probe_config = CalibratedConfig {
+        tau: opts.tau,
+        gamma: opts.gamma,
+        mcts_margin_min: opts.mcts_margin_min,
+        memory_capacity: opts.memory_capacity,
+        ..Default::default()
+    };
+    probe_config.validate()?;
     let tokenizer_path = match &opts.tokenizer_path {
         Some(p) => p.clone(),
         None if opts.model_path.is_dir() => opts.model_path.join("tokenizer.json"),
@@ -2469,6 +2730,7 @@ pub fn run_boolq_benchmark(opts: &BoolqBenchOptions) -> Result<serde_json::Value
         min_exit_layer: Some(opts.min_exit_layer),
         mcts_margin_min: opts.mcts_margin_min,
         top_k_hooks: opts.top_k_hooks,
+        memory_capacity: opts.memory_capacity,
         ..Default::default()
     };
     if opts.prune_group_size > 0 && !hook_layers.contains(&(opts.prune_shallow_layers.max(1) - 1)) {
@@ -2592,6 +2854,21 @@ pub fn run_boolq_benchmark(opts: &BoolqBenchOptions) -> Result<serde_json::Value
                     ..uncal(i)?
                 },
             );
+            // Ablations on the same capture pass: the fitted weighted
+            // runner forced to full depth, and equal hook weights (no MCTS).
+            for (arm, equal_weight) in [
+                ("multihook_weighted_full28_no_early_exit", false),
+                ("multihook_equal_weight_full28", true),
+            ] {
+                let p = runner.full_depth_readout(&dense_states[i], equal_weight)?;
+                arms.entry(arm).or_default().insert(
+                    i,
+                    RowOutcome {
+                        label: argmax(&p),
+                        ..uncal(i)?
+                    },
+                );
+            }
             let o = predict_timed(&runner, &dense, &tok, &rows[i].context)?;
             arms.entry("mcts_multihook_dense_ffn")
                 .or_default()
@@ -2713,6 +2990,7 @@ pub fn run_boolq_benchmark(opts: &BoolqBenchOptions) -> Result<serde_json::Value
         "full_28_uncalibrated",
         "full_28_calibrated",
         "mcts_multihook_dense_ffn",
+        "multihook_weighted_full28_no_early_exit",
     ];
     let mut arm_json = serde_json::Map::new();
     for (name, outcomes) in &ordered {
@@ -2782,6 +3060,7 @@ pub fn run_boolq_benchmark(opts: &BoolqBenchOptions) -> Result<serde_json::Value
         "gamma": opts.gamma,
         "mcts_margin_min": opts.mcts_margin_min,
         "top_k_hooks": opts.top_k_hooks,
+        "memory_capacity": opts.memory_capacity,
         "ffn_keep_ratio": opts.ffn_keep_ratio,
         "ffn_layers": ffn_layers,
         "ffn_importance": "activation, summed over each fold's training rows on the dense model",
@@ -2791,6 +3070,7 @@ pub fn run_boolq_benchmark(opts: &BoolqBenchOptions) -> Result<serde_json::Value
         "headline": arm_json[headline].clone(),
         "timing_boundary": "mcts arms: e2e = chat template + tokenizer + runner.predict, inference = runner.predict; full_28_* arms: the dense capture forward (no tokenizer); model load, capture, activation scoring and fitting are reported separately",
         "timing_boundary_note": TIMING_BOUNDARY_NOTE,
+        "ablation_note": ABLATION_NOTE,
         "model_load_seconds": load_seconds,
         "tokenize_all_rows_seconds": tokenize_all_seconds,
         "dense_capture_seconds": capture_seconds,
@@ -3125,6 +3405,53 @@ mod tests {
         }
         runner.min_exit_layer = 6;
         assert!(!runner.predict(&model, &ids).unwrap().early_exit);
+    }
+
+    /// M06 on the heuristic readout: a zero-weight hook gets no step and no
+    /// bound, and the next weighted hook measures its step from the last
+    /// weighted hook, not from the zero-weight one.
+    #[test]
+    fn heuristic_exit_measures_steps_between_weighted_hooks() {
+        let model = tiny_model(8);
+        let (anchors, labels) = anchor_set();
+        let base = InterLayerConfig {
+            hook_layers: Some(vec![2, 4, 5, 7]),
+            min_exit_layer: Some(2),
+            mcts_margin_min: 0.0,
+            fit_layer_weights: false,
+            ..Default::default()
+        };
+        let (mut runner, _) =
+            InterLayerMctsRunner::fit(&model, &anchors, &labels, &[7, 19], &base).unwrap();
+        // Confident constant readout with L_f = 0 (bound 0), but a nonzero
+        // coefficient so the projected step depends on its reference state.
+        for layer in [2, 4, 5] {
+            let m = runner.memories.get_mut(&layer).unwrap();
+            m.alpha
+                .iter_mut()
+                .for_each(|r| r.iter_mut().for_each(|v| *v = 0.0));
+            m.alpha[0][0] = 1.0;
+            m.target_mean = vec![8.0, 0.0];
+            m.lipschitz = 0.0;
+        }
+        runner.layer_weights = BTreeMap::from([(2, 0.5), (4, 0.0), (5, 0.5), (7, 0.0)]);
+        let ids = vec![3, 1, 4, 1, 5];
+        let d = runner.predict(&model, &ids).unwrap();
+        let read: Vec<usize> = d.checkpoints.iter().map(|c| c.layer).collect();
+        assert_eq!(read, vec![2, 4, 5], "{d:?}");
+        assert!(d.checkpoints[1].delta.is_none() && d.checkpoints[1].bound.is_none());
+        assert!(!d.checkpoints[1].stable);
+        assert_eq!(d.exit_layer, 5);
+        let states = InterLayerMctsRunner::capture_hook_states(&model, &ids, &[2, 4, 5]).unwrap();
+        let m5 = &runner.memories[&5];
+        let (f2, f4, f5) = (&states.normed[&2], &states.normed[&4], &states.normed[&5]);
+        let want = m5.projected_delta(f5, f2).unwrap();
+        let stale = m5.projected_delta(f5, f4).unwrap();
+        assert!((want - stale).abs() > 1e-9, "fixture too weak");
+        assert!(
+            (d.checkpoints[2].delta.unwrap() - want).abs() < 1e-9,
+            "{d:?}"
+        );
     }
 
     #[test]
@@ -3658,5 +3985,332 @@ mod tests {
         assert_eq!(mcnemar_exact(0, 0), 1.0);
         assert!((mcnemar_exact(5, 0) - 0.0625).abs() < 1e-12);
         assert!((mcnemar_exact(3, 1) - 0.625).abs() < 1e-12);
+    }
+
+    /// Drive the calibrated exit rule over hand-written checkpoints, with
+    /// the MCTS confirmation assumed: index of the first exit, if any, and
+    /// the readout the pass returns. Trajectory logits are `ln p`, as for a
+    /// memory-mixed readout.
+    fn run_exit_rule(weights: &[f64], dists: &[[f64; 2]]) -> (Option<usize>, Vec<f64>) {
+        let mut tracker = WeightedExitTracker::new(true, 0.5, 0.25);
+        let last = dists.len() - 1;
+        let mut probs = Vec::new();
+        for (i, (w, p)) in weights.iter().zip(dists).enumerate() {
+            let traj: Vec<f64> = p.iter().map(|v| v.ln()).collect();
+            let eval = tracker.observe(*w, &traj, p.to_vec(), i < last).unwrap();
+            if i < last && eval.passes_bound() {
+                assert!(tracker.effective_steps >= 2, "exit on one observation");
+                return (Some(i), eval.probs);
+            }
+            probs = eval.probs;
+        }
+        (None, probs)
+    }
+
+    /// M06 (WebGPT round 1): hooks [12, 16, 27], weights [0.5, 0, 0.5].
+    /// Hook 16 carries no weight, so the running mean does not move and
+    /// its drift and bound are 0; counting it as an observation exited
+    /// there with label 0. Skipping it gives the full weighted readout,
+    /// label 1 at about [0.0866878, 0.9133122].
+    #[test]
+    fn zero_weight_checkpoint_is_no_evidence_of_convergence() {
+        let (sharp0, sharp1) = ([0.9, 0.1], [0.001, 0.999]);
+        let want = [0.086_687_8, 0.913_312_2];
+        let close = |p: &[f64]| p.iter().zip(&want).all(|(a, b)| (a - b).abs() < 1e-6);
+
+        let (exit, p) = run_exit_rule(&[0.5, 0.0, 0.5], &[sharp0, sharp1, sharp1]);
+        assert_eq!(exit, None, "exited at a zero-weight checkpoint: {p:?}");
+        assert_eq!(argmax(&p), 1);
+        assert!(close(&p), "{p:?}");
+
+        // Two zero-weight checkpoints in a row.
+        let (exit, p) = run_exit_rule(&[0.5, 0.0, 0.0, 0.5], &[sharp0, sharp1, sharp1, sharp1]);
+        assert_eq!(exit, None, "{p:?}");
+        assert!(close(&p), "{p:?}");
+
+        // Only the last layer has weight: no checkpoint is an observation.
+        let (exit, p) = run_exit_rule(&[0.0, 0.0, 1.0], &[sharp0, sharp0, sharp1]);
+        assert_eq!(exit, None, "{p:?}");
+        assert!((p[1] - 0.999).abs() < 1e-9, "{p:?}");
+
+        // Positive control: two weighted checkpoints that agree do exit.
+        let (exit, _) = run_exit_rule(&[0.5, 0.5, 0.0], &[sharp0, sharp0, sharp1]);
+        assert_eq!(exit, Some(1));
+    }
+
+    /// The same rule inside `predict`: confident readouts everywhere, but
+    /// only hook 2 and the last layer carry weight, so no checkpoint has a
+    /// second observation to compare with and the pass runs to the end.
+    #[test]
+    fn calibrated_runner_never_exits_on_zero_weight_checkpoints() {
+        let model = tiny_model(8);
+        let config = CalibratedConfig {
+            hook_layers: Some(vec![2, 4, 5, 7]),
+            tau: 0.25,
+            min_exit_layer: Some(2),
+            mcts_margin_min: 0.0,
+            fit_layer_weights: false,
+            ..Default::default()
+        };
+        let (mut runner, _, _) = calibrated_fixture(&model, &config);
+        for entry in runner.calibrated.as_mut().unwrap().layers.values_mut() {
+            entry.stats.mean = vec![-40.0, 0.0];
+            entry.stats.std = vec![1.0, 1e6];
+            entry.lambda = 0.0;
+        }
+        let ids = vec![3, 1, 4, 1, 5];
+        runner.layer_weights = BTreeMap::from([(2, 0.5), (4, 0.0), (5, 0.0), (7, 0.5)]);
+        let d = runner.predict(&model, &ids).unwrap();
+        assert!(!d.early_exit, "{d:?}");
+        assert_eq!(d.layers_executed, 8);
+        assert!(d.checkpoints[1..3]
+            .iter()
+            .all(|c| c.bound.is_none() && !c.stable));
+        // Positive control: weight on hooks 2 and 4 exits at 4.
+        runner.layer_weights = BTreeMap::from([(2, 0.5), (4, 0.5), (5, 0.0), (7, 0.0)]);
+        let d = runner.predict(&model, &ids).unwrap();
+        assert!(d.early_exit, "{d:?}");
+        assert_eq!(d.exit_layer, 4);
+    }
+
+    /// The no-exit ablation arm equals a `predict` that cannot exit, and the
+    /// equal-weight arm equals the runner with weights `1 / |hooks|`.
+    #[test]
+    fn full_depth_readout_matches_a_never_exiting_predict() {
+        let model = tiny_model(8);
+        let config = CalibratedConfig {
+            hook_layers: Some(vec![2, 4, 5, 7]),
+            min_exit_layer: Some(7),
+            top_k_hooks: 2,
+            ..Default::default()
+        };
+        let (mut runner, _, layers) = calibrated_fixture(&model, &config);
+        assert!(!runner.layer_weights().is_empty());
+        for ids in [vec![5, 9, 2, 8], vec![3, 1, 4, 1, 5]] {
+            let states = InterLayerMctsRunner::capture_hook_states(&model, &ids, &layers).unwrap();
+            let d = runner.predict(&model, &ids).unwrap();
+            assert!(!d.early_exit);
+            let full = runner.full_depth_readout(&states, false).unwrap();
+            for (a, b) in d.probs.iter().zip(&full) {
+                assert!((a - b).abs() < 1e-9, "{a} vs {b}");
+            }
+            let equal = runner.full_depth_readout(&states, true).unwrap();
+            let saved = std::mem::replace(
+                &mut runner.layer_weights,
+                layers.iter().map(|&l| (l, 0.25)).collect(),
+            );
+            let d = runner.predict(&model, &ids).unwrap();
+            runner.layer_weights = saved;
+            for (a, b) in d.probs.iter().zip(&equal) {
+                assert!((a - b).abs() < 1e-9, "{a} vs {b}");
+            }
+        }
+    }
+
+    /// M07: anchors the FIFO dropped still get an out-of-fold row (all
+    /// retained entries, retained-mean centre); retained anchors get their
+    /// `loo_query` row. Brute force: a memory holding exactly the entries
+    /// the read may see.
+    #[test]
+    fn loo_query_for_all_anchors_keeps_one_row_per_anchor() {
+        let (n, cap, h) = (9, 5, 6);
+        let states: Vec<Vec<f64>> = (0..n)
+            .map(|i| {
+                (0..h)
+                    .map(|j| noise(i * h + j + 3) + (i % 3) as f64)
+                    .collect()
+            })
+            .collect();
+        let labels: Vec<usize> = (0..n).map(|i| i % 3).collect();
+        let ids: Vec<usize> = (0..n).collect();
+        let kept = &states[n - cap..];
+        let mean = |rows: &[Vec<f64>]| -> Vec<f64> {
+            (0..h)
+                .map(|j| rows.iter().map(|r| r[j]).sum::<f64>() / rows.len() as f64)
+                .collect()
+        };
+        let mut mem = EpisodicManifoldMemory::new(h, 3, cap, 4.0, Some(mean(kept))).unwrap();
+        mem.write(&states, &labels, &ids).unwrap();
+        assert_eq!(mem.len(), cap);
+        let rows = mem.loo_query_for_all_anchors(&states, &ids).unwrap();
+        assert_eq!(rows.len(), n);
+        let loo = mem.loo_query().unwrap();
+        for i in 0..n {
+            let want = if i >= n - cap {
+                loo[i - (n - cap)].clone()
+            } else {
+                let mut seen =
+                    EpisodicManifoldMemory::new(h, 3, cap, 4.0, Some(mean(kept))).unwrap();
+                seen.write(kept, &labels[n - cap..], &ids[n - cap..])
+                    .unwrap();
+                seen.query(&states[i], None).unwrap()
+            };
+            for (a, b) in rows[i].iter().zip(&want) {
+                assert!(
+                    (a - b).abs() < 1e-12,
+                    "anchor {i}: {:?} vs {want:?}",
+                    rows[i]
+                );
+            }
+        }
+        assert!(mem
+            .loo_query_for_all_anchors(&states[..2], &ids[..1])
+            .is_err());
+    }
+
+    /// M07: more training anchors than memory slots (256) must fit, with the
+    /// lambda gate scored on every anchor. 258 and 800 are the training rows
+    /// of a 5-fold split of 322 and 1000.
+    #[test]
+    fn calibrated_fit_beyond_memory_capacity_keeps_rows_aligned() {
+        let model = tiny_model(8);
+        let layers = vec![2, 4, 7];
+        let (anchors, base_labels) = anchor_set();
+        let base: Vec<HookStates> = anchors
+            .iter()
+            .map(|ids| InterLayerMctsRunner::capture_hook_states(&model, ids, &layers).unwrap())
+            .collect();
+        let jitter = |s: &HookStates, i: usize| {
+            let mut s = s.clone();
+            for (l, v) in s.raw.iter_mut().chain(s.normed.iter_mut()) {
+                for (j, x) in v.iter_mut().enumerate() {
+                    *x += 0.05 * noise(i * 7919 + l * 131 + j);
+                }
+            }
+            s
+        };
+        let config = CalibratedConfig {
+            hook_layers: Some(layers),
+            fit_layer_weights: false,
+            ..Default::default()
+        };
+        let groups = [vec![7, 3], vec![19, 11]];
+        let cap = config.memory_capacity;
+        assert_eq!(cap, 256);
+        for n in [cap, cap + 1, 258, 800] {
+            let states: Vec<HookStates> = (0..n).map(|i| jitter(&base[i % 10], i)).collect();
+            let labels: Vec<usize> = (0..n).map(|i| base_labels[i % 10]).collect();
+            let (runner, report) =
+                InterLayerMctsRunner::fit_calibrated(&model, &states, &labels, &groups, &config)
+                    .unwrap_or_else(|e| panic!("n = {n}: {e}"));
+            assert_eq!(report.anchors, n);
+            for row in &report.layers {
+                assert_eq!(row.memory_gate.n, n, "layer {}", row.layer);
+            }
+            for (layer, entry) in &runner.calibrated.as_ref().unwrap().layers {
+                assert_eq!(entry.memory.len(), n.min(cap));
+                // Centred on the retained anchors, as the out-of-fold reads.
+                let kept = &states[n.saturating_sub(cap)..];
+                let center = entry.memory.center.as_ref().unwrap();
+                for (j, c) in center.iter().enumerate() {
+                    let mean =
+                        kept.iter().map(|s| s.raw[layer][j]).sum::<f64>() / kept.len() as f64;
+                    assert!((c - mean).abs() < 1e-9, "n = {n}, layer {layer}");
+                }
+            }
+        }
+    }
+
+    /// A memory capacity below 2 fails before any forward pass, in the fit
+    /// and in the benchmark (whose model path does not exist here).
+    #[test]
+    fn bad_memory_capacity_fails_before_any_forward() {
+        for cap in [0, 1] {
+            let config = CalibratedConfig {
+                memory_capacity: cap,
+                ..Default::default()
+            };
+            assert!(config.validate().is_err());
+            let opts = BoolqBenchOptions {
+                model_path: PathBuf::from("/nonexistent/qwen"),
+                tokenizer_path: None,
+                data: PathBuf::from("/nonexistent/boolq.jsonl"),
+                n: 100,
+                folds: 5,
+                ffn_keep_ratio: 1.0,
+                ffn_layers: None,
+                hook_layers: None,
+                min_exit_layer: 22,
+                tau: 0.25,
+                gamma: 0.5,
+                mcts_margin_min: 0.05,
+                top_k_hooks: 4,
+                prune_group_size: 0,
+                prune_shallow_layers: 21,
+                prune_top_m: 2,
+                memory_capacity: cap,
+            };
+            let err = run_boolq_benchmark(&opts).unwrap_err().to_string();
+            assert!(err.contains("memory_capacity"), "{err}");
+        }
+        let model = tiny_model(8);
+        let (anchors, labels) = anchor_set();
+        let states: Vec<HookStates> = anchors
+            .iter()
+            .map(|ids| InterLayerMctsRunner::capture_hook_states(&model, ids, &[2, 7]).unwrap())
+            .collect();
+        let config = CalibratedConfig {
+            hook_layers: Some(vec![2, 7]),
+            memory_capacity: 0,
+            ..Default::default()
+        };
+        let groups = [vec![7, 3], vec![19, 11]];
+        let err = InterLayerMctsRunner::fit_calibrated(&model, &states, &labels, &groups, &config)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("memory_capacity"), "{err}");
+    }
+
+    /// WebGPT round 1, section 4: on 80 balanced rows the leave-one-out
+    /// prior gives the true label 39/79 < 1/2, so a constant [0.5, 0.5]
+    /// memory beats it (and the saturated base) by many standard errors
+    /// while carrying no information. Against the uniform row its gain is
+    /// exactly 0, so the gate keeps lambda = 0.
+    #[test]
+    fn memory_gate_rejects_a_constant_uniform_memory() {
+        let n = 80;
+        let labels: Vec<usize> = (0..n).map(|i| i % 2).collect();
+        let base: Vec<Vec<f64>> = labels
+            .iter()
+            .enumerate()
+            .map(|(i, &y)| {
+                let right = i % 10 < 7;
+                let p = if right == (y == 0) { 0.999 } else { 0.001 };
+                vec![p, 1.0 - p]
+            })
+            .collect();
+        let prior: Vec<Vec<f64>> = labels
+            .iter()
+            .map(|&y| {
+                (0..2)
+                    .map(|c| (40.0 - if c == y { 1.0 } else { 0.0 }) / 79.0)
+                    .collect()
+            })
+            .collect();
+        let flat = vec![vec![0.5, 0.5]; n];
+        let (lam, report) = select_memory_lambda(
+            &base,
+            &flat,
+            &labels,
+            &DEFAULT_LAMBDA_GRID,
+            MEMORY_SE_MULT,
+            Some(&prior),
+        )
+        .unwrap();
+        // The old two-test gate (base and LOO prior) would accept it.
+        assert!(
+            report.candidates.iter().any(|c| {
+                c.mean_gain > MEMORY_SE_MULT * c.se
+                    && c.gain_over_null.unwrap() > MEMORY_SE_MULT * c.gain_over_null_se.unwrap()
+            }),
+            "fixture too weak: {report:?}"
+        );
+        assert!(report.candidates.iter().all(|c| c.gain_over_uniform == 0.0));
+        assert!(report
+            .candidates
+            .iter()
+            .all(|c| c.gain_over_laplace.is_some()));
+        assert_eq!(lam, 0.0, "uninformative memory accepted: {report:?}");
+        assert!(report.candidates.iter().all(|c| !c.passed));
     }
 }

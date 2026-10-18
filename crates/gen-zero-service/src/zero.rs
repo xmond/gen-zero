@@ -120,7 +120,41 @@ use gen_zero_worldmodel::LatentDynamicsWorldModel;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use sha2::{Digest, Sha256};
 use std::collections::BTreeSet;
+
+fn inspection_text(arguments: &Value, fields: &[&str]) -> (String, Value) {
+    let mut inspected = serde_json::Map::new();
+    for field in fields {
+        if let Some(value) = arguments.get(*field) {
+            inspected.insert((*field).into(), value.clone());
+        }
+    }
+    let text = Value::Object(inspected).to_string();
+    let digest = format!("{:x}", Sha256::digest(text.as_bytes()));
+    (
+        text,
+        json!({"risk_checked_fields": fields, "risk_checked_sha256": digest}),
+    )
+}
+
+fn inspection_marker_rejection(
+    verb: ZeroVerb,
+    text: &str,
+    evidence: &Value,
+) -> Option<ZeroToolOutcome> {
+    contains_raw_control_marker(text).then(|| {
+        ZeroToolOutcome::rejected(
+            verb,
+            Rejection::invalid("request", "raw model control delimiter in semantic input"),
+            evidence.clone(),
+        )
+    })
+}
+
+fn has_duplicates(names: &[String]) -> bool {
+    names.iter().collect::<std::collections::HashSet<_>>().len() != names.len()
+}
 use std::ffi::OsStr;
 use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
@@ -2987,27 +3021,24 @@ impl PolymorphicZeroEngine {
                 ))
             }
         };
-        if contains_raw_control_marker(context_str)
-            || candidates.iter().any(|c| contains_raw_control_marker(c))
-        {
+        if has_duplicates(&candidates) {
             return Ok(ZeroToolOutcome::rejected(
                 ZeroVerb::Ask,
-                Rejection::invalid(
-                    "request",
-                    "raw model control delimiter in context or candidate",
-                ),
+                Rejection::invalid("candidates", "candidate names must be unique"),
                 json!({}),
             ));
         }
-
-        // Without context the candidates themselves are the request.
-        let risk_text = if context_str.is_empty() {
-            candidates.join("\n")
-        } else {
-            context_str.to_string()
-        };
+        let (risk_text, inspection) = inspection_text(
+            arguments,
+            &["context", "questions", "state", "candidates", "history"],
+        );
+        if let Some(stop) = inspection_marker_rejection(ZeroVerb::Ask, &risk_text, &inspection) {
+            return Ok(stop);
+        }
         let risk = self.assess_risk(&risk_text).await;
         if let Some(stop) = Self::risk_hard_stop(ZeroVerb::Ask, &risk) {
+            let mut stop = stop;
+            stop.meta["inspection"] = inspection;
             return Ok(stop);
         }
 
@@ -3016,7 +3047,7 @@ impl PolymorphicZeroEngine {
             return Ok(ZeroToolOutcome::rejected(
                 ZeroVerb::Ask,
                 Rejection::invalid("request", "a cognitive ask needs candidates"),
-                json!({"engine": ENGINE_COGNITIVE, "risk": risk.meta()}),
+                json!({"engine": ENGINE_COGNITIVE, "risk": risk.meta(), "inspection": inspection}),
             ));
         }
 
@@ -3025,7 +3056,7 @@ impl PolymorphicZeroEngine {
             return Ok(ZeroToolOutcome::rejected(
                 ZeroVerb::Ask,
                 Rejection::invalid("request", "ask needs at least one candidate"),
-                json!({"risk": risk.meta()}),
+                json!({"risk": risk.meta(), "inspection": inspection}),
             ));
         }
 
@@ -3047,14 +3078,20 @@ impl PolymorphicZeroEngine {
                 ZeroVerb::Ask,
                 PolicyTier::Tier3HardStop,
                 &risk,
-                json!({"engine": "formal_filter", "formally_infeasible": infeasible}),
+                json!({"engine": "formal_filter", "formally_infeasible": infeasible, "inspection": inspection}),
                 String::new(),
             ));
         }
 
         if let Some(domains) = match nanocore_domains(arguments) {
             Ok(domains) => domains,
-            Err(rej) => return Ok(ZeroToolOutcome::rejected(ZeroVerb::Ask, rej, json!({}))),
+            Err(rej) => {
+                return Ok(ZeroToolOutcome::rejected(
+                    ZeroVerb::Ask,
+                    rej,
+                    json!({"inspection": inspection}),
+                ))
+            }
         } {
             if cognitive.is_some() {
                 return Ok(ZeroToolOutcome::rejected(
@@ -3063,20 +3100,26 @@ impl PolymorphicZeroEngine {
                         "nanocore",
                         "nanocore_domain(s) cannot combine with cognitive decision",
                     ),
-                    json!({}),
+                    json!({"inspection": inspection}),
                 ));
             }
-            return self.nanocore_ask(arguments, &feasible, &domains, &risk);
+            let mut outcome = self.nanocore_ask(arguments, &feasible, &domains, &risk)?;
+            outcome.meta["inspection"] = inspection;
+            return Ok(outcome);
         }
 
         if decision_backend(arguments, ZeroVerb::Ask).expect("validated at dispatch") {
-            return self.specialized_ask(arguments, &feasible, &infeasible, &risk);
+            let mut outcome = self.specialized_ask(arguments, &feasible, &infeasible, &risk)?;
+            outcome.meta["inspection"] = inspection;
+            return Ok(outcome);
         }
 
         if let Some(block) = cognitive {
-            return self
+            let mut outcome = self
                 .certified_ask(block, binding, &feasible, &infeasible, &risk)
-                .await;
+                .await?;
+            outcome.meta["inspection"] = inspection;
+            return Ok(outcome);
         }
 
         let state = arguments.get("state").filter(|s| !s.is_string());
@@ -3118,6 +3161,13 @@ impl PolymorphicZeroEngine {
                 self.backend_meta(&mut meta);
                 (resp.chosen, probs, meta)
             }
+            Err(Unscored::Bridge(BridgeError::InvalidResponse(detail))) => {
+                return Ok(ZeroToolOutcome::rejected(
+                    ZeroVerb::Ask,
+                    Rejection::invalid("BridgeProtocolError", detail),
+                    json!({"inspection": inspection}),
+                ));
+            }
             Err(why) => {
                 tracing::warn!("ask falls back to local reflex: {}", why.describe());
                 let uniform = 1.0 / feasible.len() as f64;
@@ -3152,6 +3202,7 @@ impl PolymorphicZeroEngine {
         meta["action_id"] = json!(chosen_id.0);
         meta["confidence"] = json!(confidence);
         meta["entropy"] = json!(entropy.0);
+        meta["inspection"] = inspection;
         meta["formally_infeasible"] = json!(infeasible);
 
         if gen_zero_model::semantic_qwen::causal_utility_prior(context_str, &chosen) < 0.0 {
@@ -3998,8 +4049,25 @@ impl PolymorphicZeroEngine {
             .max(1) as usize;
         let intent = first_text(arguments, &["intent", "task_goal", "context", "query"]);
 
-        let risk = self.assess_risk(intent).await;
+        let (risk_text, inspection) = inspection_text(
+            arguments,
+            &[
+                "intent",
+                "task_goal",
+                "context",
+                "query",
+                "state",
+                "tools",
+                "history",
+            ],
+        );
+        if let Some(stop) = inspection_marker_rejection(ZeroVerb::Route, &risk_text, &inspection) {
+            return Ok(stop);
+        }
+        let risk = self.assess_risk(&risk_text).await;
         if let Some(stop) = Self::risk_hard_stop(ZeroVerb::Route, &risk) {
+            let mut stop = stop;
+            stop.meta["inspection"] = inspection;
             return Ok(stop);
         }
 
@@ -4008,6 +4076,13 @@ impl PolymorphicZeroEngine {
             .filter_map(|t| tool_name(&t).map(|n| (n, t)))
             .collect();
         let names: Vec<String> = named.iter().map(|(n, _)| n.clone()).collect();
+        if has_duplicates(&names) {
+            return Ok(ZeroToolOutcome::rejected(
+                ZeroVerb::Route,
+                Rejection::invalid("tools", "tool names must be unique"),
+                json!({"inspection": inspection}),
+            ));
+        }
         let verdicts = self.candidate_verdicts(&names, NormalizedEntropy::ZERO)?;
         let feasible_mask = verdicts.iter().map(|v| v.tier != PolicyTier::Tier3HardStop);
         let (feasible, infeasible): (Vec<_>, Vec<_>) = named
@@ -4044,7 +4119,7 @@ impl PolymorphicZeroEngine {
                     "ranking": "semantic_relevance",
                     "scorer": resp.scorer,
                     "ranked": resp.ranked,
-                    "entropy": resp.entropy,
+                    "entropy": crate::bridge::normalized_entropy(&resp.ranked),
                     "bridge_timing_ms": resp.timing_ms,
                 });
                 self.backend_meta(&mut meta);
@@ -4053,6 +4128,13 @@ impl PolymorphicZeroEngine {
                     None,
                     meta,
                 )
+            }
+            Err(Unscored::Bridge(BridgeError::InvalidResponse(detail))) => {
+                return Ok(ZeroToolOutcome::rejected(
+                    ZeroVerb::Route,
+                    Rejection::invalid("BridgeProtocolError", detail),
+                    json!({"inspection": inspection}),
+                ));
             }
             Err(why) => {
                 tracing::warn!("semantic route unavailable: {}", why.describe());
@@ -4096,6 +4178,7 @@ impl PolymorphicZeroEngine {
         meta["selected_tools"] = json!(selected);
         meta["count"] = json!(selected.len());
         meta["formally_infeasible"] = json!(infeasible);
+        meta["inspection"] = inspection;
 
         let summary = if degraded.is_some() {
             "Semantic ranking unavailable; selected no tools".to_owned()
@@ -4169,6 +4252,13 @@ impl PolymorphicZeroEngine {
                 ))
             }
         };
+        if has_duplicates(&candidates) {
+            return Ok(ZeroToolOutcome::rejected(
+                ZeroVerb::Imagine,
+                Rejection::invalid("candidate_actions", "candidate names must be unique"),
+                json!({}),
+            ));
+        }
         let scenario = first_text(arguments, &["scenario", "context", "simulation", "state"]);
         let state = arguments.get("state").filter(|s| !s.is_string());
 
@@ -4180,42 +4270,47 @@ impl PolymorphicZeroEngine {
             .map(|(c, _)| c)
             .collect();
 
-        let unavailable = |why: Unscored, engine: &str, risk: Option<&RiskCheck>| {
-            let mut meta = json!({
-                "engine": engine,
-                "semantic_scoring": false,
-                "horizon": horizon,
-                "sequence_likelihood": Value::Null,
-                "formal_checked": safety.enforce_cpsat && !candidates.is_empty(),
-                "formally_infeasible": infeasible,
-            });
-            self.backend_meta(&mut meta);
-            why.record(&mut meta);
-            let mut content = text_block(format!("LookaheadUnavailable: {}", why.describe()));
-            if let Some(risk) = risk {
-                meta["risk"] = risk.meta();
-                if risk.tier() != PolicyTier::Tier0Proceed {
-                    // Tier3 exited earlier via `risk_hard_stop`; what is left
-                    // needs confirmation and must say so (428, not 422).
-                    meta["requires_confirmation"] = json!(true);
-                    meta["gate_status"] = json!(GATE_STATUS_REQUIRES_CONFIRMATION);
-                    meta["error_code"] = json!(-32002);
-                    content.extend(text_block(risk.message()));
+        let unavailable =
+            |why: Unscored, engine: &str, risk: Option<&RiskCheck>, inspection: Option<&Value>| {
+                let mut meta = json!({
+                    "engine": engine,
+                    "semantic_scoring": false,
+                    "horizon": horizon,
+                    "sequence_likelihood": Value::Null,
+                    "formal_checked": safety.enforce_cpsat && !candidates.is_empty(),
+                    "formally_infeasible": infeasible,
+                });
+                self.backend_meta(&mut meta);
+                why.record(&mut meta);
+                if let Some(inspection) = inspection {
+                    meta["inspection"] = inspection.clone();
                 }
-            }
-            ZeroToolOutcome {
-                verb: ZeroVerb::Imagine,
-                is_error: true,
-                content,
-                meta,
-                rejection: None,
-            }
-        };
+                let mut content = text_block(format!("LookaheadUnavailable: {}", why.describe()));
+                if let Some(risk) = risk {
+                    meta["risk"] = risk.meta();
+                    if risk.tier() != PolicyTier::Tier0Proceed {
+                        // Tier3 exited earlier via `risk_hard_stop`; what is left
+                        // needs confirmation and must say so (428, not 422).
+                        meta["requires_confirmation"] = json!(true);
+                        meta["gate_status"] = json!(GATE_STATUS_REQUIRES_CONFIRMATION);
+                        meta["error_code"] = json!(-32002);
+                        content.extend(text_block(risk.message()));
+                    }
+                }
+                ZeroToolOutcome {
+                    verb: ZeroVerb::Imagine,
+                    is_error: true,
+                    content,
+                    meta,
+                    rejection: None,
+                }
+            };
 
         if candidates.len() < 2 {
             return Ok(unavailable(
                 Unscored::skipped("imagine needs at least two distinct candidate_actions"),
                 "none_invalid_input",
+                None,
                 None,
             ));
         }
@@ -4224,6 +4319,7 @@ impl PolymorphicZeroEngine {
                 Unscored::skipped("imagine needs a scenario or context text"),
                 "none_invalid_input",
                 None,
+                None,
             ));
         }
         if !feasible.iter().any(|&ok| ok) {
@@ -4231,11 +4327,30 @@ impl PolymorphicZeroEngine {
                 Unscored::skipped("every candidate action is formally infeasible"),
                 "formal_filter",
                 None,
+                None,
             ));
         }
 
-        let risk = self.assess_risk(scenario).await;
+        let (risk_text, inspection) = inspection_text(
+            arguments,
+            &[
+                "scenario",
+                "context",
+                "simulation",
+                "state",
+                "candidate_actions",
+                "candidates",
+                "history",
+            ],
+        );
+        if let Some(stop) = inspection_marker_rejection(ZeroVerb::Imagine, &risk_text, &inspection)
+        {
+            return Ok(stop);
+        }
+        let risk = self.assess_risk(&risk_text).await;
         if let Some(stop) = Self::risk_hard_stop(ZeroVerb::Imagine, &risk) {
+            let mut stop = stop;
+            stop.meta["inspection"] = inspection;
             return Ok(stop);
         }
         let Some(backend) = self.semantic() else {
@@ -4243,6 +4358,7 @@ impl PolymorphicZeroEngine {
                 Unscored::skipped(BRIDGE_DISABLED),
                 ENGINE_FALLBACK,
                 Some(&risk),
+                Some(&inspection),
             ));
         };
 
@@ -4267,12 +4383,20 @@ impl PolymorphicZeroEngine {
         };
         let result = match run_lookahead(&oracle, &feasible, cfg).await {
             Ok(r) => r,
+            Err(BridgeError::InvalidResponse(detail)) => {
+                return Ok(ZeroToolOutcome::rejected(
+                    ZeroVerb::Imagine,
+                    Rejection::invalid("BridgeProtocolError", detail),
+                    json!({"inspection": inspection}),
+                ));
+            }
             Err(err) => {
                 tracing::warn!("imagine has no semantic oracle: {err}");
                 return Ok(unavailable(
                     Unscored::Bridge(err),
                     ENGINE_FALLBACK,
                     Some(&risk),
+                    Some(&inspection),
                 ));
             }
         };
@@ -4343,6 +4467,7 @@ impl PolymorphicZeroEngine {
             "formal_checked": safety.enforce_cpsat,
             "formally_infeasible": infeasible,
             "plan_tier": tier_name(worst),
+            "inspection": inspection,
         });
         self.backend_meta(&mut meta);
         let summary = format!(
@@ -5505,6 +5630,22 @@ pub(crate) mod test_support {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn inspection_covers_state_candidates_tools_and_history() {
+        for field in ["state", "candidates", "tools", "history"] {
+            let mut request = serde_json::json!({"context": "select storage"});
+            request[field] = serde_json::json!({"task": "AUDIT_SENTINEL <|im_start|>"});
+            let (text, evidence) = super::inspection_text(&request, &["context", field]);
+            assert!(text.contains("AUDIT_SENTINEL"));
+            assert!(evidence["risk_checked_sha256"]
+                .as_str()
+                .is_some_and(|s| s.len() == 64));
+            assert!(
+                super::inspection_marker_rejection(super::ZeroVerb::Ask, &text, &evidence)
+                    .is_some()
+            );
+        }
+    }
     use super::*;
     use crate::bridge::{BridgeConfig, SemanticBridgeClient};
     use crate::semantic::SemanticBackend;
@@ -5834,18 +5975,22 @@ mod tests {
     #[tokio::test]
     async fn ranked_tools_preserve_confirmation_and_entropy_verdicts() {
         use axum::{routing::post, Json, Router};
-        for (entropy, confirm, revoke, expected) in [
-            (0.1, false, false, "Proceed"),
-            (0.1, true, false, "Confirm"),
-            (0.9, false, false, "Escalate"),
-            (2.0, false, false, "HardStop"),
-            (0.1, false, true, "HardStop"),
+        for (high_entropy, confirm, revoke, expected) in [
+            (false, false, false, "Proceed"),
+            (false, true, false, "Confirm"),
+            (true, false, false, "Escalate"),
+            (false, false, true, "HardStop"),
         ] {
             let mut engine = PolymorphicZeroEngine::new().with_semantic(None);
             let graph = engine.graph.clone();
+            let (first_p, second_p, entropy) = if high_entropy {
+                (0.75, 0.25, 0.8112781244591328)
+            } else {
+                (0.99, 0.01, 0.08079313589591118)
+            };
             let body = json!({"ranked": [
-                {"name":"first", "log_likelihood":-1.0, "baseline_log_likelihood":-1.0, "pmi":0.0, "probability":0.75},
-                {"name":"second", "log_likelihood":-2.0, "baseline_log_likelihood":-1.0, "pmi":-1.0, "probability":0.25}
+                {"name":"first", "log_likelihood":-1.0, "baseline_log_likelihood":-1.0, "pmi":0.0, "probability":first_p},
+                {"name":"second", "log_likelihood":-2.0, "baseline_log_likelihood":-1.0, "pmi":-1.0, "probability":second_p}
             ], "selected":["first"], "entropy":entropy, "scorer":{}, "timing_ms":1.0});
             let app = Router::new()
                 .route("/v1/semantic_route", post(move || {
@@ -6410,6 +6555,28 @@ mod tests {
         cfg.max_retries = 0;
         let bridge = SemanticBridgeClient::new(cfg).unwrap();
         PolymorphicZeroEngine::new().with_semantic(Some(Arc::new(SemanticBackend::Remote(bridge))))
+    }
+
+    #[tokio::test]
+    async fn inspected_early_returns_keep_evidence() {
+        let engine = offline_engine();
+        let cases = [
+            json!({"verb":"ask","context":"pick","candidates":["alpha","beta"],"nanocore_domain":99}),
+            json!({"verb":"ask","context":"pick","candidates":["alpha","beta"],"head":"etf","etf_rep":[1.0,0.0],"candidate_reps":{"alpha":[1.0,0.0],"beta":[0.0,1.0]}}),
+            json!({"verb":"ask","context":"pick","candidates":["alpha","beta"],"cognitive":{}}),
+            json!({"verb":"route","intent":"pick","tools":["alpha","beta"]}),
+            json!({"verb":"imagine","scenario":"pick","candidate_actions":["alpha","beta"]}),
+        ];
+        for request in cases {
+            let outcome = engine.execute(&request).await.unwrap();
+            let evidence = &outcome.meta["inspection"];
+            assert!(
+                evidence["risk_checked_fields"].as_array().is_some(),
+                "{outcome:?}"
+            );
+            let digest = evidence["risk_checked_sha256"].as_str().unwrap();
+            assert_eq!(digest.len(), 64, "{outcome:?}");
+        }
     }
 
     #[tokio::test]

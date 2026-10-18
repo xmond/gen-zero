@@ -879,6 +879,10 @@ impl McpServer {
                 backbone_loaded,
                 "semantic bridge ready"
             ),
+            BridgeHealth::Degraded { detail } => tracing::error!(
+                endpoint = %report.endpoint,
+                "semantic bridge cannot run inference: {detail}"
+            ),
             BridgeHealth::WrongService { detail } => tracing::error!(
                 endpoint = %report.endpoint,
                 "semantic bridge BLOCKED: wrong service on the endpoint: {detail}. \
@@ -2238,6 +2242,51 @@ mod gate_status_tests {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn unavailable_semantic_inference_blocks_startup_and_readiness() {
+        use crate::bridge::{BridgeConfig, SemanticBridgeClient, HEALTH_PATH, REQUIRED_ROUTES};
+        use axum::body::Body;
+        use tower::ServiceExt;
+        for loaded in [false, true] {
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let addr = listener.local_addr().unwrap();
+            let dependency = Router::new()
+                .route(HEALTH_PATH, get(move || async move {
+                    Json(json!({"service":"gen-zero-semantic","endpoints":REQUIRED_ROUTES,"backbone_loaded":loaded}))
+                }))
+                .route("/v1/semantic_risk", post(|| async {
+                    (StatusCode::SERVICE_UNAVAILABLE, Json(json!({"error":"semantic_backbone_unavailable"})))
+                }));
+            let task =
+                tokio::spawn(async move { axum::serve(listener, dependency).await.unwrap() });
+            let bridge =
+                SemanticBridgeClient::new(BridgeConfig::new(format!("http://{addr}"))).unwrap();
+            let engine = Arc::new(
+                PolymorphicZeroEngine::new()
+                    .with_semantic(Some(Arc::new(SemanticBackend::Remote(bridge)))),
+            );
+            let server = McpServer {
+                engine: engine.clone(),
+                auth_token: None,
+                bridge_required: true,
+                closed_loop: None,
+            };
+            assert!(server.check_semantic(None).await.is_err());
+            let app = McpServer::build_router(engine, None);
+            let response = app
+                .oneshot(
+                    Request::builder()
+                        .uri("/ready")
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+            task.abort();
+        }
+    }
+
     #[test]
     fn cpu_overload_returns_service_unavailable() {
         assert_eq!(
@@ -2253,9 +2302,14 @@ mod tests {
         use tower::ServiceExt;
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let dependency = Router::new().route(HEALTH_PATH, get(|| async {
-            Json(json!({"service": "gen-zero-semantic", "endpoints": REQUIRED_ROUTES, "backbone_loaded": true}))
-        }));
+        let dependency = Router::new()
+            .route(HEALTH_PATH, get(|| async {
+                Json(json!({"service": "gen-zero-semantic", "endpoints": REQUIRED_ROUTES, "backbone_loaded": true}))
+            }))
+            .route("/v1/semantic_risk", post(|| async {
+                Json(json!({"p_dangerous":0.0,"log_odds":-1.0,"windows":1,
+                    "thresholds":{"escalate":0.4,"hard_stop":0.8},"classifier":{},"forward_ms":1.0}))
+            }));
         let task = tokio::spawn(async move { axum::serve(listener, dependency).await.unwrap() });
         let bridge =
             SemanticBridgeClient::new(BridgeConfig::new(format!("http://{addr}"))).unwrap();
@@ -2586,6 +2640,63 @@ mod tests {
             .as_str()
             .unwrap()
             .contains("not the gen-zero semantic scorer"));
+    }
+
+    #[tokio::test]
+    async fn refreshed_health_503_cannot_make_ready() {
+        use crate::bridge::{BridgeConfig, BridgeHealth, SemanticBridgeClient};
+        use axum::body::Body;
+        use axum::http::Request;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use tower::util::ServiceExt;
+
+        let hits = Arc::new(AtomicUsize::new(0));
+        let health_hits = hits.clone();
+        let dependency = Router::new()
+            .route(crate::bridge::HEALTH_PATH, get(move || {
+                let hits = health_hits.clone();
+                async move {
+                    let count = hits.fetch_add(1, Ordering::SeqCst);
+                    let status = if count == 0 { StatusCode::OK } else { StatusCode::SERVICE_UNAVAILABLE };
+                    (status, Json(json!({
+                        "service": "gen-zero-semantic",
+                        "endpoints": crate::bridge::REQUIRED_ROUTES,
+                        "backbone_loaded": count > 0
+                    })))
+                }
+            }))
+            .route("/v1/semantic_risk", post(|| async {
+                Json(json!({"p_dangerous":0.0,"log_odds":-1.0,"windows":1,
+                    "thresholds":{"escalate":0.4,"hard_stop":0.8},"classifier":{},"forward_ms":1.0}))
+            }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, dependency).await.unwrap() });
+        let bridge =
+            SemanticBridgeClient::new(BridgeConfig::new(format!("http://{addr}"))).unwrap();
+        let engine = Arc::new(
+            PolymorphicZeroEngine::new()
+                .with_semantic(Some(Arc::new(SemanticBackend::Remote(bridge)))),
+        );
+        let client = match engine.semantic().unwrap() {
+            SemanticBackend::Remote(client) => client,
+            SemanticBackend::Native(_) => unreachable!(),
+        };
+        assert!(matches!(
+            client.probe().await.health,
+            BridgeHealth::Degraded { .. }
+        ));
+        let app = McpServer::build_router(engine, None);
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/ready")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     }
 
     #[tokio::test]

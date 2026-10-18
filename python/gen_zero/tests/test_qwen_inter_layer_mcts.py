@@ -331,6 +331,9 @@ def test_memory_is_cosine_scale_invariant_and_loo_masks_self():
     loo = memory.loo_query()[0]
     assert own[labels[0]] > loo[labels[0]]
     np.testing.assert_allclose(loo, memory.query(keys[:1], exclude_ids=[0])[0])
+    ref = EpisodicManifoldMemory(16, 3, beta=12.0)
+    ref.write(keys[1:], labels[1:], ids=list(range(1, 20)))
+    np.testing.assert_allclose(loo, ref.query(keys[:1])[0])
     with pytest.raises(ValueError):
         EpisodicManifoldMemory(16, 3).query(q)
 
@@ -371,9 +374,144 @@ def test_lambda_gate_rejects_a_prior_only_memory_against_a_saturated_probe():
     loo_prior = (onehot.sum(axis=0)[None, :] - onehot) / (n - 1)
     np.testing.assert_allclose(memory.loo_query(), loo_prior, atol=1e-12)
     lam_plain, _ = select_memory_lambda(base, memory.loo_query(), labels)
-    assert lam_plain > 0  # the old test alone is fooled by the saturated base
+    assert lam_plain == 0.0
     lam_null, report = select_memory_lambda(base, memory.loo_query(), labels, null_probs=loo_prior)
     assert lam_null == 0.0, report
+
+
+def test_memory_loo_refits_center_for_each_exclusion():
+    hidden = np.array([[1., 0.], [0., 1.], [-1., 0.], [2., 3.]])
+    labels = np.array([0, 1, 0, 1])
+    memory = EpisodicManifoldMemory(2, 2, beta=3, center=hidden.mean(axis=0))
+    memory.write(hidden, labels, ids=list(range(4)))
+    actual = memory.loo_query()
+    expected = []
+    for i in range(4):
+        rest = np.arange(4) != i
+        ref = EpisodicManifoldMemory(2, 2, beta=3, center=hidden[rest].mean(axis=0))
+        ref.write(hidden[rest], labels[rest], ids=np.arange(4)[rest].tolist())
+        expected.append(ref.query(hidden[i])[0])
+    np.testing.assert_allclose(actual, expected, atol=1e-6)
+    np.testing.assert_allclose(actual, memory.query(hidden, exclude_ids=list(range(4))), atol=1e-12)
+    assert actual.argmax(axis=1).tolist() == [1, 0, 1, 1]
+
+
+def test_memory_without_center_loo_matches_excluded_query():
+    hidden = np.array([[2., 0.], [0., 1.], [-1., 0.], [0., -3.]])
+    memory = EpisodicManifoldMemory(2, 2, beta=4, center=None)
+    memory.write(hidden, [0, 1, 0, 1], ids=list(range(4)))
+    np.testing.assert_allclose(memory.loo_query(),
+                               memory.query(hidden, exclude_ids=list(range(4))))
+    ref = EpisodicManifoldMemory(2, 2, beta=4)
+    ref.write(hidden[1:], [1, 0, 1], ids=[1, 2, 3])
+    np.testing.assert_allclose(memory.loo_query()[0], ref.query(hidden[:1])[0])
+
+
+@pytest.mark.parametrize("center", [None, np.array([1., 0.])])
+def test_memory_excluding_every_slot_returns_uniform(center):
+    memory = EpisodicManifoldMemory(2, 3, center=center)
+    memory.write([[2., 1.]], [0], ids=[7])
+    np.testing.assert_allclose(memory.query([[2., 1.]], exclude_ids=[7]),
+                               [[1 / 3, 1 / 3, 1 / 3]])
+    np.testing.assert_allclose(memory.loo_query(), [[1 / 3, 1 / 3, 1 / 3]])
+
+
+def test_predict_with_positive_memory_lambda_and_excluded_anchor(model):
+    anchors, labels = _dataset(2, seed=8)
+    runner = MctsLayerwiseQwenRunner(model, VerbalizerProbe(model, LABEL_TOKENS),
+                                     checkpoints=[1], tau=1.0)
+    runner.fit_memories(anchors, labels, layers=[1, NUM_LAYERS - 1])
+    runner.memories = {layer: (memory, 0.5) for layer, (memory, _) in runner.memories.items()}
+    decision = runner.predict(anchors[0], exclude_id=0)
+    assert 0 <= decision.label < len(LABEL_TOKENS)
+    assert np.all(np.isfinite(decision.probs))
+    np.testing.assert_allclose(np.sum(decision.probs), 1.0)
+
+
+@pytest.mark.parametrize("n,capacity", [(256, 256), (257, 256), (322, 258), (1000, 800)])
+def test_memory_loo_keeps_all_anchor_rows_after_fifo_eviction(n, capacity):
+    rng = np.random.default_rng(101)
+    hidden = rng.normal(size=(n, 4))
+    labels = np.arange(n) % 2
+    memory = EpisodicManifoldMemory(4, 2, capacity=capacity, beta=3,
+                                    center=hidden.mean(axis=0))
+    memory.write(hidden, labels, ids=list(range(n)))
+    actual = memory.loo_query(hidden, ids=list(range(n)))
+    assert actual.shape == (n, 2)
+    np.testing.assert_allclose(actual.sum(axis=1), 1, atol=1e-12)
+    assert len(memory) == capacity
+    # An evicted anchor sees the entire retained window; a retained one excludes itself.
+    retained = hidden[-capacity:]
+    ref = EpisodicManifoldMemory(4, 2, capacity=capacity, beta=3,
+                                 center=retained.mean(axis=0))
+    ref.write(retained, labels[-capacity:], ids=list(range(n - capacity, n)))
+    if n > capacity:
+        np.testing.assert_allclose(actual[0], ref.query(hidden[0])[0], atol=1e-6)
+
+
+def test_memory_loo_excludes_every_slot_with_the_same_id():
+    hidden = np.array([[1., 0.], [0., 1.], [2., 0.], [-1., 2.]])
+    memory = EpisodicManifoldMemory(2, 2, beta=3)
+    memory.write(hidden, [0, 1, 0, 1], ids=[7, 8, 7, 9])
+    result = memory.loo_query()
+    assert result[0, 1] == pytest.approx(1.0)
+    assert result[2, 1] == pytest.approx(1.0)
+
+
+def test_fit_memories_rejects_invalid_capacity_before_forward(model, monkeypatch):
+    runner = MctsLayerwiseQwenRunner(model, VerbalizerProbe(model, LABEL_TOKENS), checkpoints=[1])
+    monkeypatch.setattr(runner, "_run", lambda *args: pytest.fail("forward must not run"))
+    with pytest.raises(ValueError, match="capacity"):
+        runner.fit_memories([torch.tensor([[1]]), torch.tensor([[2]])], [0, 1], [1], capacity=0)
+
+
+@pytest.mark.parametrize("weights", [
+    {1: 0.5, 2: 0.0, 4: 0.5},
+    {1: 0.5, 2: 0.0, 3: 0.0, 4: 0.5},
+    {1: 0.0, 2: 0.0, 4: 1.0},
+])
+def test_zero_weight_checkpoints_do_not_supply_exit_evidence(model, monkeypatch, weights):
+    checkpoints = sorted(weights)
+    runner = MctsLayerwiseQwenRunner(model, VerbalizerProbe(model, LABEL_TOKENS),
+                                     checkpoints=checkpoints, layer_weights=weights,
+                                     min_exit_layer=0, tau=0, mcts_margin_min=0)
+    first = np.log([[0.9, 0.1, 1e-12]])
+    late = np.log([[0.001, 0.999, 1e-12]])
+    monkeypatch.setattr(runner, "probe_logits", lambda idx, last: first if idx == 1 else late)
+    monkeypatch.setattr(runner, "fused_probs", lambda idx, last, exclude_id=None:
+                        np.exp(first if idx == 1 else late) /
+                        np.exp(first if idx == 1 else late).sum(axis=1, keepdims=True))
+    monkeypatch.setattr(runner, "mcts_margin", lambda probs: (int(probs.argmax()), 1.0, 1.0))
+    result = runner.predict(torch.tensor([[41, 42, 43, 11]]))
+    assert result.early_exit is False or result.exit_layer >= 4
+    assert result.label == 1
+
+
+def test_resume_replays_only_shallow_layers_with_real_qwen(model):
+    runner = MctsLayerwiseQwenRunner(model, VerbalizerProbe(model, LABEL_TOKENS), checkpoints=[2])
+    ids = torch.tensor([[41, 42, 43, 11]])
+    stop, shallow_count = runner._shallow_pass(ids, 2)
+    resumed, deep_count = runner._resume_pass(ids, stop.hidden_state, 3)
+    full = QwenInterLayerHook(model, capture_layers=[NUM_LAYERS - 1])
+    with torch.no_grad(), full:
+        model.model(input_ids=ids, use_cache=False)
+    torch.testing.assert_close(resumed, full.captured[NUM_LAYERS - 1], rtol=0, atol=1e-5)
+    assert (shallow_count, deep_count) == (3, NUM_LAYERS - 3)
+
+
+def test_replay_layer_proxies_decoder_interface(model):
+    from gen_zero.causal.qwen_inter_layer_mcts import _replay_layer_cls
+    original = model.model.layers[0]
+    cached = torch.zeros((1, 4, model.config.hidden_size))
+    replay = _replay_layer_cls()(cached, original)
+    for name in ("attention_type", "layer_idx", "self_attn"):
+        if hasattr(original, name):
+            assert getattr(replay, name) is getattr(original, name)
+    original.replay_contract_marker = object()
+    try:
+        assert replay.replay_contract_marker is original.replay_contract_marker
+    finally:
+        del original.replay_contract_marker
 
 
 def test_memory_center_is_applied_to_writes_and_queries():

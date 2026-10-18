@@ -21,6 +21,7 @@
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicU32, AtomicU64, Ordering};
 use std::sync::RwLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -204,6 +205,8 @@ pub struct RiskThresholds {
 pub enum BridgeHealth {
     /// The gen-zero semantic scorer answered and lists every required route.
     Ready { backbone_loaded: bool },
+    /// The scorer has the expected identity but cannot run inference.
+    Degraded { detail: String },
     /// Something answered, but it is not the semantic scorer.
     WrongService { detail: String },
     /// Nothing answered (connection refused, timeout).
@@ -259,6 +262,12 @@ fn now_ms() -> u64 {
 }
 
 fn check_probabilities(scores: &[CandidateScore], expected: &[String]) -> Result<(), BridgeError> {
+    let requested: HashSet<&str> = expected.iter().map(String::as_str).collect();
+    if requested.len() != expected.len() {
+        return Err(BridgeError::InvalidResponse(
+            "duplicate requested candidate".into(),
+        ));
+    }
     if scores.len() != expected.len() {
         return Err(BridgeError::InvalidResponse(format!(
             "{} scores for {} candidates",
@@ -267,14 +276,21 @@ fn check_probabilities(scores: &[CandidateScore], expected: &[String]) -> Result
         )));
     }
     let mut sum = 0.0;
+    let mut seen = HashSet::new();
     for s in scores {
+        if !seen.insert(s.name.as_str()) {
+            return Err(BridgeError::InvalidResponse(format!(
+                "duplicate response candidate '{}'",
+                s.name
+            )));
+        }
         if !s.probability.is_finite() || !(0.0..=1.0).contains(&s.probability) {
             return Err(BridgeError::InvalidResponse(format!(
                 "probability {} for '{}' is outside [0, 1]",
                 s.probability, s.name
             )));
         }
-        if !expected.contains(&s.name) {
+        if !requested.contains(s.name.as_str()) {
             return Err(BridgeError::InvalidResponse(format!(
                 "unknown candidate '{}'",
                 s.name
@@ -290,22 +306,52 @@ fn check_probabilities(scores: &[CandidateScore], expected: &[String]) -> Result
     Ok(())
 }
 
+/// Independently derive normalized Shannon entropy at the trust boundary.
+pub fn normalized_entropy(scores: &[CandidateScore]) -> f64 {
+    if scores.len() < 2 {
+        return 0.0;
+    }
+    -scores
+        .iter()
+        .filter(|s| s.probability > 0.0)
+        .map(|s| s.probability * s.probability.ln())
+        .sum::<f64>()
+        / (scores.len() as f64).ln()
+}
+
+fn check_choice(
+    scores: &[CandidateScore],
+    index: usize,
+    name: &str,
+    entropy: f64,
+) -> Result<(), BridgeError> {
+    let maximum = scores
+        .iter()
+        .map(|s| s.probability)
+        .fold(f64::NEG_INFINITY, f64::max);
+    let argmax = scores
+        .iter()
+        .position(|s| s.probability == maximum)
+        .unwrap_or(0);
+    if index != argmax || scores.get(index).is_none_or(|s| s.name != name) {
+        return Err(BridgeError::InvalidResponse(
+            "chosen is not the first argmax candidate".into(),
+        ));
+    }
+    let actual = normalized_entropy(scores);
+    if !entropy.is_finite() || (entropy - actual).abs() > 1e-3 {
+        return Err(BridgeError::InvalidResponse(format!(
+            "entropy {entropy} differs from computed {actual}"
+        )));
+    }
+    Ok(())
+}
+
 /// Contract of an ask answer: a distribution over exactly the candidates,
 /// a consistent choice, and a normalized entropy.
 pub fn validate_ask(r: &SemanticAskResponse, candidates: &[String]) -> Result<(), BridgeError> {
     check_probabilities(&r.candidates, candidates)?;
-    if r.chosen_index >= r.candidates.len() || r.candidates[r.chosen_index].name != r.chosen {
-        return Err(BridgeError::InvalidResponse(
-            "chosen does not match chosen_index".into(),
-        ));
-    }
-    if !(0.0..=1.0).contains(&r.entropy) {
-        return Err(BridgeError::InvalidResponse(format!(
-            "entropy {} outside [0, 1]",
-            r.entropy
-        )));
-    }
-    Ok(())
+    check_choice(&r.candidates, r.chosen_index, &r.chosen, r.entropy)
 }
 
 /// Contract of a risk answer: probability and thresholds in [0, 1], ordered.
@@ -335,6 +381,24 @@ pub fn validate_route(r: &SemanticRouteResponse, tool_names: &[String]) -> Resul
         .any(|w| w[0].probability < w[1].probability)
     {
         return Err(BridgeError::InvalidResponse("ranking is not sorted".into()));
+    }
+    let expected: Vec<&str> = r
+        .ranked
+        .iter()
+        .take(r.selected.len())
+        .map(|s| s.name.as_str())
+        .collect();
+    if r.selected.iter().map(String::as_str).collect::<Vec<_>>() != expected {
+        return Err(BridgeError::InvalidResponse(
+            "selected tools do not match ranked argmax order".into(),
+        ));
+    }
+    let actual = normalized_entropy(&r.ranked);
+    if !r.entropy.is_finite() || (r.entropy - actual).abs() > 1e-3 {
+        return Err(BridgeError::InvalidResponse(format!(
+            "entropy {} differs from computed {actual}",
+            r.entropy
+        )));
     }
     Ok(())
 }
@@ -398,8 +462,47 @@ impl SemanticBridgeClient {
                             ),
                         }
                     } else {
-                        BridgeHealth::Ready {
-                            backbone_loaded: body["backbone_loaded"].as_bool().unwrap_or(false),
+                        // A risk request is the lightest inference operation and
+                        // also triggers the scorer's lazy backbone load.
+                        let can_infer = self.semantic_risk("readiness probe").await;
+                        if let Err(error) = can_infer {
+                            BridgeHealth::Degraded {
+                                detail: error.to_string(),
+                            }
+                        } else if body["backbone_loaded"] == true {
+                            BridgeHealth::Ready {
+                                backbone_loaded: true,
+                            }
+                        } else {
+                            let refreshed = self.http.get(&url).send().await;
+                            let loaded = match refreshed {
+                                Ok(resp) if resp.status().is_success() => {
+                                    resp.json::<Value>().await.ok().is_some_and(|v| {
+                                        let routes = v["endpoints"].as_array();
+                                        v["service"] == "gen-zero-semantic"
+                                            && routes.is_some_and(|routes| {
+                                                REQUIRED_ROUTES.iter().all(|route| {
+                                                    routes.iter().any(|value| value == route)
+                                                })
+                                            })
+                                            && v["backbone_loaded"] == true
+                                    })
+                                }
+                                Ok(_) => false,
+                                Err(_) => false,
+                            };
+                            if loaded {
+                                BridgeHealth::Ready {
+                                    backbone_loaded: true,
+                                }
+                            } else {
+                                BridgeHealth::Degraded {
+                                    detail: format!(
+                                        "semantic backbone unavailable: {}",
+                                        body["backbone_error"]
+                                    ),
+                                }
+                            }
                         }
                     }
                 }
@@ -628,13 +731,59 @@ mod tests {
 
     fn well_formed() -> Value {
         json!({
-            "chosen": "backup", "chosen_index": 1, "entropy": 0.5,
+            "chosen": "backup", "chosen_index": 1, "entropy": 0.8112781244591328,
             "candidates": [
                 {"name": "delete", "log_likelihood": -2.0, "baseline_log_likelihood": -1.0, "pmi": -1.0, "probability": 0.25},
                 {"name": "backup", "log_likelihood": -1.0, "baseline_log_likelihood": -1.5, "pmi": 0.5, "probability": 0.75}
             ],
             "scorer": {"id": "stub"}, "embedding_dim": 896, "timing_ms": 1.0
         })
+    }
+
+    #[test]
+    fn rejects_duplicate_candidates_non_argmax_and_forged_entropy() {
+        let names = cands();
+        let mut response: SemanticAskResponse = serde_json::from_value(well_formed()).unwrap();
+        assert!(validate_ask(&response, &names).is_ok());
+        response.candidates[1].name = "delete".into();
+        assert!(validate_ask(&response, &names).is_err());
+        let mut response: SemanticAskResponse = serde_json::from_value(well_formed()).unwrap();
+        response.chosen = "delete".into();
+        response.chosen_index = 0;
+        assert!(validate_ask(&response, &names).is_err());
+        let mut response: SemanticAskResponse = serde_json::from_value(well_formed()).unwrap();
+        response.entropy = 0.0;
+        assert!(validate_ask(&response, &names).is_err());
+        let mut response: SemanticAskResponse = serde_json::from_value(well_formed()).unwrap();
+        response.candidates[0].probability = 0.5;
+        response.candidates[1].probability = 0.5;
+        response.entropy = 0.0;
+        assert!(validate_ask(&response, &names).is_err());
+        response.entropy = 1.0;
+        response.chosen = "delete".into();
+        response.chosen_index = 0;
+        assert!(validate_ask(&response, &names).is_ok());
+    }
+
+    #[test]
+    fn close_probabilities_do_not_create_an_argmax_tie() {
+        let mut response: SemanticAskResponse = serde_json::from_value(well_formed()).unwrap();
+        response.candidates[0].probability = 0.49999975;
+        response.candidates[1].probability = 0.50000025;
+        response.entropy = normalized_entropy(&response.candidates);
+        response.chosen = "delete".into();
+        response.chosen_index = 0;
+        assert!(validate_ask(&response, &cands()).is_err());
+        response.chosen = "backup".into();
+        response.chosen_index = 1;
+        assert!(validate_ask(&response, &cands()).is_ok());
+        response.candidates[0].probability = 0.5;
+        response.candidates[1].probability = 0.5;
+        response.entropy = normalized_entropy(&response.candidates);
+        assert!(validate_ask(&response, &cands()).is_err());
+        response.chosen = "delete".into();
+        response.chosen_index = 0;
+        assert!(validate_ask(&response, &cands()).is_ok());
     }
 
     #[tokio::test]
@@ -813,19 +962,31 @@ mod tests {
     #[tokio::test]
     async fn probe_accepts_only_a_scorer_that_lists_every_route() {
         async fn serve(body: Value) -> String {
-            let app = Router::new().route(
-                HEALTH_PATH,
-                axum::routing::get(move || {
-                    let body = body.clone();
-                    async move { Json(body) }
-                }),
-            );
+            let app = Router::new()
+                .route(
+                    "/v1/semantic_risk",
+                    post(|| async {
+                        Json(json!({
+                            "p_dangerous": 0.0, "log_odds": -1.0, "windows": 1,
+                            "thresholds": {"escalate": 0.4, "hard_stop": 0.8},
+                            "classifier": {}, "forward_ms": 1.0
+                        }))
+                    }),
+                )
+                .route(
+                    HEALTH_PATH,
+                    axum::routing::get(move || {
+                        let body = body.clone();
+                        async move { Json(body) }
+                    }),
+                );
             let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
             let addr = listener.local_addr().unwrap();
             tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
             format!("http://{addr}")
         }
         let good = serve(json!({"service": "gen-zero-semantic", "endpoints": REQUIRED_ROUTES, "backbone_loaded": true})).await;
+        let unloaded = serve(json!({"service": "gen-zero-semantic", "endpoints": REQUIRED_ROUTES, "backbone_loaded": false})).await;
         let old =
             serve(json!({"service": "gen-zero-semantic", "endpoints": ["/v1/semantic_ask"]})).await;
         let client = SemanticBridgeClient::new(BridgeConfig::new(good)).unwrap();
@@ -835,6 +996,11 @@ mod tests {
                 backbone_loaded: true
             }
         );
+        let client = SemanticBridgeClient::new(BridgeConfig::new(unloaded)).unwrap();
+        assert!(matches!(
+            client.probe().await.health,
+            BridgeHealth::Degraded { .. }
+        ));
         let client = SemanticBridgeClient::new(BridgeConfig::new(old)).unwrap();
         assert!(!client.probe().await.health.is_ready());
         let mut cfg = BridgeConfig::new("http://127.0.0.1:1");

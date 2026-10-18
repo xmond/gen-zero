@@ -83,6 +83,10 @@ pub enum QwenAction {
         prune_shallow_layers: usize,
         #[arg(long, default_value_t = 2)]
         prune_top_m: usize,
+        /// FIFO size of each hook layer's episodic memory (>= 2); training
+        /// rows per fold may exceed it.
+        #[arg(long, default_value_t = 256)]
+        memory_capacity: usize,
         #[arg(long)]
         output: PathBuf,
     },
@@ -904,6 +908,7 @@ async fn main() -> anyhow::Result<()> {
                     prune_group_size,
                     prune_shallow_layers,
                     prune_top_m,
+                    memory_capacity,
                     output,
                 },
         } => {
@@ -924,6 +929,7 @@ async fn main() -> anyhow::Result<()> {
                 prune_group_size,
                 prune_shallow_layers,
                 prune_top_m,
+                memory_capacity,
             };
             let report = gen_zero_model::inter_layer_mcts::run_boolq_benchmark(&opts)?;
             std::fs::write(&output, serde_json::to_string_pretty(&report)?)

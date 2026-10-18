@@ -655,16 +655,14 @@ fn deposit_qwen_conflict(
     spec: &DepositSpec,
     dim: usize,
     embedder: &str,
-) -> Option<String> {
+) -> Option<Rejection> {
     if let Some(have) = graph.embedding_dim().filter(|&have| have != dim) {
-        return Some(format!(
+        return Some(invalid(format!(
             "graph embedding dimension {have} does not match configured native Qwen dimension {dim}"
-        ));
+        )));
     }
-    if let Some(locked) = graph.embedder_space().filter(|locked| locked != embedder) {
-        return Some(format!(
-            "graph embedder `{locked}` does not match configured native Qwen embedder `{embedder}`"
-        ));
+    if let Some(rejection) = embedder_space_conflict(graph, embedder) {
+        return Some(rejection);
     }
     spec.nodes
         .iter()
@@ -672,8 +670,33 @@ fn deposit_qwen_conflict(
         .find_map(|(i, n)| n.embedding.as_ref().map(|e| (i, e.len())))
         .filter(|&(_, len)| len != dim)
         .map(|(i, len)| {
-            format!("nodes[{i}] carries a {len}-dimensional caller embedding; the Qwen embedder gives {dim}")
+            invalid(format!("nodes[{i}] carries a {len}-dimensional caller embedding; the Qwen embedder gives {dim}"))
         })
+}
+
+/// Code of [`embedder_space_conflict`]: the graph's vectors come from another
+/// backbone than the loaded one.
+pub const BACKBONE_MISMATCH: &str = "BackboneMismatch";
+
+/// [`BACKBONE_MISMATCH`] (409) when the graph is locked to an embedder other
+/// than `embedder`. The embedder id starts with the backbone fingerprint
+/// ([`crate::semantic::NativeQwen::backbone_id`]: weights, tokenizer,
+/// architecture, kept FFN channels), so the same width from other weights,
+/// another tokenizer or another pruning mask is refused, never mixed. There
+/// is no in-place override: rebuilding means re-seeding the graph under the
+/// new backbone.
+fn embedder_space_conflict(graph: &LodGraph, embedder: &str) -> Option<Rejection> {
+    let locked = graph.embedder_space().filter(|locked| locked != embedder)?;
+    Some(Rejection {
+        code: BACKBONE_MISMATCH.to_string(),
+        stage: STAGE.to_string(),
+        detail: format!(
+            "graph embedder `{locked}` does not match configured native Qwen embedder \
+             `{embedder}`; the vectors come from another backbone, rebuild (re-seed) the \
+             graph under the new one"
+        ),
+        http_status: 409,
+    })
 }
 
 /// The backend and its in-process embedder, or the skip report when there is
@@ -722,7 +745,7 @@ fn deposit_embedder<'a>(
     let (_, native) = qwen_embedder(op, semantic).map_err(QwenEmbedFault::Skip)?;
     let embedder_id = native.embedder_id();
     match deposit_qwen_conflict(graph, spec, native.embedding_dim(), &embedder_id) {
-        Some(reason) => Err(QwenEmbedFault::Reject(invalid(reason))),
+        Some(rejection) => Err(QwenEmbedFault::Reject(rejection)),
         None => Ok(native),
     }
 }
@@ -768,16 +791,10 @@ pub async fn embed_graph_request(
                     return Ok(QwenVectors::skipped(op, reason, true));
                 }
             }
-            if let Some(locked) = graph
-                .embedder_space()
-                .filter(|locked| locked != &embedder_id)
-            {
+            if let Some(rejection) = embedder_space_conflict(graph, &embedder_id) {
                 // Fail-closed: same width, different model. A bare dimension
                 // match cannot tell the semantic spaces apart.
-                return Err(invalid(format!(
-                    "graph embedder `{locked}` does not match configured native Qwen embedder \
-                     `{embedder_id}`"
-                )));
+                return Err(rejection);
             }
             let vector = backend.embed(&text).await.map_err(embed_rejection)?;
             Ok(QwenVectors {
@@ -2010,4 +2027,52 @@ fn execute_operator(
         format!("graph_execute_operator: node {node_id} executed"),
         result,
     ))
+}
+
+#[cfg(test)]
+mod backbone_mismatch_tests {
+    use super::*;
+
+    fn graph_locked_to(embedder: &str) -> LodGraph {
+        let graph = LodGraph::new();
+        let embedding = vec![0.25f32; 16];
+        let node = LodNode::new(
+            0,
+            LodBand::Lod0Atomic,
+            MixedCurvatureCoord::origin(),
+            "x",
+            7,
+        )
+        .with_embedding(embedding)
+        .with_embedder_space(embedder);
+        graph.add_node(node).unwrap();
+        graph
+    }
+
+    const OLD: &str = "qwen2-native:gguf-q4_k_m-dequant-f32/v2/waaaa/tbbbb/cfg-l28-h1536-i8960-a12-kv2/final-norm-mean-pool-l2";
+    const NEW_WEIGHTS: &str = "qwen2-native:gguf-q4_k_m-dequant-f32/v2/wcccc/tbbbb/cfg-l28-h1536-i8960-a12-kv2/final-norm-mean-pool-l2";
+    const NEW_MASK: &str = "qwen2-native:gguf-q4_k_m-dequant-f32/v2/waaaa/tbbbb/cfg-l28-h1536-i8960-a12-kv2/ffn-weight_norm-l22.23.24.25.26.27-keep0.75-mdddd/final-norm-mean-pool-l2";
+
+    #[test]
+    fn another_backbone_is_refused_as_backbone_mismatch() {
+        let graph = graph_locked_to(OLD);
+        assert_eq!(graph.embedder_space().as_deref(), Some(OLD));
+        assert!(embedder_space_conflict(&graph, OLD).is_none());
+        let spec = DepositSpec {
+            nodes: Vec::new(),
+            edges: Vec::new(),
+        };
+        assert!(deposit_qwen_conflict(&graph, &spec, 16, OLD).is_none());
+        for other in [NEW_WEIGHTS, NEW_MASK] {
+            let r = embedder_space_conflict(&graph, other).expect("refused");
+            assert_eq!(r.code, BACKBONE_MISMATCH);
+            assert_eq!(r.http_status, 409);
+            assert!(r.detail.contains(other), "{}", r.detail);
+            let r = deposit_qwen_conflict(&graph, &spec, 16, other).expect("refused");
+            assert_eq!(r.code, BACKBONE_MISMATCH);
+        }
+        // A width conflict stays an input error, checked first.
+        let r = deposit_qwen_conflict(&graph, &spec, 32, NEW_WEIGHTS).expect("refused");
+        assert_eq!(r.code, "InvalidParams");
+    }
 }

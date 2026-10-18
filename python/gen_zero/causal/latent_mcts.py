@@ -141,7 +141,7 @@ class ContractiveHamiltonianTransition:
             u = _unit(self.rotations[action] @ u)
         cosine = max(-1.0, min(1.0, float(target @ u)))
         tangent = target - cosine * u
-        sine = float(np.linalg.norm(tangent))
+        sine = math.sqrt(float(np.dot(tangent, tangent)))
         if sine < _EPS:
             return u
         theta = math.atan2(sine, cosine)
@@ -152,9 +152,32 @@ class ContractiveHamiltonianTransition:
 
 
 def _softmax(logits: np.ndarray, axis: int = -1) -> np.ndarray:
-    shifted = logits - np.max(logits, axis=axis, keepdims=True)
-    exp = np.exp(shifted)
-    return exp / np.sum(exp, axis=axis, keepdims=True)
+    if logits.ndim == 1 and (axis == -1 or axis == 0):
+        if logits.size == 0 or not np.isfinite(logits).all():
+            raise ValueError("softmax logits must be finite")
+        hi = float(logits.max())
+        lo = float(logits.min())
+        if not math.isfinite(hi - lo):
+            raise ValueError("softmax produced invalid probabilities")
+        shifted = logits - hi
+        exp = np.exp(shifted)
+        total = float(exp.sum())
+        if not math.isfinite(total) or total <= 0.0:
+            raise ValueError("softmax produced invalid probabilities")
+        probs = exp / total
+        if not np.isfinite(probs).all() or float(probs.min()) < 0.0 or abs(float(probs.sum()) - 1.0) > 1e-5:
+            raise ValueError("softmax produced invalid probabilities")
+        return probs
+    if not np.isfinite(logits).all():
+        raise ValueError("softmax logits must be finite")
+    with np.errstate(all="ignore"):
+        shifted = logits - np.max(logits, axis=axis, keepdims=True)
+        exp = np.exp(shifted)
+        probs = exp / np.sum(exp, axis=axis, keepdims=True)
+    if (not np.isfinite(shifted).all() or not np.isfinite(probs).all()
+            or np.any(probs < 0) or np.any(np.abs(probs.sum(axis=axis) - 1.0) > 1e-5)):
+        raise ValueError("softmax produced invalid probabilities")
+    return probs
 
 
 def _leaf_value(priors: np.ndarray, stability: float = 1.0, relational: float = 1.0) -> float:
@@ -165,7 +188,7 @@ def _leaf_value(priors: np.ndarray, stability: float = 1.0, relational: float = 
     top2 = np.partition(priors, k - 2)[-2:]
     margin = float(top2[1] - top2[0])
     entropy = float(-np.sum(priors * np.log(priors + _EPS)))
-    certainty = 1.0 - entropy / float(np.log(k))
+    certainty = 1.0 - entropy / math.log(k)
     return (0.5 * margin + 0.5 * max(0.0, min(1.0, certainty))) * stability * relational
 
 
@@ -189,6 +212,9 @@ class LatentMctsNode:
             total = float(priors.sum())
             if total > 0:
                 priors = priors / total
+            if (not np.isfinite(priors).all() or np.any(priors < 0)
+                    or legal.any() and abs(float(priors.sum()) - 1.0) > 1e-5):
+                raise ValueError("node priors are invalid")
         self.priors = priors
         self.visits = np.zeros(priors.shape[0], dtype=np.int64)
         self.q = np.zeros(priors.shape[0], dtype=np.float64)
@@ -196,6 +222,8 @@ class LatentMctsNode:
         self.children: Dict[int, "LatentMctsNode"] = {}
         self.evidence = evidence
         self.value = self.leaf_value(evidence)
+        if not math.isfinite(self.value):
+            raise ValueError("node value is non-finite")
 
     def has_legal(self) -> bool:
         return self.legal is None or bool(self.legal.any())
@@ -365,6 +393,8 @@ class LatentMctsPlanner:
             raise ValueError("temperature must be finite and > 0")
         if not np.isfinite(c_puct) or c_puct < 0:
             raise ValueError("c_puct must be finite and non-negative")
+        if c_puct > np.finfo(np.float64).max / (math.sqrt(num_simulations) + 1.0):
+            raise ValueError("c_puct would overflow the PUCT score")
         if max_depth < 1:
             raise ValueError("max_depth must be >= 1")
         if not 0.0 < damping <= 1.0:
@@ -394,8 +424,17 @@ class LatentMctsPlanner:
         self.damping = float(damping)
         self.last_root: Optional[LatentMctsNode] = None
 
-    def _project(self, z: np.ndarray, embeddings: np.ndarray) -> np.ndarray:
-        return _softmax(embeddings @ z / self.temperature)
+    def _project(self, z: np.ndarray, embeddings: np.ndarray, _in_errstate: bool = False) -> np.ndarray:
+        if _in_errstate:
+            logits = embeddings @ z
+            scaled = logits / self.temperature
+        else:
+            with np.errstate(all="ignore"):
+                logits = embeddings @ z
+                scaled = logits / self.temperature
+        if not np.isfinite(logits).all() or not np.isfinite(scaled).all():
+            raise ValueError("projection or temperature scaling produced non-finite values")
+        return _softmax(scaled)
 
     def _default_transition(self, embeddings: np.ndarray) -> Callable[[np.ndarray, int], np.ndarray]:
         return ContractiveHamiltonianTransition(embeddings, gamma=self.damping)
@@ -467,18 +506,22 @@ class LatentMctsPlanner:
 
         def project(z: np.ndarray) -> np.ndarray:
             if memo is None:
-                return self._project(z, emb)
+                return self._project(z, emb, True)
             key = z.tobytes()
             hit = memo["projection"].get(key)
             if hit is None:
-                hit = self._project(z, emb)
+                hit = self._project(z, emb, True)
                 memo["projection"].put(key, hit)
+            if not np.isfinite(hit).all() or np.any(hit < 0) or abs(float(hit.sum()) - 1.0) > 1e-5:
+                raise ValueError("cached projection is invalid")
             return hit.copy()
 
         def transition(z: np.ndarray, a: int) -> np.ndarray:
             if memo is not None:
                 hit = memo["transition"].get((z.tobytes(), a))
                 if hit is not None:
+                    if not np.isfinite(hit).all():
+                        raise ValueError("cached transition is non-finite")
                     return hit.copy()
             calls["transition"] += 1
             z_next = np.asarray(step(z, a), dtype=np.float64).reshape(-1)
@@ -492,68 +535,85 @@ class LatentMctsPlanner:
                 memo["transition"].put((z.tobytes(), a), z_next.copy())
             return z_next
 
-        root = LatentMctsNode(z0, project(z0), legal_at(z0))
-        if not root.has_legal():
-            raise ValueError("no candidate is legal at the root state")
-        max_depth_seen = 0
-        nodes = 1
-        halving = None
-        if self.search_strategy == "sequential_halving":
-            gumbel = (self.gumbel_scale * self.rng.gumbel(size=k) if self.gumbel_scale > 0.0
-                      else np.zeros(k))
-            halving = _RootSequentialHalving(root, self.num_simulations, gumbel, self.sh_max_considered,
-                                             self.sh_c_visit, self.sh_c_scale)
-        simulations_run = 0
-        early_stop_reason: Optional[str] = None
+        with np.errstate(all="ignore"):
+            root = LatentMctsNode(z0, project(z0), legal_at(z0))
+            if not root.has_legal():
+                raise ValueError("no candidate is legal at the root state")
+            max_depth_seen = 0
+            nodes = 1
+            halving = None
+            if self.search_strategy == "sequential_halving":
+                gumbel = (self.gumbel_scale * self.rng.gumbel(size=k) if self.gumbel_scale > 0.0
+                          else np.zeros(k))
+                halving = _RootSequentialHalving(root, self.num_simulations, gumbel, self.sh_max_considered,
+                                                 self.sh_c_visit, self.sh_c_scale)
+            simulations_run = 0
+            early_stop_reason: Optional[str] = None
 
-        for _ in range(self.num_simulations):
-            # The visit lead can exceed the remaining budget only after half of it.
-            if self.early_stop and (halving is not None or 2 * simulations_run > self.num_simulations):
-                early_stop_reason = (halving.resolved() if halving is not None
-                                     else _count_dominance(root, self.num_simulations - simulations_run))
-                if early_stop_reason is not None:
-                    break
-            simulations_run += 1
-            node = root
-            path = []
-            depth = 0
-            value = node.value
-            while depth < self.max_depth and node.has_legal():
-                a = halving.next_action() if (halving is not None and node is root) else node.select(self.c_puct)
-                path.append((node, a))
-                depth += 1
-                child = node.children.get(a)
-                if child is None:
-                    z_next = transition(node.z, a)
-                    child_unit = _unit(z_next)
-                    before = float(targets[a] @ node.unit_z)
-                    after = float(targets[a] @ child_unit)
-                    stability = float(np.exp(-max(0.0, before - after)))
-                    relational = float(np.exp(-0.5 * np.linalg.norm(child_unit - root_unit)))
-                    if relational_constraint is not None:
-                        score = float(relational_constraint(z0.copy(), z_next.copy(), a))
-                        if not np.isfinite(score) or not 0 <= score <= 1:
-                            raise ValueError("relational_constraint must return a finite score in [0,1]")
-                        relational *= score
-                    child = LatentMctsNode(z_next, project(z_next), legal_at(z_next),
-                                           evidence=min(node.evidence, stability * relational),
-                                           unit_z=child_unit)
-                    node.children[a] = child
-                    nodes += 1
-                    value = child.value
-                    break
-                node = child
+            for _ in range(self.num_simulations):
+                # The visit lead can exceed the remaining budget only after half of it.
+                if self.early_stop and (halving is not None or 2 * simulations_run > self.num_simulations):
+                    early_stop_reason = (halving.resolved() if halving is not None
+                                         else _count_dominance(root, self.num_simulations - simulations_run))
+                    if early_stop_reason is not None:
+                        break
+                simulations_run += 1
+                node = root
+                path = []
+                depth = 0
                 value = node.value
-            max_depth_seen = max(max_depth_seen, depth)
+                while depth < self.max_depth and node.has_legal():
+                    a = halving.next_action() if (halving is not None and node is root) else node.select(self.c_puct)
+                    path.append((node, a))
+                    depth += 1
+                    child = node.children.get(a)
+                    if child is None:
+                        z_next = transition(node.z, a)
+                        child_unit = _unit(z_next)
+                        before = float(targets[a] @ node.unit_z)
+                        after = float(targets[a] @ child_unit)
+                        if not math.isfinite(before) or not math.isfinite(after):
+                            raise ValueError("transition geometry is non-finite")
+                        stability = math.exp(-max(0.0, before - after))
+                        diff = child_unit - root_unit
+                        relational = math.exp(-0.5 * math.sqrt(float(np.dot(diff, diff))))
+                        if not math.isfinite(stability) or not math.isfinite(relational):
+                            raise ValueError("transition evidence is non-finite")
+                        if relational_constraint is not None:
+                            score = float(relational_constraint(z0.copy(), z_next.copy(), a))
+                            if not np.isfinite(score) or not 0 <= score <= 1:
+                                raise ValueError("relational_constraint must return a finite score in [0,1]")
+                            relational *= score
+                        if not math.isfinite(relational):
+                            raise ValueError("relational evidence is non-finite")
+                        child = LatentMctsNode(z_next, project(z_next), legal_at(z_next),
+                                               evidence=min(node.evidence, stability * relational),
+                                               unit_z=child_unit)
+                        node.children[a] = child
+                        nodes += 1
+                        value = child.value
+                        break
+                    node = child
+                    value = node.value
+                max_depth_seen = max(max_depth_seen, depth)
 
-            for parent, a in path:
-                parent.visits[a] += 1
-                parent.total_visits += 1
-                parent.q[a] += (value - parent.q[a]) / parent.visits[a]
+                for parent, a in path:
+                    parent.visits[a] += 1
+                    parent.total_visits += 1
+                    updated_q = parent.q[a] + (value - parent.q[a]) / parent.visits[a]
+                    if not math.isfinite(updated_q):
+                        raise ValueError("Q update is non-finite")
+                    parent.q[a] = updated_q
 
         self.last_root = root
         visits = root.visits
+        if visits.sum() <= 0:
+            raise ValueError("root has no visits")
         policy = visits / float(visits.sum())
+        if (not np.isfinite(policy).all() or np.any(policy < 0)
+                or abs(float(policy.sum()) - 1.0) > 1e-5
+                or not np.isfinite(root.q).all()):
+            raise ValueError("final policy or Q values are invalid")
         # Ties (e.g. 1 simulation) break on Q, then prior.
         best = int(np.lexsort((root.priors, root.q, visits))[-1])
         if halving is not None:

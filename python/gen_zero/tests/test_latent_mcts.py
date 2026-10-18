@@ -5,6 +5,27 @@ import pytest
 
 from gen_zero.causal.latent_mcts import LatentMctsNode, LatentMctsPlanner
 
+
+def test_planner_rejects_finite_inputs_that_overflow_projection():
+    with pytest.raises(ValueError):
+        LatentMctsPlanner(num_simulations=4, max_depth=2).plan(
+            np.array([-1e308, 1e308]), ["a", "b"], np.eye(2))
+    with pytest.raises(ValueError, match="PUCT"):
+        LatentMctsPlanner(num_simulations=4, c_puct=1e308)
+
+
+@pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
+def test_planner_rejects_nonfinite_callback_outputs(bad):
+    planner = LatentMctsPlanner(num_simulations=4, max_depth=2)
+    z = np.array([1.0, 0.0])
+    embeddings = np.eye(2)
+    with pytest.raises(ValueError):
+        planner.plan(z, ["a", "b"], embeddings,
+                     transition_fn=lambda state, action: np.array([bad, 0.0]))
+    with pytest.raises(ValueError):
+        planner.plan(z, ["a", "b"], embeddings,
+                     relational_constraint=lambda *args: bad)
+
 CANDS = ["a", "b", "c"]
 EMB = np.eye(3, 4)  # three orthonormal candidates; dim 3 is a free "depth" channel
 

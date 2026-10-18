@@ -34,7 +34,7 @@ impl<'de, const D: usize> Deserialize<'de> for LatentState<D> {
             type Value = LatentState<N>;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                write!(formatter, "a sequence of {} floats", N)
+                write!(formatter, "a sequence of {N} floats")
             }
 
             fn visit_seq<A>(self, mut seq: A) -> Result<Self::Value, A::Error>

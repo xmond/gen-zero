@@ -67,9 +67,19 @@ fn stub_scorer() -> String {
                                 })
                             })
                             .collect();
+                        let entropy = if n <= 1 {
+                            0.0
+                        } else {
+                            let h: f64 = (0..n)
+                                .map(&prob)
+                                .filter(|&p| p > 0.0)
+                                .map(|p| -p * p.ln())
+                                .sum();
+                            (h / (n as f64).ln()).clamp(0.0, 1.0)
+                        };
                         Json(json!({
                             "chosen": names[0], "chosen_index": 0, "candidates": scores,
-                            "entropy": 0.5, "scorer": {"name": "test-stub"},
+                            "entropy": entropy, "scorer": {"name": "test-stub"},
                             "embedding_dim": 0, "timing_ms": 0.0,
                         }))
                     }),

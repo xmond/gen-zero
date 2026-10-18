@@ -21,7 +21,7 @@ use crate::bridge::{
 use crate::error::ServiceError;
 use gen_zero_model::semantic_qwen::{
     causal_utility_prior, normalized_entropy, select_ask_frame, state_text, tool_continuation,
-    ROUTE_FRAME,
+    RiskScoreReport, CAUSAL_PRIOR_VERSION, RISK_THRESHOLDS_VERSION, ROUTE_FRAME,
 };
 use gen_zero_model::{
     QwenModelInfo, QwenSemanticScorer, RISK_ESCALATE_THRESHOLD, RISK_HARD_STOP_THRESHOLD,
@@ -37,6 +37,62 @@ pub const ENGINE_NATIVE_QWEN: &str = "native_qwen";
 /// `_meta.engine` of a semantic outcome scored by the Python service.
 pub const ENGINE_SEMANTIC_BRIDGE: &str = "semantic_bridge";
 
+/// Turns on the contextual policy prior ([`causal_utility_prior`]) for
+/// `ask` and everything built on it (`imagine`): `contextual_v2` (or `on`).
+/// Unset, empty or `off`: the response is the model's scores, untouched.
+pub const CAUSAL_PRIOR_ENV: &str = "GENZERO_CAUSAL_PRIOR";
+
+fn parse_causal_prior_env(raw: &str) -> Result<bool, BridgeError> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "" | "off" | "0" | "false" => Ok(false),
+        "on" | "1" | "true" => Ok(true),
+        v if v == CAUSAL_PRIOR_VERSION => Ok(true),
+        _ => Err(BridgeError::Native(format!(
+            "{CAUSAL_PRIOR_ENV}={raw:?}: expected `off` or `{CAUSAL_PRIOR_VERSION}`"
+        ))),
+    }
+}
+
+/// Whether [`CAUSAL_PRIOR_ENV`] enables the prior. An unknown value is an
+/// error, not a silent default.
+fn causal_prior_enabled() -> Result<bool, BridgeError> {
+    match std::env::var(CAUSAL_PRIOR_ENV) {
+        Err(std::env::VarError::NotPresent) => Ok(false),
+        Err(e) => Err(BridgeError::Native(format!("{CAUSAL_PRIOR_ENV}: {e}"))),
+        Ok(raw) => parse_causal_prior_env(&raw),
+    }
+}
+
+/// Record the raw model distribution and, only when `enabled`, apply the
+/// policy prior on top of it. Either way `scorer.policy_prior` says what ran.
+fn apply_policy_prior(
+    context: &str,
+    response: &mut SemanticAskResponse,
+    enabled: bool,
+) -> Result<(), BridgeError> {
+    for candidate in &mut response.candidates {
+        candidate
+            .raw_probability
+            .get_or_insert(candidate.probability);
+        candidate.policy_prior_adjustment = 0.0;
+    }
+    if !response.scorer.is_object() {
+        response.scorer = json!({ "backend_scorer": response.scorer.take() });
+    }
+    response.scorer["policy_prior"] = json!({
+        "enabled": enabled,
+        "source": null,
+        "env": CAUSAL_PRIOR_ENV,
+    });
+    if enabled {
+        apply_causal_prior(context, response)?;
+    }
+    Ok(())
+}
+
+/// Re-rank by `log raw_probability + causal_utility_prior`. `pmi` and
+/// `raw_probability` keep the model's values; the adjustment goes to
+/// `policy_prior_adjustment` and only `probability` changes.
 fn apply_causal_prior(
     context: &str,
     response: &mut SemanticAskResponse,
@@ -46,6 +102,15 @@ fn apply_causal_prior(
         .iter()
         .map(|candidate| causal_utility_prior(context, &candidate.name))
         .collect();
+    let raw_chosen = response.chosen.clone();
+    response.scorer["policy_prior"] = json!({
+        "enabled": true,
+        "source": "causal_utility_prior",
+        "version": CAUSAL_PRIOR_VERSION,
+        "env": CAUSAL_PRIOR_ENV,
+        "adjusted_candidates": adjustments.iter().filter(|v| **v != 0.0).count(),
+        "raw_chosen": raw_chosen,
+    });
     if adjustments.iter().all(|value| *value == 0.0) {
         return Ok(());
     }
@@ -54,7 +119,8 @@ fn apply_causal_prior(
         .iter()
         .zip(&adjustments)
         .map(|(candidate, adjustment)| {
-            candidate.probability.max(f64::MIN_POSITIVE).ln() + adjustment
+            let raw = candidate.raw_probability.unwrap_or(candidate.probability);
+            raw.max(f64::MIN_POSITIVE).ln() + adjustment
         })
         .collect();
     if logits.iter().any(|value| !value.is_finite()) {
@@ -71,7 +137,7 @@ fn apply_causal_prior(
         ));
     }
     for (index, candidate) in response.candidates.iter_mut().enumerate() {
-        candidate.pmi += adjustments[index];
+        candidate.policy_prior_adjustment = adjustments[index];
         candidate.probability = weights[index] / total;
     }
     response.chosen_index = response
@@ -89,8 +155,35 @@ fn apply_causal_prior(
             .map(|c| c.probability)
             .collect::<Vec<_>>(),
     );
-    response.scorer["causal_utility_prior"] = json!("contextual_v1");
     Ok(())
+}
+
+/// `classifier` metadata of a native risk response: the score's provenance
+/// ([`RiskScoreReport`]), never a claim the thresholds were fit on this backbone.
+fn risk_classifier_meta(
+    id: &str,
+    per_order_log_odds: &[f64],
+    report: Option<&RiskScoreReport>,
+) -> Value {
+    let calibrated = report.is_some_and(|r| r.calibration.is_some());
+    json!({
+        "id": id,
+        "method": "in_context_pmi_log_odds",
+        "per_order_log_odds": per_order_log_odds,
+        "backbone_id": report.map(|r| r.backbone_id.as_str()),
+        "calibration_method": report.map(|r| r.method.as_str()),
+        "calibration_split": report.and_then(|r| r.calibration_split.as_deref()),
+        "heldout_split": report.map(|r| r.heldout_split.as_str()),
+        "heldout": report.and_then(|r| r.heldout),
+        "calibration": report.and_then(|r| r.calibration.as_ref()),
+        "thresholds_version": RISK_THRESHOLDS_VERSION,
+        "thresholds_calibrated_on": if calibrated {
+            "python fp32 Qwen2.5-0.5B (risk_data/report.json); this backbone's log-odds are \
+             mapped onto that scale by the LDA fit on calibration.jsonl"
+        } else {
+            "python fp32 Qwen2.5-0.5B (risk_data/report.json); this backbone is uncalibrated"
+        },
+    })
 }
 
 #[cfg(test)]
@@ -98,7 +191,14 @@ mod causal_prior_tests {
     use super::*;
 
     fn score(context: &str, names: &[&str]) -> SemanticAskResponse {
-        let mut response = SemanticAskResponse {
+        let mut response = raw_response(names);
+        apply_policy_prior(context, &mut response, true).unwrap();
+        response
+    }
+
+    /// Model scores that favor the first name (pmi 3, probability 0.95).
+    fn raw_response(names: &[&str]) -> SemanticAskResponse {
+        SemanticAskResponse {
             chosen: names[0].into(),
             chosen_index: 0,
             candidates: names
@@ -110,6 +210,8 @@ mod causal_prior_tests {
                     baseline_log_likelihood: 0.0,
                     pmi: if index == 0 { 3.0 } else { 0.0 },
                     probability: if index == 0 { 0.95 } else { 0.05 },
+                    raw_probability: None,
+                    policy_prior_adjustment: 0.0,
                 })
                 .collect(),
             entropy: 0.3,
@@ -117,9 +219,7 @@ mod causal_prior_tests {
             embedding_dim: 0,
             embedding: None,
             timing_ms: 0.0,
-        };
-        apply_causal_prior(context, &mut response).unwrap();
-        response
+        }
     }
 
     #[test]
@@ -159,6 +259,126 @@ mod causal_prior_tests {
         );
         assert_eq!(response.chosen, "keep away");
         assert!(response.candidates[0].probability < 0.01);
+    }
+
+    /// WebGPT round 1 (M01) counterexamples: negation, word boundaries,
+    /// parsed paths and Chinese.
+    #[test]
+    fn negated_hazards_are_not_penalized() {
+        let p = causal_utility_prior;
+        let milk = "The milk is expired";
+        assert!(p(milk, "do not drink") >= 0.0);
+        assert!(p(milk, "do not drink") > p(milk, "drink it"));
+        assert!(p(milk, "discard it") >= 0.0);
+        let wire = "The wire is high voltage";
+        assert!(p(wire, "do not touch it") >= 0.0);
+        assert!(p(wire, "do not touch it") > p(wire, "touch it"));
+        assert!(p(wire, "don't touch it, call an electrician") > 0.0);
+        assert!(p(milk, "never drink it") > 0.0);
+        assert_eq!(p(milk, "do not discard it. Drink it"), -16.0);
+        assert_eq!(p(milk, "Do not hesitate to drink it"), -16.0);
+        assert_eq!(p(milk, "Do not drink it: drink it"), -16.0);
+    }
+
+    #[test]
+    fn substrings_and_safe_paths_get_no_penalty() {
+        let p = causal_utility_prior;
+        // `create` contains `eat`; a certificate is not food.
+        assert_eq!(
+            p(
+                "The certificate has expired",
+                "create a replacement certificate"
+            ),
+            0.0
+        );
+        assert_eq!(p("Clean up temporary files", "rm -rf /tmp/cache"), 0.0);
+        assert_eq!(p("Clean up temporary files", "rm -rf /tmp/_/"), 0.0);
+        assert_eq!(p("Clean up temporary files", "rm -rf ./build/*"), 0.0);
+        for root in [
+            "rm -rf /",
+            "rm -rf /*",
+            "sudo rm -r -f /",
+            "rm --recursive --force /",
+            "never hesitate. rm -rf /",
+            "echo never && rm -rf --no-preserve-root /",
+        ] {
+            assert_eq!(p("Clean up temporary files", root), -16.0, "{root}");
+        }
+        assert_eq!(p("Clean up temporary files", "never run rm -rf /"), 0.0);
+        assert_eq!(p("The cheese is not expired", "eat it"), 0.0);
+    }
+
+    #[test]
+    fn chinese_terms_follow_the_same_rules() {
+        let p = causal_utility_prior;
+        let milk = "牛奶已经过期";
+        assert!(p(milk, "喝掉它") < 0.0);
+        assert!(p(milk, "特别想喝") < 0.0);
+        assert!(p(milk, "别喝，倒掉") > 0.0);
+        assert!(p(milk, "不要喝，扔掉它") >= 0.0);
+        assert!(p(milk, "不要喝，扔掉它") > p(milk, "喝掉它"));
+        assert_eq!(p(milk, "喝掉它"), p("The milk is expired", "drink it"));
+        assert_eq!(
+            p(milk, "不要喝，扔掉它"),
+            p("The milk is expired", "do not drink it, throw it away")
+        );
+        assert!(p("电线裸露带电", "徒手去摸") < 0.0);
+        assert!(p("电线裸露带电", "切断电源，叫电工") > 0.0);
+    }
+
+    #[test]
+    fn prior_never_changes_the_raw_model_scores() {
+        let response = score("The milk is expired", &["drink it", "throw it away"]);
+        assert_eq!(response.chosen, "throw it away");
+        assert_eq!(response.candidates[0].pmi, 3.0);
+        assert_eq!(response.candidates[1].pmi, 0.0);
+        assert_eq!(response.candidates[0].raw_probability, Some(0.95));
+        assert_eq!(response.candidates[1].raw_probability, Some(0.05));
+        assert_eq!(response.candidates[0].policy_prior_adjustment, -16.0);
+        assert_eq!(response.candidates[1].policy_prior_adjustment, 8.0);
+        assert_eq!(response.scorer["policy_prior"]["enabled"], json!(true));
+        assert_eq!(
+            response.scorer["policy_prior"]["version"],
+            json!(CAUSAL_PRIOR_VERSION)
+        );
+        assert_eq!(
+            response.scorer["policy_prior"]["raw_chosen"],
+            json!("drink it")
+        );
+    }
+
+    #[test]
+    fn prior_is_off_unless_enabled() {
+        for off in ["", "0", "off", "false", " FALSE "] {
+            assert!(!parse_causal_prior_env(off).unwrap(), "{off}");
+        }
+        for on in ["1", "on", "true", "TRUE", CAUSAL_PRIOR_VERSION] {
+            assert!(parse_causal_prior_env(on).unwrap(), "{on}");
+        }
+        assert!(parse_causal_prior_env("invalid").is_err());
+        let mut raw = raw_response(&["drink it", "throw it away"]);
+        let before = raw.candidates.clone();
+        apply_policy_prior("The milk is expired", &mut raw, false).unwrap();
+        assert_eq!(raw.chosen, "drink it");
+        for (after, before) in raw.candidates.iter().zip(&before) {
+            assert_eq!(after.pmi, before.pmi);
+            assert_eq!(after.probability, before.probability);
+            assert_eq!(after.raw_probability, Some(before.probability));
+            assert_eq!(after.policy_prior_adjustment, 0.0);
+        }
+        assert_eq!(raw.scorer["policy_prior"]["enabled"], json!(false));
+        assert_eq!(raw.scorer["policy_prior"]["source"], Value::Null);
+    }
+
+    #[test]
+    fn risk_metadata_names_its_disjoint_splits() {
+        let meta = risk_classifier_meta("id", &[0.1], None);
+        assert_eq!(meta["thresholds_version"], json!(RISK_THRESHOLDS_VERSION));
+        assert_eq!(meta["calibration_split"], Value::Null);
+        assert!(meta["thresholds_calibrated_on"]
+            .as_str()
+            .unwrap()
+            .contains("uncalibrated"));
     }
 
     #[test]
@@ -274,6 +494,12 @@ impl NativeQwen {
     /// document/long-text retrieval (see [`gen_zero_model::PoolingMode::Mean`]).
     pub fn pooling(&self) -> gen_zero_model::PoolingMode {
         gen_zero_model::PoolingMode::Mean
+    }
+
+    /// Fingerprint of the loaded weights ([`QwenSemanticScorer::backbone_id`]);
+    /// every scorer, classifier, embedder and calibration id starts with it.
+    pub fn backbone_id(&self) -> String {
+        self.scorer.backbone_id()
     }
 
     /// Id of the vectors [`Self::embed_texts`] returns.
@@ -396,6 +622,8 @@ impl SemanticBackend {
                     "model": info.source,
                     "format": info.format,
                     "weights_sha256": info.weights_sha256,
+                    "tokenizer_sha256": info.tokenizer_sha256,
+                    "backbone_id": native.backbone_id(),
                 })
             }
             Self::Remote(client) => json!({"kind": "python_http", "endpoint": client.endpoint()}),
@@ -468,7 +696,7 @@ impl SemanticBackend {
                 resp
             }
         };
-        apply_causal_prior(&context, &mut response)?;
+        apply_policy_prior(&context, &mut response, causal_prior_enabled()?)?;
         validate_ask(&response, input.candidates)?;
         Ok(response)
     }
@@ -478,8 +706,14 @@ impl SemanticBackend {
             Self::Remote(client) => client.semantic_risk(text).await,
             Self::Native(native) => {
                 let text = text.to_string();
-                let (r, id) = native
-                    .run(move |s| Ok((s.assess_risk_detailed(&text)?, s.classifier_id())))
+                let (r, id, report) = native
+                    .run(move |s| {
+                        Ok((
+                            s.assess_risk_detailed(&text)?,
+                            s.classifier_id(),
+                            s.info().risk_report.clone(),
+                        ))
+                    })
                     .await?;
                 let resp = SemanticRiskResponse {
                     p_dangerous: r.p_dangerous,
@@ -489,12 +723,7 @@ impl SemanticBackend {
                         escalate: RISK_ESCALATE_THRESHOLD,
                         hard_stop: RISK_HARD_STOP_THRESHOLD,
                     },
-                    classifier: json!({
-                        "id": id,
-                        "method": "in_context_pmi_log_odds",
-                        "per_order_log_odds": r.per_order_log_odds,
-                        "thresholds_calibrated_on": "python fp32 backbone (risk_data/report.json)",
-                    }),
+                    classifier: risk_classifier_meta(&id, &r.per_order_log_odds, report.as_ref()),
                     forward_ms: r.forward_ms,
                 };
                 validate_risk(&resp)?;

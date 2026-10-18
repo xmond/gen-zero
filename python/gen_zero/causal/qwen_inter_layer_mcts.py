@@ -428,6 +428,7 @@ class EpisodicManifoldMemory:
             self.center = c
         key_dim = dim if self.projection is None else self.projection.shape[1]
         self._keys = np.zeros((0, key_dim))
+        self._raw_keys = np.zeros((0, dim))
         self._values = np.zeros((0, num_labels))
         self._ids: list[Any] = []
 
@@ -448,6 +449,7 @@ class EpisodicManifoldMemory:
 
     def write(self, hidden, targets, ids: Sequence[Any]) -> None:
         keys = self.encode(hidden)
+        raw = np.atleast_2d(np.asarray(hidden, dtype=np.float64))
         t = np.asarray(targets)
         if t.ndim == 1:
             if t.dtype.kind not in "iu" or np.any((t < 0) | (t >= self.num_labels)):
@@ -466,29 +468,76 @@ class EpisodicManifoldMemory:
         if not len(keys) == len(values) == len(ids):
             raise ValueError("hidden, targets and ids must have the same length")
         self._keys = np.vstack([self._keys, keys])[-self.capacity:]
+        self._raw_keys = np.vstack([self._raw_keys, raw])[-self.capacity:]
         self._values = np.vstack([self._values, values])[-self.capacity:]
         self._ids = (self._ids + list(ids))[-self.capacity:]
 
     def query(self, hidden, exclude_ids: Sequence[Any] | None = None) -> np.ndarray:
+        if exclude_ids is not None and self.center is not None:
+            raw = np.atleast_2d(np.asarray(hidden, dtype=np.float64))
+            if raw.shape[1] != self.dim or not np.all(np.isfinite(raw)):
+                raise ValueError(f"hidden states must be finite with last dim {self.dim}")
+            if len(exclude_ids) != len(raw):
+                raise ValueError("one exclude id per query row")
+            if not len(self):
+                raise ValueError("memory is empty")
+            stored = np.asarray(self._ids, dtype=object)
+            result = np.empty((len(raw), self.num_labels))
+            for i, (q, excluded) in enumerate(zip(raw, exclude_ids)):
+                keep = stored != excluded
+                remaining = self._raw_keys[keep]
+                if not len(remaining):
+                    result[i] = 1.0 / self.num_labels
+                    continue
+                center = remaining.mean(axis=0)
+                def normalized(rows):
+                    z = rows - center
+                    if self.projection is not None:
+                        z = z @ self.projection
+                    norms = np.linalg.norm(z, axis=1, keepdims=True)
+                    if not np.all(np.isfinite(norms)):
+                        raise ValueError("cannot key an overflowing state")
+                    return z / np.where(norms == 0, 1.0, norms)
+                logits = self.beta * (normalized(q[None, :]) @ normalized(remaining).T)
+                result[i] = _softmax(logits, axis=1)[0] @ self._values[keep]
+            return result
         return self._read(self.encode(hidden), exclude_ids)
 
     def _read(self, q: np.ndarray, exclude_ids: Sequence[Any] | None) -> np.ndarray:
         if len(self) == 0:
             raise ValueError("memory is empty")
         sims = self.beta * (q @ self._keys.T)
-        if exclude_ids is not None:
-            if len(exclude_ids) != len(q):
-                raise ValueError("one exclude id per query row")
-            stored = np.asarray(self._ids, dtype=object)
-            mask = np.stack([stored == e for e in exclude_ids])
-            sims = np.where(mask, -np.inf, sims)
-            if np.any(np.all(mask, axis=1)):
-                raise ValueError("leave-one-out removed every memory entry")
-        return _softmax(sims, axis=1) @ self._values
+        if exclude_ids is None:
+            return _softmax(sims, axis=1) @ self._values
+        if len(exclude_ids) != len(q):
+            raise ValueError("one exclude id per query row")
+        stored = np.asarray(self._ids, dtype=object)
+        result = np.empty((len(q), self.num_labels))
+        for i, excluded in enumerate(exclude_ids):
+            valid_mask = stored != excluded
+            if not np.any(valid_mask):
+                result[i] = 1.0 / self.num_labels
+                continue
+            valid_logits = sims[i, valid_mask]
+            result[i] = _softmax(valid_logits) @ self._values[valid_mask]
+        return result
 
-    def loo_query(self) -> np.ndarray:
-        """Each stored entry's own query with itself masked out (out-of-fold read)."""
-        return self._read(self._keys, self._ids)
+    def loo_query(self, hidden=None, ids: Sequence[Any] | None = None) -> np.ndarray:
+        """Read every supplied anchor against retained slots, excluding matching IDs.
+
+        When a center is configured, refit it for each exclusion for both query
+        and remaining keys. With no center, retain the uncentered geometry.
+        Supplying all anchors preserves rows that have fallen out of the FIFO window.
+        """
+        raw = self._raw_keys if hidden is None else np.atleast_2d(np.asarray(hidden, dtype=np.float64))
+        query_ids = self._ids if ids is None else list(ids)
+        if raw.ndim != 2 or raw.shape[1] != self.dim or not np.all(np.isfinite(raw)):
+            raise ValueError("hidden states must be finite with the memory dimension")
+        if len(raw) != len(query_ids):
+            raise ValueError("one ID per query row")
+        if not len(self):
+            raise ValueError("memory is empty")
+        return self.query(raw, exclude_ids=query_ids)
 
 
 def select_memory_lambda(
@@ -515,11 +564,14 @@ def select_memory_lambda(
         raise ValueError("lambda selection needs at least 2 out-of-fold samples")
     if base.shape != mem.shape or base.shape[0] != n:
         raise ValueError("base_probs, memory_probs and labels disagree in shape")
-    null = None
+    nulls = {"uniform": np.full_like(base, 1.0 / base.shape[1])}
+    counts = np.bincount(y, minlength=base.shape[1]).astype(np.float64)
+    nulls["laplace"] = (counts[None, :] - np.eye(base.shape[1])[y] + 1.0) / (n - 1 + base.shape[1])
     if null_probs is not None:
         null = np.asarray(null_probs, dtype=np.float64)
         if null.shape != base.shape or not np.all(np.isfinite(null)):
             raise ValueError("null_probs must be finite with the shape of base_probs")
+        nulls["provided"] = null
     rows = np.arange(n)
     ll0 = np.log(np.clip(base[rows, y], 1e-12, None))
     report: dict[str, Any] = {"n": n, "candidates": []}
@@ -533,7 +585,7 @@ def select_memory_lambda(
             raise ValueError("non-finite out-of-fold gain")
         passed = mean > 0 and mean > se_mult * se
         entry = {"lambda": float(lam), "mean_gain": mean, "se": se}
-        if null is not None:
+        for null_name, null in nulls.items():
             null_mix = (1 - lam) * base + lam * null
             excess = np.log(np.clip(mix[rows, y], 1e-12, None)) - np.log(np.clip(null_mix[rows, y], 1e-12, None))
             excess_mean = float(excess.mean())
@@ -541,7 +593,10 @@ def select_memory_lambda(
             if not (np.isfinite(excess_mean) and np.isfinite(excess_se)):
                 raise ValueError("non-finite out-of-fold gain over the null")
             passed = passed and excess_mean > 0 and excess_mean > se_mult * excess_se
-            entry.update(gain_over_null=excess_mean, gain_over_null_se=excess_se)
+            entry[f"gain_over_{null_name}"] = excess_mean
+            entry[f"gain_over_{null_name}_se"] = excess_se
+            if null_name == "provided":
+                entry.update(gain_over_null=excess_mean, gain_over_null_se=excess_se)
         entry["passed"] = passed
         report["candidates"].append(entry)
         if passed and mean > best_gain:
@@ -671,9 +726,16 @@ def _replay_layer_cls():
     class _ReplayLayer(torch.nn.Module):
         """Stands in for an already-computed layer: returns the cached residual."""
 
-        def __init__(self, cached) -> None:
+        def __init__(self, cached, orig_layer) -> None:
             super().__init__()
             self.cached = cached
+            object.__setattr__(self, "_orig_layer", orig_layer)
+
+        def __getattr__(self, name):
+            try:
+                return super().__getattr__(name)
+            except AttributeError:
+                return getattr(object.__getattribute__(self, "_orig_layer"), name)
 
         def forward(self, hidden_states, *args, **kwargs):
             if hidden_states.shape != self.cached.shape:
@@ -860,6 +922,8 @@ class MctsLayerwiseQwenRunner:
         anchor is not standardised with its own logits.
         """
         layers = sorted({int(layer) for layer in layers})
+        if capacity <= 0:
+            raise ValueError("capacity must be positive")
         if len(anchors) != len(labels) or len(anchors) < 2:
             raise ValueError("need at least 2 anchors, one label each")
         states: dict[int, list[np.ndarray]] = {layer: [] for layer in layers}
@@ -884,7 +948,8 @@ class MctsLayerwiseQwenRunner:
             z_by_layer[layer] = z
             mean, std = _anchor_logit_stats(z)
             base = _softmax((z - _loo_mean(z)) / _loo_std(z), axis=1)
-            lam, report = select_memory_lambda(base, memory.loo_query(), labels, null_probs=loo_prior)
+            lam, report = select_memory_lambda(base, memory.loo_query(h, ids=list(range(len(labels)))), labels,
+                                               null_probs=loo_prior)
             self.memories[layer] = (memory, lam)
             self.probe_stats[layer] = self._check_probe_stats(layer, mean, std, self.probe.num_labels)
             report["probe_logit_mean"] = mean[0].tolist()
@@ -929,6 +994,7 @@ class MctsLayerwiseQwenRunner:
         prev: dict[str, Any] = {}
         cum_w = 0.0
         cum_z = None
+        effective_steps = 0
 
         def trajectory(idx, last):
             nonlocal cum_w, cum_z
@@ -940,15 +1006,20 @@ class MctsLayerwiseQwenRunner:
             if entry is not None and entry[1] > 0:
                 z = np.log(np.clip(instant, 1e-12, None))
             weight = self.layer_weights.get(idx, 0.0)
-            if weight > 0:
+            if weight > 1e-12:
                 cum_w += weight
                 cum_z = weight * z if cum_z is None else cum_z + weight * z
             return _softmax(cum_z / cum_w, axis=1)[0] if cum_w > 0 else instant[0]
 
         def policy(idx: int, last, delta: np.ndarray) -> bool:
+            nonlocal effective_steps
             probs = trajectory(idx, last)
             record: dict[str, Any] = {"probs": probs}
             seen[idx] = record
+            if self.layer_weights:
+                if self.layer_weights.get(idx, 0.0) <= 1e-12:
+                    return False
+                effective_steps += 1
             if not prev:
                 prev.update(probs=probs, drift=None)
                 return False
@@ -961,7 +1032,7 @@ class MctsLayerwiseQwenRunner:
             ordered = np.sort(probs)
             gap = float(ordered[-1] - ordered[-2])
             record.update(drift=drift, gamma_hat=gamma_hat, threshold=bound, margin=gap)
-            if idx < self.min_exit_layer or not stable or gap <= bound or (self.layer_weights and cum_w <= 0):
+            if idx < self.min_exit_layer or not stable or gap <= bound or (self.layer_weights and effective_steps < 2):
                 return False
             best, visit_margin, value = self.mcts_margin(probs)
             record.update(mcts_margin=visit_margin, value=value)
@@ -1058,7 +1129,7 @@ class MctsLayerwiseQwenRunner:
         hook = QwenInterLayerHook(self.model, capture_layers=[last_layer])
         try:
             for j in range(shallow_layers):
-                layers[j] = replay(cached)
+                layers[j] = replay(cached, originals[j])
             if self._run(hook, input_ids) is not None:
                 raise RuntimeError("deep pass exited early")
         finally:
