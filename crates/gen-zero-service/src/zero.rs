@@ -152,6 +152,16 @@ fn inspection_marker_rejection(
     })
 }
 
+/// What `imagine`'s sequence likelihoods are: the model's, or the model's
+/// reweighted by the policy prior.
+fn likelihood_source(policy_prior_enabled: bool) -> &'static str {
+    if policy_prior_enabled {
+        "policy_prior_reweighted"
+    } else {
+        "raw_model"
+    }
+}
+
 fn has_duplicates(names: &[String]) -> bool {
     names.iter().collect::<std::collections::HashSet<_>>().len() != names.len()
 }
@@ -3205,7 +3215,12 @@ impl PolymorphicZeroEngine {
         meta["inspection"] = inspection;
         meta["formally_infeasible"] = json!(infeasible);
 
-        if gen_zero_model::semantic_qwen::causal_utility_prior(context_str, &chosen) < 0.0 {
+        // The prior is opt-in policy: off (the default), it never vetoes an ask.
+        let prior_enabled = crate::semantic::causal_prior_enabled()
+            .map_err(|e| ServiceError::Core(e.to_string()))?;
+        if prior_enabled
+            && gen_zero_model::semantic_qwen::causal_utility_prior(context_str, &chosen) < 0.0
+        {
             return Err(ServiceError::ConfirmationRequired(
                 "The selected action has a severe negative causal affordance".into(),
             ));
@@ -3818,6 +3833,21 @@ impl PolymorphicZeroEngine {
             "trained": false,
             "calibrated": false,
         });
+        // The same canonical inspection as a text ask: a non-empty context
+        // never hides the candidates (or any other text field) from the check.
+        let (risk_text, inspection) = inspection_text(
+            arguments,
+            &[
+                "context",
+                "candidates",
+                "state",
+                "intent",
+                "goal",
+                "tools",
+                "history",
+            ],
+        );
+        meta["inspection"] = inspection.clone();
         let refuse =
             |r: Rejection, meta: Value| Ok(ZeroToolOutcome::rejected(ZeroVerb::Ask, r, meta));
         let dynamics = match dynamics {
@@ -3850,14 +3880,14 @@ impl PolymorphicZeroEngine {
             Err(r) => return refuse(r, meta),
         };
 
-        let context = first_text(arguments, &["context"]);
-        let risk_text = if context.is_empty() {
-            candidates.join("\n")
-        } else {
-            context.to_string()
-        };
+        // `meta` already carries `inspection`, so the refusal does too.
+        if let Some(stop) = inspection_marker_rejection(ZeroVerb::Ask, &risk_text, &meta) {
+            return Ok(stop);
+        }
         let risk = self.assess_risk(&risk_text).await;
         if let Some(stop) = Self::risk_hard_stop(ZeroVerb::Ask, &risk) {
+            let mut stop = stop;
+            stop.meta["inspection"] = inspection;
             return Ok(stop);
         }
 
@@ -3897,6 +3927,7 @@ impl PolymorphicZeroEngine {
                     "engine": "formal_filter",
                     "formally_infeasible": infeasible,
                     "graph_revoked": graph_revoked,
+                    "inspection": inspection,
                 }),
                 String::new(),
             ));
@@ -4362,6 +4393,9 @@ impl PolymorphicZeroEngine {
             ));
         };
 
+        // Read once: the oracle's `semantic_ask` applies the same switch.
+        let prior_enabled = crate::semantic::causal_prior_enabled()
+            .map_err(|e| ServiceError::Core(e.to_string()))?;
         let oracle = SemanticOracle {
             backend,
             scenario,
@@ -4447,6 +4481,10 @@ impl PolymorphicZeroEngine {
             // scenario text. Not an environment reward, not observed feedback.
             "value_model": "geometric_mean_step_likelihood",
             "value_is_environment_reward": false,
+            // With the policy prior on, every step distribution was reweighted
+            // by it: the likelihoods are no longer the model's own.
+            "policy_prior_enabled": prior_enabled,
+            "likelihood_source": likelihood_source(prior_enabled),
             "c_puct": DEFAULT_C_PUCT,
             "root_noise": {
                 "kind": "dirichlet",
@@ -5630,6 +5668,12 @@ pub(crate) mod test_support {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn likelihood_source_names_a_reweighted_score() {
+        assert_eq!(super::likelihood_source(true), "policy_prior_reweighted");
+        assert_eq!(super::likelihood_source(false), "raw_model");
+    }
+
     #[test]
     fn inspection_covers_state_candidates_tools_and_history() {
         for field in ["state", "candidates", "tools", "history"] {

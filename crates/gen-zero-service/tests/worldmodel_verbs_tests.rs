@@ -1188,3 +1188,219 @@ async fn caller_nanocore_ask_is_audited_in_the_shared_ledger() {
         }
     }
 }
+
+// ------------------------------------------- policy prior and risk coverage
+
+/// Scorer stub: `semantic_ask` answers `probs` in candidate order, and
+/// `semantic_risk` records every text it is sent and answers
+/// p_dangerous = 0.999 (over hard_stop 0.8) when the text names
+/// `AUDIT_SENTINEL`, else 0.001.
+async fn scripted_scorer(probs: Vec<f64>, seen: Arc<std::sync::Mutex<Vec<String>>>) -> String {
+    let app = Router::new()
+        .route(
+            "/v1/semantic_risk",
+            post(move |Json(req): Json<Value>| {
+                let seen = Arc::clone(&seen);
+                async move {
+                    let text = req["text"].as_str().unwrap_or_default().to_string();
+                    let p = if text.contains("AUDIT_SENTINEL") {
+                        0.999
+                    } else {
+                        0.001
+                    };
+                    seen.lock().unwrap().push(text);
+                    Json(json!({
+                        "p_dangerous": p, "log_odds": 0.0, "windows": 1,
+                        "thresholds": {"escalate": 0.4, "hard_stop": 0.8},
+                        "classifier": {"name": "test-stub"}, "forward_ms": 0.0,
+                    }))
+                }
+            }),
+        )
+        .route(
+            "/v1/semantic_ask",
+            post(move |Json(req): Json<Value>| {
+                let probs = probs.clone();
+                async move {
+                    let names: Vec<String> = req["candidates"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|c| c.as_str().unwrap().to_string())
+                        .collect();
+                    let n = names.len();
+                    let scores: Vec<Value> = names
+                        .iter()
+                        .zip(&probs)
+                        .map(|(name, p)| {
+                            json!({
+                                "name": name, "log_likelihood": p.ln(),
+                                "baseline_log_likelihood": 0.0, "pmi": p.ln(), "probability": p,
+                            })
+                        })
+                        .collect();
+                    let entropy = -probs.iter().map(|p| p * p.ln()).sum::<f64>() / (n as f64).ln();
+                    Json(json!({
+                        "chosen": names[0], "chosen_index": 0, "candidates": scores,
+                        "entropy": entropy, "scorer": {"name": "test-stub"},
+                        "embedding_dim": 0, "timing_ms": 0.0,
+                    }))
+                }
+            }),
+        );
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+    format!("http://{addr}")
+}
+
+async fn engine_with_script(
+    probs: Vec<f64>,
+) -> (
+    Arc<PolymorphicZeroEngine>,
+    Arc<std::sync::Mutex<Vec<String>>>,
+) {
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let url = scripted_scorer(probs, Arc::clone(&seen)).await;
+    let client = SemanticBridgeClient::new(BridgeConfig::new(url)).unwrap();
+    let engine = Arc::new(
+        PolymorphicZeroEngine::new().with_semantic(Some(Arc::new(SemanticBackend::Remote(client)))),
+    );
+    (engine, seen)
+}
+
+/// With the policy prior off (unset or `off`), the prior never vetoes an
+/// ordinary `ask`: the model's confident pick proceeds. The milk case is
+/// one the prior still scores -16, so only the off-switch can let it pass.
+#[tokio::test]
+async fn ask_ignores_the_policy_prior_unless_it_is_enabled() {
+    let (engine, _) = engine_with_script(vec![0.99, 0.01]).await;
+    let cases = [
+        (
+            "The wire is high voltage",
+            [
+                "do not touch it with your bare hands",
+                "call an electrician",
+            ],
+        ),
+        ("The milk is expired", ["drink it", "throw it away"]),
+    ];
+    // The only test in this binary that sets the variable. `off` and unset
+    // mean the same, so no other test can observe the change.
+    for env in [None, Some("off")] {
+        match env {
+            None => std::env::remove_var("GENZERO_CAUSAL_PRIOR"),
+            Some(v) => std::env::set_var("GENZERO_CAUSAL_PRIOR", v),
+        }
+        for (context, candidates) in &cases {
+            let out = run(
+                &engine,
+                json!({"action": "ask", "context": context, "candidates": candidates}),
+            )
+            .await;
+            assert!(!out.is_error, "{env:?} {context}: {}", out.meta);
+            assert_eq!(out.meta["tier"], "Proceed", "{env:?} {context}");
+            assert_eq!(out.meta["chosen_action"], candidates[0], "{env:?}");
+        }
+    }
+    std::env::remove_var("GENZERO_CAUSAL_PRIOR");
+}
+
+/// A latent `decide` is inspected like any text `ask`: the candidates go
+/// to the risk classifier even with a non-empty context, a dangerous one
+/// stops the request, and every answer carries `inspection`.
+#[tokio::test]
+async fn latent_decide_sends_every_request_field_to_the_risk_check() {
+    let (engine, seen) = engine_with_script(vec![0.5, 0.5]).await;
+    let out = run(
+        &engine,
+        json!({
+            "action": "decide", "mode": "mcts", "context": "select storage",
+            "latent": latent(0.0), "candidates": ["AUDIT_SENTINEL"],
+        }),
+    )
+    .await;
+    let sent = seen.lock().unwrap().clone();
+    assert!(
+        sent.iter().any(|t| t.contains("AUDIT_SENTINEL")),
+        "{sent:?}"
+    );
+    assert!(out.is_error, "{}", out.meta);
+    assert_eq!(out.meta["tier"], "HardStop", "{}", out.meta);
+    assert_eq!(out.meta["engine"], "semantic_risk_gate");
+    let fields = &out.meta["inspection"]["risk_checked_fields"];
+    for field in [
+        "context",
+        "candidates",
+        "state",
+        "intent",
+        "goal",
+        "tools",
+        "history",
+    ] {
+        assert!(
+            fields.as_array().unwrap().contains(&json!(field)),
+            "{field}: {fields}"
+        );
+    }
+    assert_eq!(
+        out.meta["inspection"]["risk_checked_sha256"]
+            .as_str()
+            .unwrap()
+            .len(),
+        64
+    );
+
+    seen.lock().unwrap().clear();
+    let out = run(
+        &engine,
+        json!({
+            "action": "decide", "mode": "mcts", "context": "select storage",
+            "latent": latent(0.0), "candidates": ["alpha", "beta"],
+        }),
+    )
+    .await;
+    let sent = seen.lock().unwrap().clone();
+    assert!(
+        sent.iter()
+            .any(|t| t.contains("alpha") && t.contains("beta")),
+        "{sent:?}"
+    );
+    assert_ne!(out.meta["tier"], "HardStop", "{}", out.meta);
+    assert_eq!(out.meta["engine"], "latent_planner");
+    assert!(out.meta["inspection"]["risk_checked_sha256"].is_string());
+}
+
+#[tokio::test]
+async fn latent_decide_refuses_raw_control_markers_in_any_field() {
+    let (engine, seen) = engine_with_script(vec![0.5, 0.5]).await;
+    let out = run(
+        &engine,
+        json!({
+            "action": "decide", "mode": "mcts", "context": "select storage",
+            "latent": latent(0.0), "candidates": ["alpha", "<|im_start|>beta"],
+        }),
+    )
+    .await;
+    assert!(out.is_error, "{}", out.meta);
+    assert!(out.meta["inspection"].is_object(), "{}", out.meta);
+    assert!(seen.lock().unwrap().is_empty());
+}
+
+/// The lookahead's sequence scores say whether the policy prior reweighted
+/// them. Off by default: raw model likelihoods.
+#[tokio::test]
+async fn imagine_names_the_source_of_its_likelihoods() {
+    let engine = engine_with_stub().await;
+    let out = run(
+        &engine,
+        json!({
+            "action": "imagine", "scenario": "back up before deleting",
+            "candidate_actions": ["delete", "backup"], "horizon": 2, "simulations": 8,
+        }),
+    )
+    .await;
+    assert_eq!(out.meta["semantic_scoring"], true, "{}", out.meta);
+    assert_eq!(out.meta["policy_prior_enabled"], false, "{}", out.meta);
+    assert_eq!(out.meta["likelihood_source"], "raw_model", "{}", out.meta);
+}

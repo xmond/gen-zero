@@ -325,7 +325,7 @@ def test_memory_is_cosine_scale_invariant_and_loo_masks_self():
     memory = EpisodicManifoldMemory(16, 3, beta=12.0)
     memory.write(keys, labels, ids=list(range(20)))
     q = rng.normal(size=(4, 16))
-    np.testing.assert_allclose(memory.query(q), memory.query(3.0 * q), atol=1e-12)
+    np.testing.assert_allclose(memory.query(q), memory.query(memory.center + 3.0 * (q - memory.center)), atol=1e-12)
     # Without masking, an entry finds itself at cosine 1 and dominates its own read.
     own = memory.query(keys[:1])[0]
     loo = memory.loo_query()[0]
@@ -367,15 +367,16 @@ def test_lambda_gate_rejects_a_prior_only_memory_against_a_saturated_probe():
     n = len(labels)
     # A saturated, wrong-half probe: every row says label 0 with probability ~1.
     base = np.tile([1 - 1e-9, 1e-9], (n, 1))
-    # Identical keys: every cosine is 1, so the LOO read is exactly the LOO class prior.
+    # A prior-only retriever is represented by its probability rows; identical
+    # centered keys are invalid and must never be installed in memory.
     memory = EpisodicManifoldMemory(4, 2)
-    memory.write(np.ones((n, 4)), labels, ids=list(range(n)))
+    with pytest.raises(ValueError, match="zero"):
+        memory.write(np.ones((n, 4)), labels, ids=list(range(n)))
     onehot = np.eye(2)[labels]
     loo_prior = (onehot.sum(axis=0)[None, :] - onehot) / (n - 1)
-    np.testing.assert_allclose(memory.loo_query(), loo_prior, atol=1e-12)
-    lam_plain, _ = select_memory_lambda(base, memory.loo_query(), labels)
+    lam_plain, _ = select_memory_lambda(base, loo_prior, labels)
     assert lam_plain == 0.0
-    lam_null, report = select_memory_lambda(base, memory.loo_query(), labels, null_probs=loo_prior)
+    lam_null, report = select_memory_lambda(base, loo_prior, labels, null_probs=loo_prior)
     assert lam_null == 0.0, report
 
 
@@ -449,20 +450,50 @@ def test_memory_loo_keeps_all_anchor_rows_after_fifo_eviction(n, capacity):
         np.testing.assert_allclose(actual[0], ref.query(hidden[0])[0], atol=1e-6)
 
 
-def test_memory_loo_excludes_every_slot_with_the_same_id():
+def test_memory_rejects_duplicate_ids():
     hidden = np.array([[1., 0.], [0., 1.], [2., 0.], [-1., 2.]])
     memory = EpisodicManifoldMemory(2, 2, beta=3)
-    memory.write(hidden, [0, 1, 0, 1], ids=[7, 8, 7, 9])
-    result = memory.loo_query()
-    assert result[0, 1] == pytest.approx(1.0)
-    assert result[2, 1] == pytest.approx(1.0)
+    with pytest.raises(ValueError, match="duplicate"):
+        memory.write(hidden, [0, 1, 0, 1], ids=[7, 8, 7, 9])
+    memory.write(hidden[:3], [0, 1, 0], ids=[7, 8, 9])
+    with pytest.raises(ValueError, match="duplicate"):
+        memory.write(hidden[3:], [1], ids=[7])
+    with pytest.raises(ValueError, match="duplicate"):
+        memory.loo_query(hidden[:2], ids=[7, 7])
+
+
+def test_fifo_center_and_loo_match_refit():
+    rng = np.random.default_rng(18)
+    hidden = rng.normal(size=(8, 4))
+    labels = np.arange(8) % 2
+    memory = EpisodicManifoldMemory(4, 2, capacity=4, beta=3, center=hidden.mean(axis=0))
+    memory.write(hidden, labels, ids=list(range(8)))
+    np.testing.assert_allclose(memory.center, hidden[4:].mean(axis=0), atol=1e-12)
+    loo = memory.loo_query(hidden, ids=list(range(8)))
+    np.testing.assert_allclose(loo[0], memory.query(hidden[0])[0], atol=1e-12)
+    for i in range(4, 8):
+        kept = [j for j in range(4, 8) if j != i]
+        ref = EpisodicManifoldMemory(4, 2, capacity=4, beta=3, center=hidden[kept].mean(axis=0))
+        ref.write(hidden[kept], labels[kept], ids=kept)
+        np.testing.assert_allclose(loo[i], ref.query(hidden[i])[0], atol=1e-12)
+        np.testing.assert_allclose(0.4 * loo[i] + 0.6 * np.array([0.2, 0.8]),
+                                   0.4 * ref.query(hidden[i])[0] + 0.6 * np.array([0.2, 0.8]), atol=1e-12)
+
+
+def test_centered_memory_rejects_degenerate_keys():
+    with pytest.raises(ValueError, match="capacity"):
+        EpisodicManifoldMemory(2, 2, capacity=2)
+    memory = EpisodicManifoldMemory(2, 2, capacity=3, center=np.zeros(2))
+    with pytest.raises(ValueError, match="zero"):
+        memory.write(np.ones((3, 2)), [0, 1, 0], ids=[0, 1, 2])
 
 
 def test_fit_memories_rejects_invalid_capacity_before_forward(model, monkeypatch):
     runner = MctsLayerwiseQwenRunner(model, VerbalizerProbe(model, LABEL_TOKENS), checkpoints=[1])
     monkeypatch.setattr(runner, "_run", lambda *args: pytest.fail("forward must not run"))
-    with pytest.raises(ValueError, match="capacity"):
-        runner.fit_memories([torch.tensor([[1]]), torch.tensor([[2]])], [0, 1], [1], capacity=0)
+    for capacity in (0, 1, 2):
+        with pytest.raises(ValueError, match="capacity"):
+            runner.fit_memories([torch.tensor([[1]])] * 3, [0, 1, 0], [1], capacity=capacity)
 
 
 @pytest.mark.parametrize("weights", [
@@ -933,6 +964,43 @@ def test_fit_layer_weights_normalizes_and_keeps_top_k(model):
     assert 1 <= sum(weight > 0 for weight in runner.layer_weights.values()) <= 2
     decision = runner.predict(anchors[0])
     assert decision.active_hook_weights == runner.layer_weights
+    for arm in ("multihook_weighted_full28_no_early_exit",
+                "multihook_equal_weight_full28"):
+        result = runner.ablation_predict(arm, anchors[0])
+        assert result.layers_executed == NUM_LAYERS
+        assert not result.early_exit
+    base = runner.ablation_predict("multihook_no_mcts_margin_early_exit", anchors[0])
+    assert base.active_hook_weights == runner.base_utility_weights
+
+
+def test_positive_lambda_fifo_fit_keeps_all_anchor_rows(model, monkeypatch):
+    rng = np.random.default_rng(41)
+    labels = np.arange(80) % 2
+    hidden = rng.normal(scale=0.05, size=(80, model.config.hidden_size)).astype(np.float32)
+    hidden[:, 0] = np.where(labels == 0, -3.0, 3.0)
+    hidden[:, 1:3] = rng.normal(size=(80, 2))
+    runner = MctsLayerwiseQwenRunner(model, VerbalizerProbe(model, LABEL_TOKENS), [1, 2])
+
+    class WeakProbe:
+        num_labels = 2
+
+        def __call__(self, rows):
+            return rows[:, 1:3].detach().cpu().numpy()
+
+    runner.probe = WeakProbe()
+
+    def capture(hook, ids):
+        row = hidden[int(ids.item())]
+        for layer in hook.capture_layers:
+            hook.captured[layer] = torch.tensor(row[None, :])
+        return None
+
+    monkeypatch.setattr(runner, "_run", capture)
+    anchors = [torch.tensor([[i]]) for i in range(80)]
+    report = runner.fit_memories(anchors, labels, [1, 2], capacity=20,
+                                 fit_mcts_layer_weights=True)
+    assert any(row["lambda"] > 0 for row in report.values())
+    assert sum(runner.layer_weights.values()) == pytest.approx(1.0)
 
 
 def test_fit_ffn_pruning_changes_predict_compute(model):

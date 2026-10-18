@@ -409,8 +409,8 @@ class EpisodicManifoldMemory:
         projection: np.ndarray | None = None,
         center: np.ndarray | None = None,
     ) -> None:
-        if dim < 1 or num_labels < 1 or capacity < 1:
-            raise ValueError("dim, num_labels and capacity must be >= 1")
+        if dim < 1 or num_labels < 1 or capacity < 3:
+            raise ValueError("dim and num_labels must be >= 1; capacity must be >= 3")
         if not np.isfinite(beta) or beta <= 0:
             raise ValueError("beta must be finite and > 0")
         self.dim, self.num_labels, self.capacity, self.beta = dim, num_labels, capacity, float(beta)
@@ -448,8 +448,11 @@ class EpisodicManifoldMemory:
         return z / norm
 
     def write(self, hidden, targets, ids: Sequence[Any]) -> None:
-        keys = self.encode(hidden)
         raw = np.atleast_2d(np.asarray(hidden, dtype=np.float64))
+        if raw.shape[1] != self.dim or not np.all(np.isfinite(raw)):
+            raise ValueError("hidden states must be finite with the memory dimension")
+        if len(set(ids)) != len(ids) or any(i in self._ids for i in ids):
+            raise ValueError("duplicate memory ID")
         t = np.asarray(targets)
         if t.ndim == 1:
             if t.dtype.kind not in "iu" or np.any((t < 0) | (t >= self.num_labels)):
@@ -465,12 +468,27 @@ class EpisodicManifoldMemory:
             if not np.all((row_sums > 0) & np.isfinite(row_sums)):
                 raise ValueError("every target distribution needs a positive mass")
             values = values / row_sums
-        if not len(keys) == len(values) == len(ids):
+        if not len(raw) == len(values) == len(ids):
             raise ValueError("hidden, targets and ids must have the same length")
-        self._keys = np.vstack([self._keys, keys])[-self.capacity:]
-        self._raw_keys = np.vstack([self._raw_keys, raw])[-self.capacity:]
-        self._values = np.vstack([self._values, values])[-self.capacity:]
-        self._ids = (self._ids + list(ids))[-self.capacity:]
+        new_raw = np.vstack([self._raw_keys, raw])[-self.capacity:]
+        new_values = np.vstack([self._values, values])[-self.capacity:]
+        new_ids = (self._ids + list(ids))[-self.capacity:]
+        old_center = self.center
+        if len(new_raw):
+            self.center = new_raw.mean(axis=0)
+        try:
+            if len(new_raw) == 1:
+                original = new_raw if self.projection is None else new_raw @ self.projection
+                norm = np.linalg.norm(original)
+                if norm == 0 or not np.isfinite(norm):
+                    raise ValueError("cannot key a zero or overflowing state")
+                new_keys = np.zeros((1, self._keys.shape[1]))
+            else:
+                new_keys = self.encode(new_raw)
+        except ValueError:
+            self.center = old_center
+            raise
+        self._raw_keys, self._values, self._ids, self._keys = new_raw, new_values, new_ids, new_keys
 
     def query(self, hidden, exclude_ids: Sequence[Any] | None = None) -> np.ndarray:
         if exclude_ids is not None and self.center is not None:
@@ -495,9 +513,9 @@ class EpisodicManifoldMemory:
                     if self.projection is not None:
                         z = z @ self.projection
                     norms = np.linalg.norm(z, axis=1, keepdims=True)
-                    if not np.all(np.isfinite(norms)):
-                        raise ValueError("cannot key an overflowing state")
-                    return z / np.where(norms == 0, 1.0, norms)
+                    if np.any(norms == 0) or not np.all(np.isfinite(norms)):
+                        raise ValueError("cannot key a zero or overflowing state")
+                    return z / norms
                 logits = self.beta * (normalized(q[None, :]) @ normalized(remaining).T)
                 result[i] = _softmax(logits, axis=1)[0] @ self._values[keep]
             return result
@@ -535,6 +553,8 @@ class EpisodicManifoldMemory:
             raise ValueError("hidden states must be finite with the memory dimension")
         if len(raw) != len(query_ids):
             raise ValueError("one ID per query row")
+        if len(set(query_ids)) != len(query_ids):
+            raise ValueError("duplicate query ID")
         if not len(self):
             raise ValueError("memory is empty")
         return self.query(raw, exclude_ids=query_ids)
@@ -806,6 +826,7 @@ class MctsLayerwiseQwenRunner:
         self.labels = [str(i) for i in range(k)]
         self.etf = simplex_etf(k)
         self.layer_weights = self._normalize_layer_weights(layer_weights or {})
+        self.base_utility_weights: dict[int, float] = {}
         self.ffn_channel_masks = dict(ffn_channel_masks or {})
         self._sparse_hook = QwenSparseFfnHook(self.model, self.ffn_channel_masks)
         self._sparse_masks_snapshot = {i: np.asarray(v).copy() for i, v in self.ffn_channel_masks.items()}
@@ -822,7 +843,8 @@ class MctsLayerwiseQwenRunner:
         return {i: float(v / total) for i, v in weights.items()}
 
     def fit_layer_weights(self, z_by_layer: Mapping[int, np.ndarray], labels: Sequence[int],
-                          top_k_hooks: int = 4, reward_scale: float = 10.0) -> dict[int, float]:
+                          top_k_hooks: int = 4, reward_scale: float = 10.0,
+                          memory_loo_by_layer: Mapping[int, np.ndarray] | None = None) -> dict[int, float]:
         layers = sorted(z_by_layer)
         y = np.asarray(labels)
         if not layers or top_k_hooks < 1 or not np.isfinite(reward_scale) or reward_scale <= 0:
@@ -838,11 +860,18 @@ class MctsLayerwiseQwenRunner:
             p = _softmax((z - _loo_mean(z)) / _loo_std(z), axis=1)
             entry = self.memories.get(layer)
             if entry is not None and entry[1] > 0:
-                p = (1 - entry[1]) * p + entry[1] * entry[0].loo_query()
+                if memory_loo_by_layer is None or layer not in memory_loo_by_layer:
+                    raise ValueError("anchor-aligned memory LOO probabilities required")
+                memory_loo = np.asarray(memory_loo_by_layer[layer])
+                if memory_loo.shape != p.shape:
+                    raise ValueError("memory LOO probabilities must match anchor rows")
+                p = (1 - entry[1]) * p + entry[1] * memory_loo
             acc = np.mean(np.argmax(p, axis=1) == y)
             ll = np.mean(np.log(np.clip(p[np.arange(len(y)), y], 1e-12, None)))
             utility.append(float(acc + 0.1 * ll))
         reward = reward_scale * (np.asarray(utility) - np.mean(utility))
+        base = _softmax(reward)
+        self.base_utility_weights = {layer: float(base[j]) for j, layer in enumerate(layers)}
         planner = LatentMctsPlanner(num_simulations=max(64, self.planner.num_simulations),
                                     c_puct=self.planner.c_puct, temperature=0.25, max_depth=2)
         _, policy, _ = planner.plan(reward, [str(i) for i in layers], simplex_etf(len(layers)))
@@ -922,10 +951,10 @@ class MctsLayerwiseQwenRunner:
         anchor is not standardised with its own logits.
         """
         layers = sorted({int(layer) for layer in layers})
-        if capacity <= 0:
-            raise ValueError("capacity must be positive")
-        if len(anchors) != len(labels) or len(anchors) < 2:
-            raise ValueError("need at least 2 anchors, one label each")
+        if capacity < 3:
+            raise ValueError("capacity must be >= 3")
+        if len(anchors) != len(labels) or len(anchors) < 3:
+            raise ValueError("need at least 3 anchors, one label each")
         states: dict[int, list[np.ndarray]] = {layer: [] for layer in layers}
         for ids in anchors:
             hook = QwenInterLayerHook(self.model, capture_layers=layers)
@@ -935,6 +964,7 @@ class MctsLayerwiseQwenRunner:
                 states[layer].append(hook.captured[layer].cpu().numpy())
         reports = {}
         z_by_layer = {}
+        memory_loo_by_layer = {}
         torch = _torch()
         y = np.asarray(labels)
         onehot = np.eye(self.probe.num_labels)[y]
@@ -948,7 +978,8 @@ class MctsLayerwiseQwenRunner:
             z_by_layer[layer] = z
             mean, std = _anchor_logit_stats(z)
             base = _softmax((z - _loo_mean(z)) / _loo_std(z), axis=1)
-            lam, report = select_memory_lambda(base, memory.loo_query(h, ids=list(range(len(labels)))), labels,
+            memory_loo_by_layer[layer] = memory.loo_query(h, ids=list(range(len(labels))))
+            lam, report = select_memory_lambda(base, memory_loo_by_layer[layer], labels,
                                                null_probs=loo_prior)
             self.memories[layer] = (memory, lam)
             self.probe_stats[layer] = self._check_probe_stats(layer, mean, std, self.probe.num_labels)
@@ -956,10 +987,32 @@ class MctsLayerwiseQwenRunner:
             report["probe_logit_std"] = std[0].tolist()
             reports[layer] = report
         if fit_mcts_layer_weights:
-            weights = self.fit_layer_weights(z_by_layer, labels, top_k_hooks=top_k_hooks)
+            weights = self.fit_layer_weights(z_by_layer, labels, top_k_hooks=top_k_hooks,
+                                             memory_loo_by_layer=memory_loo_by_layer)
             for layer in layers:
                 reports[layer]["mcts_layer_weight"] = weights[layer]
         return reports
+
+    def ablation_predict(self, arm: str, input_ids) -> LayerExitDecision:
+        """Evaluate a calibrated component ablation with the same exit rule."""
+        old_weights, old_min_exit = self.layer_weights, self.min_exit_layer
+        try:
+            if arm == "multihook_weighted_full28_no_early_exit":
+                self.min_exit_layer = self.num_layers
+            elif arm == "multihook_no_mcts_margin_early_exit":
+                if not self.base_utility_weights:
+                    raise ValueError("base utility weights require a calibrated fit")
+                self.layer_weights = self.base_utility_weights
+            elif arm == "multihook_equal_weight_full28":
+                if not self.probe_stats:
+                    raise ValueError("equal-weight ablation requires a calibrated fit")
+                self.layer_weights = {layer: 1.0 / len(self.probe_stats) for layer in self.probe_stats}
+                self.min_exit_layer = self.num_layers
+            else:
+                raise ValueError(f"unknown ablation arm: {arm}")
+            return self.predict(input_ids)
+        finally:
+            self.layer_weights, self.min_exit_layer = old_weights, old_min_exit
 
     def contraction(self, drift: float, prev_drift: float | None) -> float:
         """Empirical drift ratio, floored at ``gamma`` and capped at 0.95."""

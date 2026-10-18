@@ -670,9 +670,9 @@ impl EpisodicManifoldMemory {
         beta: f64,
         center: Option<Vec<f64>>,
     ) -> Result<Self, ModelError> {
-        if dim == 0 || num_labels == 0 || capacity == 0 {
+        if dim == 0 || num_labels == 0 || capacity < 3 {
             return Err(ModelError::QwenInput(
-                "dim, num_labels and capacity must be >= 1".into(),
+                "dim and num_labels must be >= 1; capacity must be >= 3".into(),
             ));
         }
         if !(beta.is_finite() && beta > 0.0) {
@@ -751,23 +751,47 @@ impl EpisodicManifoldMemory {
                 "label index {bad} out of range"
             )));
         }
-        let keys = hidden
-            .iter()
-            .map(|h| self.encode(h))
-            .collect::<Result<Vec<_>, _>>()?;
-        for (((key, h), &y), &id) in keys.into_iter().zip(hidden).zip(labels).zip(ids) {
+        let mut seen: std::collections::BTreeSet<usize> = self.ids.iter().copied().collect();
+        if ids.iter().any(|id| !seen.insert(*id)) {
+            return Err(ModelError::QwenInput("duplicate memory ID".into()));
+        }
+        for h in hidden {
+            if h.len() != self.dim {
+                return Err(ModelError::QwenInput("memory state width mismatch".into()));
+            }
+            check_finite("memory state", h)?;
+        }
+        let mut raw = self.raw.clone();
+        let mut values = self.values.clone();
+        let mut retained_ids = self.ids.clone();
+        for ((h, &y), &id) in hidden.iter().zip(labels).zip(ids) {
             let mut value = vec![0.0; self.num_labels];
             value[y] = 1.0;
-            self.raw.push(h.clone());
-            self.keys.push(key);
-            self.values.push(value);
-            self.ids.push(id);
+            raw.push(h.clone());
+            values.push(value);
+            retained_ids.push(id);
         }
-        let drop = self.ids.len().saturating_sub(self.capacity);
-        self.raw.drain(..drop);
-        self.keys.drain(..drop);
-        self.values.drain(..drop);
-        self.ids.drain(..drop);
+        let drop = retained_ids.len().saturating_sub(self.capacity);
+        raw.drain(..drop);
+        values.drain(..drop);
+        retained_ids.drain(..drop);
+        let center = (!raw.is_empty()).then(|| {
+            (0..self.dim)
+                .map(|j| raw.iter().map(|h| h[j]).sum::<f64>() / raw.len() as f64)
+                .collect::<Vec<_>>()
+        });
+        let keys = if raw.len() == 1 {
+            vec![vec![0.0; self.dim]]
+        } else {
+            raw.iter()
+                .map(|h| self.encode_with(h, center.as_deref()))
+                .collect::<Result<Vec<_>, _>>()?
+        };
+        self.raw = raw;
+        self.values = values;
+        self.ids = retained_ids;
+        self.center = center;
+        self.keys = keys;
         Ok(())
     }
 
@@ -880,6 +904,10 @@ impl EpisodicManifoldMemory {
             return Err(ModelError::QwenInput(
                 "hidden and ids must have the same length".into(),
             ));
+        }
+        let unique: std::collections::BTreeSet<usize> = ids.iter().copied().collect();
+        if unique.len() != ids.len() {
+            return Err(ModelError::QwenInput("duplicate query ID".into()));
         }
         if self.is_empty() {
             return Err(ModelError::Inference("memory is empty".into()));
@@ -1579,9 +1607,9 @@ impl CalibratedConfig {
                 "mcts_margin_min must be in [0, 1)".into(),
             ));
         }
-        if self.memory_capacity < 2 {
+        if self.memory_capacity < 3 {
             return Err(ModelError::QwenInput(format!(
-                "memory_capacity must be >= 2, got {}",
+                "memory_capacity must be >= 3, got {}",
                 self.memory_capacity
             )));
         }
@@ -2587,8 +2615,8 @@ fn down_column_norms(model: &QwenModel, layer: usize) -> Result<Vec<f64>, ModelE
 /// Meaning of the per-arm speed ratio, written into the BoolQ report.
 pub const TIMING_BOUNDARY_NOTE: &str = "e2e_speedup_vs_full_28_uncalibrated is a compatibility name only; it equals capture_forward_vs_predict_timed_ratio = (sum of dense 28-layer capture forward seconds, no tokenizer) / (sum of the arm's per-row predict_timed seconds, chat template + tokenizer + runner.predict). It excludes model load, the per-fold fit and the sparse arm's pruned reload, so it is a local per-row timing ratio, not a full end-to-end speed-up.";
 
-/// Meaning of the two no-exit ablation arms, written into the BoolQ report.
-pub const ABLATION_NOTE: &str = "multihook_weighted_full28_no_early_exit = the fold's fitted runner with its MCTS hook weights, read after layer 27 with early exit disabled (InterLayerMctsRunner::full_depth_readout(states, false)); multihook_equal_weight_full28 = the same calibrated per-layer readouts averaged in logit space with weight 1/|hooks| on every hook layer (no MCTS weights, no early exit). Both reuse the dense capture pass, so their timing fields are those of full_28_uncalibrated. full_28_calibrated reads only layer 27, so mcts_multihook_dense_ffn vs multihook_weighted_full28_no_early_exit isolates the early exit and multihook_weighted_full28_no_early_exit vs multihook_equal_weight_full28 isolates the MCTS hook weights.";
+/// Meaning of the component ablation arms, written into the BoolQ report.
+pub const ABLATION_NOTE: &str = "multihook_weighted_full28_no_early_exit uses fitted MCTS weights at full depth; multihook_no_mcts_margin_early_exit uses softmax base utility weights and the identical early-exit rule; multihook_equal_weight_full28 uses equal hook weights at full depth. The full-depth arms reuse the dense capture pass.";
 
 fn predict_timed(
     runner: &InterLayerMctsRunner,
@@ -2829,6 +2857,24 @@ pub fn run_boolq_benchmark(opts: &BoolqBenchOptions) -> Result<serde_json::Value
             &groups,
             &config,
         )?;
+        let mut no_mcts_runner = runner.clone();
+        let peak = fit
+            .layers
+            .iter()
+            .map(|r| r.utility)
+            .fold(f64::NEG_INFINITY, f64::max);
+        let scores: Vec<f64> = fit
+            .layers
+            .iter()
+            .map(|r| (config.reward_scale * (r.utility - peak)).exp())
+            .collect();
+        let total: f64 = scores.iter().sum();
+        no_mcts_runner.layer_weights = fit
+            .layers
+            .iter()
+            .zip(scores)
+            .map(|(r, s)| (r.layer, s / total))
+            .collect();
         let dense_fit_s = t.elapsed().as_secs_f64();
         fit_seconds += dense_fit_s;
         let mut fold_report = serde_json::json!({
@@ -2871,6 +2917,10 @@ pub fn run_boolq_benchmark(opts: &BoolqBenchOptions) -> Result<serde_json::Value
             }
             let o = predict_timed(&runner, &dense, &tok, &rows[i].context)?;
             arms.entry("mcts_multihook_dense_ffn")
+                .or_default()
+                .insert(i, o);
+            let o = predict_timed(&no_mcts_runner, &dense, &tok, &rows[i].context)?;
+            arms.entry("multihook_no_mcts_margin_early_exit")
                 .or_default()
                 .insert(i, o);
         }
@@ -2991,6 +3041,7 @@ pub fn run_boolq_benchmark(opts: &BoolqBenchOptions) -> Result<serde_json::Value
         "full_28_calibrated",
         "mcts_multihook_dense_ffn",
         "multihook_weighted_full28_no_early_exit",
+        "multihook_no_mcts_margin_early_exit",
     ];
     let mut arm_json = serde_json::Map::new();
     for (name, outcomes) in &ordered {
@@ -3584,11 +3635,11 @@ mod tests {
         assert!((dot(&key, &key) - 1.0).abs() < 1e-12);
         let q = mem.query(&[12.0, 10.0, 0.0], None).unwrap();
         assert!(q[0] > 0.99, "{q:?}");
-        // Without centring every key points nearly the same way.
+        // A retained FIFO always uses its own center, even if none was supplied.
         let mut flat = EpisodicManifoldMemory::new(3, 2, 4, 12.0, None).unwrap();
         flat.write(&states, &labels, &[0, 1, 2, 3]).unwrap();
         let fq = flat.query(&[12.0, 10.0, 0.0], None).unwrap();
-        assert!(fq[0] < 0.6, "{fq:?}");
+        assert!((fq[0] - q[0]).abs() < 1e-12, "{fq:?}");
         let loo = mem.loo_query().unwrap();
         for (i, row) in loo.iter().enumerate() {
             assert!((row.iter().sum::<f64>() - 1.0).abs() < 1e-12);
@@ -3597,7 +3648,7 @@ mod tests {
         // The ring evicts the oldest entry; zero keys and an emptied LOO fail.
         mem.write(&[vec![9.0, 10.0, 1.0]], &[1], &[4]).unwrap();
         assert_eq!(mem.len(), 4);
-        assert!(mem.encode(&[10.0, 10.0, 0.0]).is_err());
+        assert!(mem.encode(mem.center.as_ref().unwrap()).is_err());
         let mut one = EpisodicManifoldMemory::new(3, 2, 4, 12.0, None).unwrap();
         one.write(&[vec![1.0, 0.0, 0.0]], &[0], &[0]).unwrap();
         assert!(one.loo_query().is_err());
@@ -3626,13 +3677,9 @@ mod tests {
                     .collect()
             })
             .collect();
-        let full_mean: Vec<f64> = (0..h)
-            .map(|j| states.iter().map(|r| r[j]).sum::<f64>() / n as f64)
-            .collect();
-        let mut mem = EpisodicManifoldMemory::new(h, 3, 64, 4.0, Some(full_mean.clone())).unwrap();
+        let mut mem = EpisodicManifoldMemory::new(h, 3, 64, 4.0, None).unwrap();
         mem.write(&states, &labels, &ids).unwrap();
         let loo = mem.loo_query().unwrap();
-        let mut worst_stale = 0.0f64;
         for i in 0..n {
             let keep: Vec<usize> = (0..n).filter(|&j| j != i).collect();
             let kept: Vec<Vec<f64>> = keep.iter().map(|&j| states[j].clone()).collect();
@@ -3651,16 +3698,7 @@ mod tests {
                     loo[i]
                 );
             }
-            // The full-mean read the old code returned differs, so this
-            // test fails if loo_query keeps the centre that holds h_i.
-            let mut stale =
-                EpisodicManifoldMemory::new(h, 3, 64, 4.0, Some(full_mean.clone())).unwrap();
-            stale.write(&kept, &kept_labels, &kept_ids).unwrap();
-            let s = stale.query(&states[i], None).unwrap();
-            let gap = s.iter().zip(&direct).map(|(a, b)| (a - b).abs());
-            worst_stale = gap.fold(worst_stale, f64::max);
         }
-        assert!(worst_stale > 1e-3, "fixture too weak: {worst_stale}");
     }
 
     /// Gate check in H = 1536 with n = 80: random keys carry no label
@@ -4215,7 +4253,7 @@ mod tests {
     /// and in the benchmark (whose model path does not exist here).
     #[test]
     fn bad_memory_capacity_fails_before_any_forward() {
-        for cap in [0, 1] {
+        for cap in [0, 1, 2] {
             let config = CalibratedConfig {
                 memory_capacity: cap,
                 ..Default::default()
@@ -4259,6 +4297,52 @@ mod tests {
             .unwrap_err()
             .to_string();
         assert!(err.contains("memory_capacity"), "{err}");
+    }
+
+    #[test]
+    fn fifo_center_loo_and_duplicate_ids_regression() {
+        let states: Vec<Vec<f64>> = (0..8)
+            .map(|i| vec![i as f64, (i * i % 7) as f64, (i * 3 % 5) as f64])
+            .collect();
+        let labels: Vec<usize> = (0..8).map(|i| i % 2).collect();
+        let ids: Vec<usize> = (0..8).collect();
+        let mut memory = EpisodicManifoldMemory::new(3, 2, 4, 3.0, Some(vec![0.0; 3])).unwrap();
+        memory.write(&states, &labels, &ids).unwrap();
+        let center = memory.center.as_ref().unwrap().clone();
+        for j in 0..3 {
+            let expected = states[4..].iter().map(|h| h[j]).sum::<f64>() / 4.0;
+            assert!((center[j] - expected).abs() < 1e-12);
+        }
+        let loo = memory.loo_query_for_all_anchors(&states, &ids).unwrap();
+        let deployed = memory.query(&states[0], None).unwrap();
+        for c in 0..2 {
+            assert!((loo[0][c] - deployed[c]).abs() < 1e-12);
+        }
+        for i in 4..8 {
+            let kept: Vec<usize> = (4..8).filter(|j| *j != i).collect();
+            let raw: Vec<Vec<f64>> = kept.iter().map(|&j| states[j].clone()).collect();
+            let ys: Vec<usize> = kept.iter().map(|&j| labels[j]).collect();
+            let mut refit = EpisodicManifoldMemory::new(3, 2, 4, 3.0, Some(vec![0.0; 3])).unwrap();
+            refit.write(&raw, &ys, &kept).unwrap();
+            let expected = refit.query(&states[i], None).unwrap();
+            for c in 0..2 {
+                assert!((loo[i][c] - expected[c]).abs() < 1e-12);
+                assert!(
+                    (0.4 * loo[i][c] + 0.6 * 0.5 - (0.4 * expected[c] + 0.6 * 0.5)).abs() < 1e-12
+                );
+            }
+        }
+        assert!(memory.write(&[states[0].clone()], &[0], &[4]).is_err());
+        assert!(memory.write(&states[..2], &labels[..2], &[9, 9]).is_err());
+        assert!(memory
+            .loo_query_for_all_anchors(&states[..2], &[0, 0])
+            .is_err());
+        assert!(memory.query(&center, None).is_err());
+        let mut same = EpisodicManifoldMemory::new(3, 2, 3, 3.0, Some(vec![0.0; 3])).unwrap();
+        assert!(same
+            .write(&vec![vec![1.0; 3]; 3], &[0, 1, 0], &[0, 1, 2])
+            .is_err());
+        assert!(EpisodicManifoldMemory::new(3, 2, 2, 3.0, None).is_err());
     }
 
     /// WebGPT round 1, section 4: on 80 balanced rows the leave-one-out

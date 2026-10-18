@@ -20,6 +20,11 @@ per arm, and everything it fits sees only that fold's training rows:
 * ``mcts_multihook_sparse_ffn[_<layers>_k<ratio>]``: ``fit_ffn_pruning(train, layers,
   keep_ratio)`` (``QwenSparseFfnHook`` physical slices), then the same ``fit_memories``
   on the sliced model, then ``predict``.
+* Component ablations, each read from the fold's fitted dense runner through
+  ``MctsLayerwiseQwenRunner.ablation_predict`` (see ``ABLATION_COMPONENT_MATRIX``):
+  ``multihook_weighted_full28_no_early_exit`` (MCTS weights, early exit off),
+  ``multihook_no_mcts_margin_early_exit`` (softmax base-utility weights, same early-exit rule)
+  and ``multihook_equal_weight_full28`` (equal hook weights, early exit off).
 
 The headline sparse configuration is fixed by ``--headline-ffn`` before any run (default
 layers 22..27, keep ratio 0.75). Other ``--ffn-grid`` configurations are evaluated on the
@@ -66,6 +71,34 @@ PROMPT_SUFFIX = "\nAnswer with yes or no based strictly on the passage."
 NUM_LAYERS = 28
 HIDDEN = 1536
 INTERMEDIATE = 8960
+FULL_DEPTH_ABLATIONS = ("multihook_weighted_full28_no_early_exit", "multihook_equal_weight_full28")
+ABLATION_COMPONENT_MATRIX = {
+    "mcts_multihook_dense_ffn": {
+        "layer_weights": "mcts_fitted", "early_exit": True,
+        "removed_components": [],
+        "description": "reference arm: MCTS-refined hook weights plus the calibrated early-exit rule"},
+    "multihook_weighted_full28_no_early_exit": {
+        "layer_weights": "mcts_fitted", "early_exit": False,
+        "removed_components": ["dynamic_early_exit"],
+        "description": "same fitted MCTS hook weights, min_exit_layer set past the last layer so all "
+                       "28 layers run; vs the reference it isolates dynamic early exit"},
+    "multihook_no_mcts_margin_early_exit": {
+        "layer_weights": "base_utility_softmax", "early_exit": True,
+        "removed_components": ["mcts_weight_refinement"],
+        "description": "softmax of the per-layer anchor utilities (no MCTS search), identical "
+                       "early-exit rule and min_exit_layer; vs the reference it isolates MCTS "
+                       "weight refinement"},
+    "multihook_equal_weight_full28": {
+        "layer_weights": "equal", "early_exit": False,
+        "removed_components": ["mcts_weight_refinement", "anchor_utility_weighting",
+                               "dynamic_early_exit"],
+        "description": "weight 1/|hooks| on every calibrated hook layer, all 28 layers; vs "
+                       "multihook_weighted_full28_no_early_exit it isolates the fitted weights"},
+}
+ABLATION_TIMING_NOTE = ("Each ablation arm here is a real timed runner.ablation_predict call per row "
+                        "(its own forward). The Rust suite's two full-depth ablation arms instead "
+                        "reuse the dense capture pass, so their Rust timing fields copy "
+                        "full_28_uncalibrated; compare ablation timing only within one suite.")
 
 
 def _sha256(path) -> str:
@@ -74,6 +107,20 @@ def _sha256(path) -> str:
         for chunk in iter(lambda: f.read(1 << 20), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _sanitize(obj):
+    """Replace the home-directory prefix in every string so reports carry no local user path."""
+    home = str(Path.home()).rstrip("/\\")
+    if isinstance(obj, str):
+        for sep in ("/", "\\"):
+            obj = obj.replace(home + sep, "~" + sep)
+        return obj
+    if isinstance(obj, dict):
+        return {_sanitize(k): _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize(v) for v in obj]
+    return obj
 
 
 def _loadavg():
@@ -144,14 +191,14 @@ def _mcnemar_exact(wins: int, losses: int) -> float:
     return min(1.0, 2.0 * tail / (2 ** discordant))
 
 
-def _predict_timed(runner, tok, row, device):
-    """End-to-end and inference-only seconds for one row through ``runner.predict``."""
+def _predict_timed(predict, tok, row, device):
+    """End-to-end and inference-only seconds for one row through ``predict(input_ids)``."""
     _sync(device)
     t0 = time.perf_counter()
     ids = _encode(tok, row, device)
     _sync(device)
     t1 = time.perf_counter()
-    decision = runner.predict(ids)
+    decision = predict(ids)
     _sync(device)
     t2 = time.perf_counter()
     if not np.all(np.isfinite(decision.probs)):
@@ -351,8 +398,9 @@ def main(argv=None) -> int:
         _plain_forward_timed(model, tok, rows[i], device)
         make_runner(min_exit=total - 1).predict(anchor_ids[i])
 
+    ablation_names = [n for n in ABLATION_COMPONENT_MATRIX if n != "mcts_multihook_dense_ffn"]
     arm_names = ["full_28_uncalibrated", "full_28_calibrated", "mcts_multihook_dense_ffn",
-                 *[_ffn_name(s) for s in grid]]
+                 *ablation_names, *[_ffn_name(s) for s in grid]]
     decisions = {name: {} for name in arm_names}
     e2e = {name: {} for name in arm_names}
     infer = {name: {} for name in arm_names}
@@ -373,18 +421,23 @@ def main(argv=None) -> int:
                                      fit_mcts_layer_weights=True, top_k_hooks=args.top_k_hooks)
         fit_s = time.perf_counter() - t0
         fit_seconds += fit_s
+        if not dense.base_utility_weights or dense.min_exit_layer != args.min_exit_layer:
+            raise RuntimeError("dense fit lacks base utility weights or changed min_exit_layer")
         fold_info["arms"]["mcts_multihook_dense_ffn"] = {
             "fit_seconds": fit_s,
             "layer_weights": {str(k): v for k, v in dense.layer_weights.items()},
+            "base_utility_weights": {str(k): v for k, v in dense.base_utility_weights.items()},
             "memory_lambdas": {str(k): dense.memories[k][1] for k in hook_layers},
             "probe_logit_mean": {str(k): reports[k]["probe_logit_mean"] for k in hook_layers},
             "probe_logit_std": {str(k): reports[k]["probe_logit_std"] for k in hook_layers}}
         runners = {
-            "full_28_uncalibrated": make_runner(min_exit=total - 1),
+            "full_28_uncalibrated": make_runner(min_exit=total - 1).predict,
             "full_28_calibrated": make_runner(min_exit=total - 1, memories=dense.memories,
-                                              probe_stats=dense.probe_stats),
-            "mcts_multihook_dense_ffn": dense,
+                                              probe_stats=dense.probe_stats).predict,
+            "mcts_multihook_dense_ffn": dense.predict,
         }
+        for name in ablation_names:
+            runners[name] = lambda ids, arm=name: dense.ablation_predict(arm, ids)
         for spec in grid:
             name = _ffn_name(spec)
             ffn_layers, keep = _parse_ffn(spec)
@@ -395,7 +448,7 @@ def main(argv=None) -> int:
                                 fit_mcts_layer_weights=True, top_k_hooks=args.top_k_hooks)
             fit_s = time.perf_counter() - t0
             fit_seconds += fit_s
-            runners[name] = sparse
+            runners[name] = sparse.predict
             fold_info["arms"][name] = {
                 "fit_seconds": fit_s,
                 "kept_channels": {str(k): int(len(v)) for k, v in masks.items()},
@@ -411,14 +464,19 @@ def main(argv=None) -> int:
     evaluated = sorted(decisions["full_28_uncalibrated"])
     y_eval = [labels[i] for i in evaluated]
     ordered = {name: [decisions[name][i] for i in evaluated] for name in arm_names}
-    refs = {"full_28_uncalibrated": ordered["full_28_uncalibrated"],
-            "full_28_calibrated": ordered["full_28_calibrated"],
-            "mcts_multihook_dense_ffn": ordered["mcts_multihook_dense_ffn"]}
+    refs = {name: ordered[name] for name in (
+        "full_28_uncalibrated", "full_28_calibrated", "mcts_multihook_dense_ffn",
+        "multihook_weighted_full28_no_early_exit", "multihook_no_mcts_margin_early_exit")}
     arms = {}
     for name in arm_names:
         arms[name] = _summary(ordered[name], y_eval, [e2e[name][i] for i in evaluated],
                               [infer[name][i] for i in evaluated],
                               {k: v for k, v in refs.items() if k != name})
+    for name in FULL_DEPTH_ABLATIONS:
+        if arms[name]["early_exits"] or any(n != NUM_LAYERS for n in arms[name]["layers_executed"]):
+            raise RuntimeError(f"{name} must run all {NUM_LAYERS} layers with no early exit")
+    for name in ablation_names:
+        arms[name]["removed_components"] = ABLATION_COMPONENT_MATRIX[name]["removed_components"]
     headline_name = _ffn_name(headline)
     arms["mcts_multihook_sparse_ffn"] = dict(arms[headline_name], headline_of=headline_name)
     base_e2e = arms["full_28_uncalibrated"]["e2e_seconds_total"]
@@ -459,6 +517,8 @@ def main(argv=None) -> int:
         "min_exit_layer": args.min_exit_layer, "tau": args.tau,
         "mcts_margin_min": args.mcts_margin_min, "top_k_hooks": args.top_k_hooks,
         "headline_ffn": headline, "ffn_grid": grid,
+        "ablation_component_matrix": ABLATION_COMPONENT_MATRIX,
+        "ablation_timing_note": ABLATION_TIMING_NOTE,
         "ffn_grid_note": "headline fixed before the run; other grid arms evaluated on the same rows",
         "dense28_ffn_channels_per_token": NUM_LAYERS * INTERMEDIATE,
         "dense28_ffn_macs_per_token": 3 * HIDDEN * INTERMEDIATE * NUM_LAYERS,
@@ -481,6 +541,7 @@ def main(argv=None) -> int:
         "nvidia_smi_end": _nvidia_smi() if device.type == "cuda" else None,
     }
     report["total_wall_seconds"] = time.perf_counter() - wall_start
+    report = _sanitize(report)
     Path(args.out).write_text(json.dumps(report, indent=2), encoding="utf-8")
     brief = {k: {kk: v[kk] for kk in ("correct", "n", "mean_layers_executed",
                                       "ffn_mac_reduction_vs_dense28",

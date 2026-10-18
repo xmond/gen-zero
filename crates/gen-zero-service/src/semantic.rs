@@ -55,7 +55,7 @@ fn parse_causal_prior_env(raw: &str) -> Result<bool, BridgeError> {
 
 /// Whether [`CAUSAL_PRIOR_ENV`] enables the prior. An unknown value is an
 /// error, not a silent default.
-fn causal_prior_enabled() -> Result<bool, BridgeError> {
+pub(crate) fn causal_prior_enabled() -> Result<bool, BridgeError> {
     match std::env::var(CAUSAL_PRIOR_ENV) {
         Err(std::env::VarError::NotPresent) => Ok(false),
         Err(e) => Err(BridgeError::Native(format!("{CAUSAL_PRIOR_ENV}: {e}"))),
@@ -140,13 +140,17 @@ fn apply_causal_prior(
         candidate.policy_prior_adjustment = adjustments[index];
         candidate.probability = weights[index] / total;
     }
-    response.chosen_index = response
-        .candidates
-        .iter()
-        .enumerate()
-        .max_by(|(_, a), (_, b)| a.probability.total_cmp(&b.probability))
-        .map(|(index, _)| index)
-        .ok_or_else(|| BridgeError::InvalidResponse("no candidates".into()))?;
+    // First argmax, as `validate_ask` requires: `max_by` keeps the last of a tie.
+    if response.candidates.is_empty() {
+        return Err(BridgeError::InvalidResponse("no candidates".into()));
+    }
+    let mut best = 0;
+    for (index, candidate) in response.candidates.iter().enumerate() {
+        if candidate.probability > response.candidates[best].probability {
+            best = index;
+        }
+    }
+    response.chosen_index = best;
     response.chosen = response.candidates[response.chosen_index].name.clone();
     response.entropy = normalized_entropy(
         &response
@@ -379,6 +383,25 @@ mod causal_prior_tests {
             .as_str()
             .unwrap()
             .contains("uncalibrated"));
+    }
+
+    /// Two hazards tie after the prior. The pick stays on the first argmax,
+    /// as `validate_ask` requires; `max_by` would move it to the last.
+    #[test]
+    fn a_tie_after_the_prior_keeps_the_first_argmax() {
+        let names = ["drink it", "eat it"];
+        let mut response = raw_response(&names);
+        for candidate in &mut response.candidates {
+            candidate.probability = 0.5;
+        }
+        response.entropy = 1.0;
+        apply_policy_prior("expired milk", &mut response, true).unwrap();
+        assert_eq!(response.candidates[0].policy_prior_adjustment, -16.0);
+        assert_eq!(response.candidates[1].policy_prior_adjustment, -16.0);
+        assert_eq!(response.chosen_index, 0);
+        assert_eq!(response.chosen, "drink it");
+        let candidates: Vec<String> = names.iter().map(|n| (*n).to_string()).collect();
+        crate::bridge::validate_ask(&response, &candidates).unwrap();
     }
 
     #[test]

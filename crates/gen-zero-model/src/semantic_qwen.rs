@@ -561,12 +561,21 @@ const NEGATIONS: &[&str] = &[
     "拒绝",
 ];
 
+/// Most words a negation cue may stand before the hazard it covers.
+const NEGATION_REACH: usize = 6;
+
 /// One hazard domain: context cues, actions that realize the hazard, and
 /// actions that remedy it.
+///
+/// A hazard verb whose clause names one of `safe_objects`, and none of
+/// `spoiled_markers` outside those names, acts on something else ("drink a
+/// glass of fresh water"): that clause neither flags nor rewards.
 struct PriorDomain {
     context: &'static [&'static str],
     hazards: &'static [&'static str],
     remedies: &'static [&'static str],
+    safe_objects: &'static [&'static str],
+    spoiled_markers: &'static [&'static str],
 }
 
 const PRIOR_DOMAINS: [PriorDomain; 3] = [
@@ -626,6 +635,28 @@ const PRIOR_DOMAINS: [PriorDomain; 3] = [
             "倒掉",
             "处理掉",
         ],
+        safe_objects: &[
+            "fresh water",
+            "clean water",
+            "bottled water",
+            "tap water",
+            "plain water",
+            "water instead",
+            "fresh milk",
+            "new milk",
+            "unexpired",
+            "safe food",
+            "something else",
+            "茶",
+            "清水",
+            "白开水",
+            "矿泉水",
+            "新鲜",
+        ],
+        spoiled_markers: &[
+            "milk", "expired", "spoiled", "sour", "rotten", "moldy", "mouldy", "过期", "变质",
+            "发霉", "馊", "腐烂",
+        ],
     },
     PriorDomain {
         context: &[
@@ -670,6 +701,8 @@ const PRIOR_DOMAINS: [PriorDomain; 3] = [
             "切断电源",
             "远离",
         ],
+        safe_objects: &[],
+        spoiled_markers: &[],
     },
     PriorDomain {
         context: &[
@@ -708,6 +741,8 @@ const PRIOR_DOMAINS: [PriorDomain; 3] = [
             "撤离",
             "防护",
         ],
+        safe_objects: &[],
+        spoiled_markers: &[],
     },
 ];
 
@@ -788,8 +823,9 @@ fn negated_before(words: &[String], at: usize) -> bool {
                     return false;
                 }
             }
+            // Six words reach "do not touch it with your bare hands".
             let between = &prefix[idx + p.len()..];
-            if between.len() > 3 {
+            if between.len() > NEGATION_REACH {
                 return false;
             }
             if between.iter().any(|tok| {
@@ -825,9 +861,8 @@ fn prior_clauses(text: &str) -> Vec<String> {
     for (idx, &ch) in chars.iter().enumerate() {
         let prev = idx.checked_sub(1).map(|i| chars[i]);
         let next = chars.get(idx + 1).copied();
-        let is_sentence_dot = ch == '.'
-            && !matches!(prev, Some('/' | '.'))
-            && !matches!(next, Some('/' | '.'));
+        let is_sentence_dot =
+            ch == '.' && !matches!(prev, Some('/' | '.')) && !matches!(next, Some('/' | '.'));
         if is_sentence_dot {
             normalized.push(';');
         } else {
@@ -836,8 +871,7 @@ fn prior_clauses(text: &str) -> Vec<String> {
     }
     let mut out = Vec::new();
     for part in normalized.split([
-        ',', ';', ':', '\n', '!', '?', '&', '|', '—', '–', '，', '；', '：', '。', '！', '？',
-        '、',
+        ',', ';', ':', '\n', '!', '?', '&', '|', '—', '–', '，', '；', '：', '。', '！', '？', '、',
     ]) {
         let mut rest = part.to_lowercase();
         for joint in [" and ", " then ", " but ", "然后", "但是"] {
@@ -861,6 +895,47 @@ fn asserts_any(text: &str, phrases: &[&str]) -> bool {
             .into_iter()
             .any(|at| !negated_before(&words, at))
     })
+}
+
+/// The hazard verb at `at` acts on a safe object `domain` names, not on the
+/// hazard: a safe object is in the clause, no spoiled marker is outside the
+/// safe names, and the verb is not followed by `it` / `它`.
+fn acts_on_safe_object(domain: &PriorDomain, words: &[String], at: usize) -> bool {
+    let verb_len = domain
+        .hazards
+        .iter()
+        .map(|h| prior_words(h))
+        .filter(|h| words[at..].starts_with(h))
+        .map(|h| h.len())
+        .max()
+        .unwrap_or(1);
+    let obj_start = at + verb_len;
+    let mut covered = vec![false; words.len()];
+    let mut safe_after_verb = false;
+    for phrase in domain.safe_objects {
+        let len = prior_words(phrase).len();
+        for start in phrase_positions(words, &[*phrase]) {
+            covered[start..start + len].fill(true);
+            if start >= obj_start {
+                safe_after_verb = true;
+            }
+        }
+    }
+    if !safe_after_verb {
+        return false;
+    }
+    if words[obj_start..].iter().enumerate().any(|(i, w)| {
+        !covered[obj_start + i]
+            && matches!(
+                w.as_str(),
+                "it" | "this" | "that" | "them" | "它" | "这" | "那" | "这个" | "那个"
+            )
+    }) {
+        return false;
+    }
+    !phrase_positions(words, domain.spoiled_markers)
+        .into_iter()
+        .any(|start| !covered[start])
 }
 
 /// A root-equivalent path: `/`, `/*`, `/.`, `//` and the like.
@@ -935,7 +1010,7 @@ pub fn causal_utility_prior(context: &str, action: &str) -> f64 {
                 for at in hazard_hits {
                     if negated_before(&words, at) {
                         safe = true;
-                    } else {
+                    } else if !acts_on_safe_object(domain, &words, at) {
                         hazard = true;
                     }
                 }
@@ -2743,7 +2818,10 @@ mod backbone_identity_tests {
         let id_f64 = s.backbone_id();
         s.info.rms_norm_eps = 1e-6_f32 as f64;
         let id_f32 = s.backbone_id();
-        assert_ne!(id_f64, id_f32, "1e-6_f64 and (1e-6_f32 as f64) must have distinct backbone_ids");
+        assert_ne!(
+            id_f64, id_f32,
+            "1e-6_f64 and (1e-6_f32 as f64) must have distinct backbone_ids"
+        );
     }
 
     #[test]
@@ -2974,7 +3052,10 @@ mod risk_split_tests {
                 ("pooled_std", cal.pooled_std),
             ] {
                 let want = c["calibration_fit"][k].as_f64().unwrap();
-                assert!((actual - want).abs() < 1e-12, "{bid} {k}: {actual} vs {want}");
+                assert!(
+                    (actual - want).abs() < 1e-12,
+                    "{bid} {k}: {actual} vs {want}"
+                );
             }
         }
     }
@@ -3116,5 +3197,38 @@ mod risk_heldout_report {
         });
         std::fs::write(&out, serde_json::to_string_pretty(&doc).unwrap() + "\n").unwrap();
         println!("wrote {out}");
+    }
+}
+
+#[cfg(test)]
+mod causal_prior_binding_tests {
+    use super::causal_utility_prior as p;
+
+    /// "do not" sits four words before "bare hands": the negation still
+    /// covers it, so the avoidance is rewarded, not flagged.
+    #[test]
+    fn negation_reaches_a_hazard_four_words_later() {
+        let context = "The wire is high voltage";
+        assert_eq!(p(context, "do not touch it with your bare hands"), 8.0);
+        assert_eq!(p(context, "touch it with your bare hands"), -16.0);
+        assert_eq!(
+            p(context, "do not hesitate to touch it with your bare hands"),
+            -16.0
+        );
+    }
+
+    /// A drink verb bound to a different, safe object is not the hazard.
+    #[test]
+    fn a_safe_object_unbinds_the_spoiled_food_hazard() {
+        let context = "The milk is expired";
+        assert_eq!(p(context, "drink a glass of fresh water"), 0.0);
+        assert_eq!(p(context, "drink fresh milk"), 0.0);
+        assert_eq!(p(context, "喝一杯白开水"), 0.0);
+        assert_eq!(p(context, "drink it"), -16.0);
+        assert_eq!(p(context, "drink the expired milk"), -16.0);
+        assert_eq!(p(context, "drink it with fresh water"), -16.0);
+        assert_eq!(p(context, "drink all of it with fresh water"), -16.0);
+        assert_eq!(p(context, "drink the milk and some fresh water"), -16.0);
+        assert_eq!(p(context, "drink the sour milk with clean water"), -16.0);
     }
 }
