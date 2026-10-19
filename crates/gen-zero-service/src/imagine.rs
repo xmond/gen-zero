@@ -34,7 +34,27 @@ use std::pin::Pin;
 pub const MAX_HORIZON: usize = 8;
 pub const MAX_SIMULATIONS: usize = 128;
 
-pub type PriorFuture<'a> = Pin<Box<dyn Future<Output = Result<Vec<f64>, BridgeError>> + Send + 'a>>;
+pub type PriorFuture<'a> =
+    Pin<Box<dyn Future<Output = Result<StepPriors, BridgeError>> + Send + 'a>>;
+
+/// Next-action distribution at one node. `probability` is what the search
+/// runs on (reweighted by the policy prior when that is on);
+/// `raw_probability` is the model's own distribution, kept for reporting.
+#[derive(Clone, Debug, PartialEq)]
+pub struct StepPriors {
+    pub probability: Vec<f64>,
+    pub raw_probability: Vec<f64>,
+}
+
+/// An oracle without a policy prior: the raw distribution is the same one.
+impl From<Vec<f64>> for StepPriors {
+    fn from(probability: Vec<f64>) -> Self {
+        Self {
+            raw_probability: probability.clone(),
+            probability,
+        }
+    }
+}
 
 /// Source of next-action probabilities for a history of action indices.
 pub trait PriorOracle: Sync {
@@ -67,17 +87,21 @@ impl PriorOracle for SemanticOracle<'_> {
                 })
                 .await?;
             // The backend validated that every candidate is present exactly once.
-            Ok(self
+            let (probability, raw_probability) = self
                 .candidates
                 .iter()
                 .map(|c| {
                     resp.candidates
                         .iter()
                         .find(|s| &s.name == c)
-                        .map(|s| s.probability)
-                        .unwrap_or(0.0)
+                        .map(|s| (s.probability, s.raw_probability.unwrap_or(s.probability)))
+                        .unwrap_or((0.0, 0.0))
                 })
-                .collect())
+                .unzip();
+            Ok(StepPriors {
+                probability,
+                raw_probability,
+            })
         })
     }
 }
@@ -152,7 +176,10 @@ fn dirichlet(rng: &mut StdRng, alpha: f64, k: usize) -> Vec<f64> {
 #[derive(Clone, Debug)]
 pub struct LookaheadStep {
     pub action: usize,
+    /// The probability the search used (policy-prior-reweighted when on).
     pub probability: f64,
+    /// The model's own probability of the same step.
+    pub raw_probability: f64,
     pub entropy: NormalizedEntropy,
 }
 
@@ -179,6 +206,7 @@ pub struct LookaheadResult {
 
 struct Node {
     priors: Vec<f64>,
+    raw_priors: Vec<f64>,
     entropy: NormalizedEntropy,
     children: Vec<Option<usize>>,
     visits: Vec<u32>,
@@ -186,12 +214,18 @@ struct Node {
 }
 
 impl Node {
-    fn new(priors: Vec<f64>) -> Self {
+    fn new(
+        StepPriors {
+            probability: priors,
+            raw_probability: raw_priors,
+        }: StepPriors,
+    ) -> Self {
         let k = priors.len();
         let p32: Vec<f32> = priors.iter().map(|&p| p as f32).collect();
         Self {
             entropy: NormalizedEntropy::from_probabilities(&p32),
             priors,
+            raw_priors,
             children: vec![None; k],
             visits: vec![0; k],
             value_sum: vec![0.0; k],
@@ -291,10 +325,12 @@ async fn expand<O: PriorOracle>(
     k: usize,
 ) -> Result<Node, BridgeError> {
     let priors = oracle.priors(history).await?;
-    if priors.len() != k || priors.iter().any(|p| !p.is_finite() || *p < 0.0) {
+    let bad = |v: &[f64]| v.len() != k || v.iter().any(|p| !p.is_finite() || *p < 0.0);
+    if bad(&priors.probability) || bad(&priors.raw_probability) {
         return Err(BridgeError::InvalidResponse(format!(
-            "oracle returned {} priors for {} actions",
-            priors.len(),
+            "oracle returned {} priors ({} raw) for {} actions",
+            priors.probability.len(),
+            priors.raw_probability.len(),
             k
         )));
     }
@@ -408,6 +444,7 @@ pub async fn run_lookahead<O: PriorOracle>(
         principal_variation.push(LookaheadStep {
             action: a,
             probability: nodes[n].priors[a],
+            raw_probability: nodes[n].raw_priors[a],
             entropy: nodes[n].entropy,
         });
         node = nodes[n].children[a];
@@ -453,7 +490,7 @@ mod tests {
                 None => self.root.clone(),
                 Some(&last) => self.after[last].clone(),
             };
-            Box::pin(async move { Ok(p) })
+            Box::pin(async move { Ok(p.into()) })
         }
     }
 
@@ -649,5 +686,38 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, BridgeError::Transport(_)));
+    }
+
+    /// WebGPT R3 M01.C: the plan carries the model's raw step probability
+    /// next to the reweighted one the search ran on.
+    #[tokio::test]
+    async fn plan_steps_keep_the_raw_probability() {
+        struct Reweighted;
+        impl PriorOracle for Reweighted {
+            fn priors<'a>(&'a self, _: &'a [usize]) -> PriorFuture<'a> {
+                Box::pin(async {
+                    Ok(StepPriors {
+                        probability: vec![0.1, 0.9],
+                        raw_probability: vec![0.7, 0.3],
+                    })
+                })
+            }
+        }
+        let r = run_lookahead(&Reweighted, &[true, true], cfg(2, 16))
+            .await
+            .unwrap();
+        assert_eq!(r.best_action, 1);
+        assert!(!r.principal_variation.is_empty());
+        for step in &r.principal_variation {
+            assert_eq!(step.action, 1);
+            assert_eq!(step.probability, 0.9);
+            assert_eq!(step.raw_probability, 0.3);
+        }
+    }
+
+    #[test]
+    fn a_plain_distribution_is_its_own_raw_distribution() {
+        let p = StepPriors::from(vec![0.25, 0.75]);
+        assert_eq!(p.probability, p.raw_probability);
     }
 }

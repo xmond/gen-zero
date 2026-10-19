@@ -1,9 +1,10 @@
 # Gen-Zero Production Quality Gate Evidence
 
-- **Generated**: 2026-10-19 (WebGPT Round 2, finding G03)
-- **Base commit**: `f78bfcceff61a55859f019527211fe6abae388e3` (`main`, "close WebGPT Round 1 audit findings")
-- **Status of this sign-off**: integrated Round 2 tree (all three worktrees `w1`, `w2`, `w3` merged on top of `f78bfcc`).
-  This file no longer signs off the stale 2026-09-29 (`4c12e8e`) record; that record is superseded.
+- **Generated**: 2026-10-19 (WebGPT Round 3, findings M01.A/B/C, M08, G04.A/B/C; Round 2 record kept below)
+- **Base commit**: `674071f3af40e6fe51f819d2d6dbe38587fc6edc` (`main`, "close WebGPT Round 2 findings")
+- **Status of this sign-off**: integrated Round 3 tree (worktrees `b1019r3-w1-m01`, `b1019r3-w2-m08`,
+  `b1019r3-w3-g04` merged on top of `674071f`, plus the dual-review fixes in section 1.1).
+  The Round 2 sign-off on `f78bfcc` and the stale 2026-09-29 (`4c12e8e`) record are superseded.
 - **Repository URL**: `https://github.com/xmond/gen-zero`
 
 Each gate below states its command, exit code, the tree it ran on, and where its raw log is.
@@ -13,25 +14,67 @@ A check that was not run is listed under section 7 as `Not run in this pass`, ne
 
 ## 1. Tree Identity
 
-The Round 2 integrated tree is `f78bfcc` plus these modified source and test files (SHA-256 of the committed working copy):
+The Round 3 integrated tree is `674071f` plus these files (SHA-256 of the integrated working copy
+that the section 2 and 3 gates ran on; rows marked "unchanged" were re-hashed and still match):
 
 | File | Change | SHA-256 |
 |---|---|---|
-| `crates/gen-zero-model/src/semantic_qwen.rs` | Round 2 M01/G02 fixes (negation window, safe-object unbinding, rustfmt) | `04a435e57b0e03f06dccaa0b4dff4c88afad0dadc82cf7a82d064ac2689423dc` |
-| `crates/gen-zero-model/src/inter_layer_mcts.rs` | Round 2 M07/M08 fixes + ablation arms | `b23656d99a12663a26bca25aeea34b6f1d207c13fc88184fd3a4d1f896cf2fe2` |
-| `crates/gen-zero-service/src/semantic.rs` | Round 2 M01 fixes (first-argmax tie rule, prior provenance) | `3df1ce41e6d0bdec55d403aad2429bb0427b4746f61ce515e474aa54dcc40f5c` |
-| `crates/gen-zero-service/src/zero.rs` | Round 2 M01/M02 fixes (veto gated by prior switch, latent candidate risk inspection, imagine provenance) | `f33cf0c0a26f140aa913f313e7e27973c59b38b5f44b2d6dfcae3f3603227429` |
-| `crates/gen-zero-service/tests/worldmodel_verbs_tests.rs` | Round 2 M01/M02 regression tests | `191fdf725a310304d31e26bf47e2999d51803f6af5e150b1062a9a45c15db0fe` |
+| `crates/gen-zero-model/src/semantic_qwen.rs` | Round 3 M01.B (poison markers, direct-object rule in `acts_on_safe_object()`) | `01320a642132ee3dfb8d1dd9283a8ae05f86d2773c040ccbf0f0d825f7474658` |
+| `crates/gen-zero-model/src/inter_layer_mcts.rs` | Round 3 M08 (`loo_query_for_all_anchors` reads the supplied states) | `426fe45e74790b66f5bee8cfe6683e9ce5f6887276715fbc9d3c8aef717f40f1` |
+| `crates/gen-zero-service/src/semantic.rs` | unchanged from `674071f` (Round 2 M01) | `3df1ce41e6d0bdec55d403aad2429bb0427b4746f61ce515e474aa54dcc40f5c` |
+| `crates/gen-zero-service/src/zero.rs` | Round 3 M01.A (ask gate sees context + `state`), M01.C (raw likelihood, `PlanLikelihood`) | `9fabef985de3dd4c7506e195722ef5780bd214a36cc37830de5ca053f9bd16c6` |
+| `crates/gen-zero-service/src/imagine.rs` | Round 3 M01.C (`StepPriors`, per-step `raw_probability`) | `daf1b3e458b7063a142b61dc03dd16119e8f0b6cf1bb714e59b479639c52eaac` |
+| `crates/gen-zero-service/tests/ask_causal_prior_on_tests.rs` | Round 3 M01.A/C regression tests (new file, prior switched on) | `fddcd0244130b9962ee9096d324ca342da3930879936b53ddafde072750e052d` |
+| `crates/gen-zero-service/tests/worldmodel_verbs_tests.rs` | unchanged from `674071f` (Round 2 M01/M02 tests) | `191fdf725a310304d31e26bf47e2999d51803f6af5e150b1062a9a45c15db0fe` |
+| `crates/gen-zero-planner/tests/deadline_anytime_tests.rs` | Round 3 G04 (wall ceiling 30 ms to 250 ms in one deadline test) | `bb7933728611f00dcb72f83f6204fa21a32cd691e2c781fca95cc37738ccaaec` |
+| `python/gen_zero/__init__.py` | Round 3 G04.A (torch/scipy-optional imports) | `f3c4008bb48a5d7066ce3bf6aeacb9ae5245e18a64e1475933e5a051083be8fc` |
+| `.github/workflows/ci.yml` | Round 3 G04.A/B (numpy step, Windows sparse checkout) | `5a0a14a7b9b36e0325c496112ef15af42ca6e1ba9c745202f345de17a7354683` |
+| `benchmarks/results/reachability.json` | Round 3 G04.C (regenerated; 219/271 Python modules reachable) | `7fea754fc0f74b6bf9e2006400dd587e8cfa7585063a5414231337f63135a55b` |
 | `python/gen_zero/causal/qwen_inter_layer_mcts.py` | Round 2 M07/M08 fixes + `ablation_predict` | `5879755e83b8c0cf50fc2513162a3134f69767a03a50681e51743835ec49c888` |
 | `python/gen_zero/causal/latent_mcts.py` | unchanged from `f78bfcc` | `613a68d0e2483266896f4de69d79f6cfb9fc9da4546b6a4f61f5a8fa81c2a0fb` |
 | `python/gen_zero/tests/test_qwen_inter_layer_mcts.py` | Round 2 M07/M08 regression tests | `6f134ae55f7f08ab9b15c78989dcbea629e6538f4958aa30bfb0448648bc1e83` |
 | `benchmarks/suites/benchmark_layerwise_mcts_qwen15b.py` | G03 component ablation arms | `b54d2e4dbd1d2b2a4be58bef8e5a68b2e4688ee220462cf7e7261edfd389d0b7` |
 
+The three Python/benchmark files above are not modified in Round 3. Their `sha256sum` equals all six
+`module_sha256` entries in `benchmarks/results/layerwise_mcts_qwen15b_report.json`
+(`module_sha256_verification`, `gpu_run`, `cpu_run`).
+
+### 1.1 Round 3 closures
+
+| Finding | Closure (symbols as named in the code) | Named test, `... ok` in the section 2.1 log |
+|---|---|---|
+| M01.A | `zero.rs` ask handler: when `causal_prior_enabled()` is true, the confirmation gate scores `semantic_qwen::state_text(context, state)`, the same text the policy prior scored, and returns `ConfirmationRequired` if the chosen action's `policy_prior_adjustment < 0` or `causal_utility_prior(...) < 0`. Off (the default), it never vetoes. | `ask_causal_prior_on_tests::ask_gate_sees_the_state_the_policy_prior_scored` |
+| M01.B | `semantic_qwen.rs`: food-domain spoiled markers add poison, toxic, contaminated and similar words; `acts_on_safe_object()` exempts an action only when the safe name is its direct object (after `OBJECT_FILLERS`), not anywhere in the clause. The Round 2 `negated_before()` rule is unchanged, so a negated hazard still scores +8. | `semantic_qwen::causal_prior_binding_tests::poison_markers_and_direct_object_bind_the_hazard` |
+| M01.C | `imagine.rs`: `StepPriors { probability, raw_probability }` keeps the unreweighted model probability per step. `zero.rs`: `imagine` reports `raw_sequence_likelihood` and `raw_sequence_log_likelihood` beside `plan_sequence_*`, via `PlanLikelihood`. Dual-review fix: `PlanLikelihood::over` now stores the true unclamped product as the likelihood, and floors `p` at `1e-300` only inside `ln`, so a `1e-15` step reports `1e-15`, not `1e-12`. | `zero::tests::imagine_summary_names_the_score_it_reports` (asserts the `1e-15` case), `ask_causal_prior_on_tests::imagine_reports_raw_likelihood_beside_the_reweighted_score`, `imagine::tests::plan_steps_keep_the_raw_probability` |
+| M08 | `inter_layer_mcts.rs` `EpisodicManifoldMemory::loo_query_for_all_anchors`: each supplied state is read around the mean of the entries with a different ID; a retained ID no longer returns its cached stored-anchor query. `loo_query()` delegates to it. | `inter_layer_mcts::tests::loo_query_for_all_anchors_uses_supplied_states`, `..._two_dimensional_reproducer`, `..._validates_retained_query_states` |
+| G04.A | `python/gen_zero/__init__.py` keeps the real `from .client import ...` / `from .manifold import ...` statements, each in `try`/`except ModuleNotFoundError` that re-raises unless the missing module is `torch` or `scipy`. `python/gen_zero/causal/__init__.py` is byte-identical to `674071f`: all 13 of its submodules import with torch and scipy blocked, so it needs no guard. `ci.yml` installs numpy in the `test` (ubuntu, macos) and `msrv` jobs, both of which run `cargo test`. | `test_nanocore_live::legacy_fixture_artifact_is_rejected_by_the_python_bridge` (dev `python3` has no torch) |
+| G04.B | `ci.yml` `windows-check` sparse checkout: `crates`, `python`, `benchmarks/results` (the last for the `include_str!` of `qwen15b_risk_heldout_report.json` in `semantic_qwen.rs` tests). | Not run in this pass (no Windows runner, section 7) |
+| G04.C | `benchmarks/results/reachability.json` regenerated: 219/271 Python modules reachable, the same 219-module set as `674071f`'s own code produces (0 lost, 0 gained). A second run, and runs on dev with CPython 3.11.16 and 3.14.4, give the same SHA-256. | section 3.2 |
+
+The Round 2 risk-inspection path is unchanged in Round 3: `inspection_text()` still returns
+`risk_checked_fields` and `risk_checked_sha256`, and `handle_latent_plan()` still inspects latent
+candidates (`zero::tests::inspection_covers_state_candidates_tools_and_history ... ok`).
+
 ---
 
 ## 2. Rust Quality Gates
 
-### 2.1 Integrated Round 2 tree (all changes merged), run on the dev build host, 2026-10-19
+### 2.1 Integrated Round 3 tree, run on the dev build host, 2026-10-19
+
+Run on the dev build host (`TMPDIR=$HOME/.cache/tmp-cargo`, `cargo 1.98.1`).
+`PATH` used dev's system `python3` (no torch), so the Python bridge tests ran without torch.
+
+| Gate | Command | Exit code | Raw log (claw) |
+|---|---|---|---|
+| Format | `cargo fmt --all -- --check` | **0** | `/tmp/dev-offload/20261019T092307-3684330.log` |
+| Lint | `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` | **0** | `/tmp/dev-offload/20261019T092319-3685125.log` |
+| Unit + integration | `cargo test --workspace --locked --no-fail-fast -- --test-threads=4` | **0** | `/tmp/dev-offload/20261019T092358-3687133.log` |
+
+- `cargo test`: 85 test targets (75 test binaries + 10 doc-test targets), **1455 passed, 0 failed, 31 ignored**; every `test result:` line shows `0 failed`.
+  The named tests in section 1.1 each print `... ok`, and so does
+  `semantic_qwen::risk_split_tests::pinned_measurements_match_heldout_report_json`.
+
+### 2.1a Integrated Round 2 tree (all changes merged), run on the dev build host, 2026-10-19 (superseded)
 
 Raw log: `/tmp/b1019r2-merged/integrated_gates.log` (`PATH` includes the torch venv so Python bridge tests import torch).
 
@@ -56,7 +99,38 @@ Raw log: `/tmp/b1019r2-merged/integrated_gates.log` (`PATH` includes the torch v
 
 ## 3. Python Test Gates
 
-### 3.1 Integrated Round 2 tree, dev build host, CPython 3.11.16
+### 3.1 Integrated Round 3 tree, full CI suite, dev build host, CPython 3.11.16
+
+The CI command, in `~/.venv-gz-torch` (torch 2.14.0+cpu, numpy 2.4.6; `ortools` 9.15.6755 installed for this run):
+
+```bash
+OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 PYTHONPATH=$PWD/python \
+  ~/.venv-gz-torch/bin/python -m pytest -ra --strict-config --strict-markers \
+  python/gen_zero/tests python/tests/test_rnn_set_adapter_contract.py
+```
+
+- **Exit code 1**: `3 failed, 2882 passed, 71 skipped, 20 warnings in 902.38s`
+  (log `/tmp/dev-offload/20261019T092739-3688098.log`). None of the three is caused by Round 3.
+  Each was rerun 3 times on a clean `674071f` worktree and on the Round 3 tree, same host, same venv:
+
+| Test | `674071f` | Round 3 | Cause |
+|---|---|---|---|
+| `test_issue_16_score_endpoint.py::TestLlamaCppScoreAdapter::test_adapter_health_check` | 3/3 fail | 3/3 fail | Host: the test hardcodes `http://127.0.0.1:8080`, and dev serves a live Gen-Zero there (`{"service":"gen-zero","status":"ok"}`), so `check_health()` takes the reachable branch, which has no `base_url`. Against a free port it returns `base_url` and passes the test's assertions. |
+| `test_issue_23_nanocore_scaling.py::TestCPSATFormalSolverAndHardTimeout::test_cpsat_optimal_safety_solving` | 3/3 fail | 3/3 fail, then 5/5 fail serially | Host speed: CP-SAT solve 2.5 to 3.3 ms against a `<= 2.0` ms assertion. Same on both trees. |
+| `test_calibrated_causal_dynamics_export.py::test_npz_loads_into_expert_and_step_meets_deployment_contract` | 3/3 pass | 2/3 pass, then 5/5 pass serially | Load flake: median step latency 82 us against `<= 15` us in the full run, while other agents loaded dev. |
+
+  Logs: `/tmp/fleet/b1019r3-integrate.pyfail-baseline.log`, `/tmp/fleet/b1019r3-integrate.pyfail-r3.log`,
+  `/tmp/fleet/b1019r3-integrate.pyfail-isolate.log`. Round 3 changes one Python file (`python/gen_zero/__init__.py`).
+
+### 3.2 Reachability audit (G04.C)
+
+- `python3 scripts/reachability_audit.py`: `219/271 Python modules import-reachable; 106 Rust files inventoried; 0 deletion claims`.
+- The reached set equals the one `674071f`'s own code produces in a clean worktree: 219 and 219, 0 lost, 0 gained.
+  The committed file at `674071f` was stale (211 reached).
+- Re-running leaves `benchmarks/results/reachability.json` byte-identical (SHA-256 `7fea754f...5a55b`
+  on claw, and on dev under CPython 3.11.16 and 3.14.4).
+
+### 3.3 Integrated Round 2 tree, dev build host, CPython 3.11.16 (superseded)
 
 ```bash
 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=python \
@@ -70,10 +144,9 @@ OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=python \
   `test_positive_lambda_fifo_fit_keeps_all_anchor_rows`,
   `test_memory_loo_keeps_all_anchor_rows_after_fifo_eviction[...]` (4 cases).
 
-### 3.2 Scope
+### 3.4 Scope
 
-Only these two Python test files ran. The full `python/gen_zero/tests` directory did not run
-(section 7).
+In Round 2 only these two Python test files ran. Round 3 ran the full CI suite (section 3.1).
 
 ---
 
@@ -93,8 +166,10 @@ log `/tmp/dev-offload/20261019T015231-2280568.log` (`REMOTE_DONE rc=0`), per
 | dense FFN | 36 | 17 | 1 | 0 | 18 | 0.056 | 0.000 | 0.50 |
 | FFN L22-27 keep 0.75 | 36 | 17 | 1 | 0 | 18 | 0.056 | 0.000 | 0.50 |
 
-This report was not regenerated in this pass. The Round 2 service change (M01) edits
-`semantic_qwen.rs`; whether it shifts these numbers is `Not run in this pass`.
+This report was not regenerated in this pass. Round 2 M01 and Round 3 M01.B edit `semantic_qwen.rs`;
+whether that shifts these numbers is `Not run in this pass`. The Round 3 tree still passes
+`semantic_qwen::risk_split_tests::pinned_measurements_match_heldout_report_json`, which checks the
+pinned constants against this JSON, not a fresh run.
 
 ---
 
@@ -187,8 +262,7 @@ Source: `/tmp/fleet/b1019r1-awswin-deploy.report.md`, probes at 2026-10-18T19:49
 - Public `GET /health`: **HTTP 200**, `{"service":"gen-zero","status":"ok"}`.
 - Public `GET /ready`: **HTTP 200**, `cognitive_assets.status=loaded`, `semantic_bridge.status=ready`,
   `model.num_layers=28`, `model.hidden_size=1536`.
-- This proves the `f78bfcc` build only. The Round 2 changes are redeployed after the Round 2 commit
-  is pushed.
+- This proves the `f78bfcc` build only. Neither the Round 2 (`674071f`) nor the Round 3 tree is deployed there.
 
 ---
 
@@ -197,12 +271,19 @@ Source: `/tmp/fleet/b1019r1-awswin-deploy.report.md`, probes at 2026-10-18T19:49
 - **GGUF vs SafeTensors bitwise parity**: Not run in this pass. The Rust BoolQ run used Q4_K_M GGUF,
   the Python runs used fp32 SafeTensors, so their accuracies are not bit-comparable.
 - **Python 3.10 / 3.12 matrix**: Not run in this pass. Only CPython 3.11.16 ran.
-- **Full `python/gen_zero/tests` directory**: Not run in this pass (two files ran, section 3).
+- **GitHub Actions CI on the Round 3 tree** (macOS `test`, `msrv`, `windows-check`, and the G04.A numpy
+  step and G04.B sparse checkout themselves): Not run in this pass. `ci.yml` parses as YAML; no runner executed it.
 - **MSRV 1.88 check** (`cargo +1.88.0 check`): Not run in this pass.
-- **Windows compile check of the Round 2 tree**: Not run in this pass prior to commit (aws-win built `f78bfcc`).
-- **Risk held-out report regeneration after M01**: Not run in this pass. M01 modified only the
-  optional keyword policy prior (`causal_utility_prior`) and rustfmt formatting in `semantic_qwen.rs`,
-  not the 16-shot risk classifier forward or LDA calibration path.
+- **Windows compile check of the Round 3 tree**: Not run in this pass (aws-win built `f78bfcc`).
+- **Python suite with 0 failures**: not reached. Three tests fail on dev for host reasons, identically or
+  flakily on `674071f` too (section 3.1). They were not fixed in this pass.
+- **BoolQ benchmark regeneration after M08**: Not run in this pass. `fit_calibrated` calls
+  `loo_query_for_all_anchors(&raw, &ids)` with the same states it wrote, the case where the M08 change
+  should not alter results, but sections 5.1 to 5.3 were not re-run to confirm.
+- **Risk held-out report regeneration after M01 (Round 2) and M01.B (Round 3)**: Not run in this pass.
+  Both modified only the optional keyword policy prior (`causal_utility_prior`, `PRIOR_DOMAINS`,
+  `acts_on_safe_object()`) and formatting in `semantic_qwen.rs`, not the 16-shot risk classifier
+  forward or LDA calibration path.
 - **Red inversion for the benchmark-suite change**: Not run in this pass. The suite fails closed at
   run time instead: full-depth arms must run 28 layers with zero exits, and the dense fit must carry
   base-utility weights with an unchanged `min_exit_layer`.
@@ -212,9 +293,12 @@ Source: `/tmp/fleet/b1019r1-awswin-deploy.report.md`, probes at 2026-10-18T19:49
 
 ## 8. Conclusion
 
-On the integrated Round 2 tree, `cargo fmt --all -- --check` (rc 0), `cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` (rc 0),
-`cargo test --workspace --locked --no-fail-fast -- --test-threads=4` (rc 0, 84 targets, 1446 passed, 0 failed),
-and the targeted Python suites (`pytest`, rc 0, 102 passed, 1 skipped) all pass, and the real 28-layer
-Qwen2.5-1.5B BoolQ benchmarks with component-isolated ablations ran in both Rust and Python with
-recorded hashes matching the committed source files byte for byte. Items in section 7 remain
+On the integrated Round 3 tree (`674071f` plus the files in section 1), `cargo fmt --all -- --check` (rc 0),
+`cargo clippy --workspace --all-targets --all-features --locked -- -D warnings` (rc 0) and
+`cargo test --workspace --locked --no-fail-fast -- --test-threads=4` (rc 0, 85 targets, 1455 passed,
+0 failed, 31 ignored) pass on dev, with every Round 3 named test `... ok`. The full CI Python suite
+returns rc 1 on dev: 2882 passed, 3 failed, and each failure reproduces on `674071f` or is a load flake
+that passes when rerun serially (section 3.1). `benchmarks/results/reachability.json` is regenerated, keeps
+the same 219 reachable Python modules, and is stable across reruns and Python versions. The three
+benchmark-locked Python files are untouched and match the report hashes. Items in section 7 remain
 explicitly scoped as not run in this pass.

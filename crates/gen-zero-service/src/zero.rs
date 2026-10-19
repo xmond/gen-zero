@@ -162,6 +162,67 @@ fn likelihood_source(policy_prior_enabled: bool) -> &'static str {
     }
 }
 
+/// Likelihood of an `imagine` plan: the unclamped product of its step
+/// probabilities, and the sum of `ln p` with `p` floored at 1e-300 only so a
+/// zero step stays finite in JSON. A 1e-12 floor would turn a 1e-15 step
+/// into 1e-12 (WebGPT R3 M01.C).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct PlanLikelihood {
+    product: f64,
+    log: f64,
+}
+
+impl PlanLikelihood {
+    fn over(probabilities: impl Iterator<Item = f64>) -> Self {
+        let probabilities: Vec<f64> = probabilities.collect();
+        Self {
+            product: probabilities.iter().copied().product::<f64>(),
+            log: probabilities
+                .iter()
+                .map(|p| p.max(1e-300).ln())
+                .sum::<f64>(),
+        }
+    }
+
+    fn likelihood(self) -> f64 {
+        self.product
+    }
+}
+
+/// The human-readable `imagine` summary. With the policy prior on, the
+/// search value is a reweighted score, not the model's likelihood, so the
+/// text names it that way and quotes the raw plan likelihood beside it.
+fn imagine_summary(
+    horizon: usize,
+    result: &crate::imagine::LookaheadResult,
+    best: &str,
+    raw: PlanLikelihood,
+    policy_prior_enabled: bool,
+) -> String {
+    if policy_prior_enabled {
+        format!(
+            "Lookahead over {} steps ({} simulations): best first action '{}' \
+             (visit share {:.2}, policy-prior-reweighted sequence score {:.3}; \
+             raw language-model likelihood of the plan {:.4}, raw log-likelihood {:.3}; \
+             a policy-prior-reweighted language-model score, not an environment reward)",
+            horizon,
+            result.simulations,
+            best,
+            result.confidence,
+            result.sequence_likelihood,
+            raw.likelihood(),
+            raw.log
+        )
+    } else {
+        format!(
+            "Lookahead over {} steps ({} simulations): best first action '{}' \
+             (visit share {:.2}, sequence likelihood {:.3}; a language-model likelihood, \
+             not an environment reward)",
+            horizon, result.simulations, best, result.confidence, result.sequence_likelihood
+        )
+    }
+}
+
 fn has_duplicates(names: &[String]) -> bool {
     names.iter().collect::<std::collections::HashSet<_>>().len() != names.len()
 }
@@ -3216,14 +3277,30 @@ impl PolymorphicZeroEngine {
         meta["formally_infeasible"] = json!(infeasible);
 
         // The prior is opt-in policy: off (the default), it never vetoes an ask.
+        // It must see the same text the scorer saw (context plus `state`): a
+        // hazard named only in `state` penalises every candidate equally, so
+        // the ranking does not move and only this gate can catch it.
         let prior_enabled = crate::semantic::causal_prior_enabled()
             .map_err(|e| ServiceError::Core(e.to_string()))?;
-        if prior_enabled
-            && gen_zero_model::semantic_qwen::causal_utility_prior(context_str, &chosen) < 0.0
-        {
-            return Err(ServiceError::ConfirmationRequired(
-                "The selected action has a severe negative causal affordance".into(),
-            ));
+        if prior_enabled {
+            let prior_text = gen_zero_model::semantic_qwen::state_text(context_str, state);
+            let scored_adjustment = meta["candidates"]
+                .as_array()
+                .and_then(|candidates| {
+                    candidates
+                        .iter()
+                        .find(|candidate| candidate["name"] == chosen)
+                })
+                .and_then(|candidate| candidate["policy_prior_adjustment"].as_f64())
+                .unwrap_or(0.0);
+            if scored_adjustment < 0.0
+                || gen_zero_model::semantic_qwen::causal_utility_prior(&prior_text, &chosen) < 0.0
+            {
+                return Err(ServiceError::ConfirmationRequired(format!(
+                    "the causal utility prior flags a physical-safety hazard on the \
+                     selected action {chosen:?} given its context and state"
+                )));
+            }
         }
 
         let verdict = self
@@ -4455,6 +4532,7 @@ impl PolymorphicZeroEngine {
             plan.push(json!({
                 "action": name,
                 "probability": step.probability,
+                "raw_probability": step.raw_probability,
                 "entropy": step.entropy.0,
                 "tier": tier_name(verdict.tier),
             }));
@@ -4473,6 +4551,9 @@ impl PolymorphicZeroEngine {
             })
             .collect();
         let best = &candidates[result.best_action];
+        let plan_steps = &result.principal_variation;
+        let plan_log_likelihood = PlanLikelihood::over(plan_steps.iter().map(|s| s.probability));
+        let raw_log_likelihood = PlanLikelihood::over(plan_steps.iter().map(|s| s.raw_probability));
         let mut meta = json!({
             "engine": backend.engine_name(),
             "semantic_scoring": true,
@@ -4499,6 +4580,12 @@ impl PolymorphicZeroEngine {
             "oracle_calls": result.oracle_calls,
             "best_action": best,
             "sequence_likelihood": result.sequence_likelihood,
+            // Product over the principal plan of the step probabilities the
+            // search used, and of the model's own (raw) step probabilities.
+            "plan_sequence_likelihood": plan_log_likelihood.likelihood(),
+            "plan_sequence_log_likelihood": plan_log_likelihood.log,
+            "raw_sequence_likelihood": raw_log_likelihood.likelihood(),
+            "raw_sequence_log_likelihood": raw_log_likelihood.log,
             "confidence": result.confidence,
             "plan": plan,
             "root": root,
@@ -4508,12 +4595,7 @@ impl PolymorphicZeroEngine {
             "inspection": inspection,
         });
         self.backend_meta(&mut meta);
-        let summary = format!(
-            "Lookahead over {} steps ({} simulations): best first action '{}' \
-                 (visit share {:.2}, sequence likelihood {:.3}; a language-model likelihood, \
-                 not an environment reward)",
-            horizon, result.simulations, best, result.confidence, result.sequence_likelihood
-        );
+        let summary = imagine_summary(horizon, &result, best, raw_log_likelihood, prior_enabled);
         // `worst` already folds the request risk into the plan tier. The same
         // mapping as ask and route decides the outcome: a Tier1/Tier2 plan is
         // a ConfirmationRequired error (428) even when the request text was
@@ -5674,6 +5756,52 @@ mod tests {
         assert_eq!(super::likelihood_source(false), "raw_model");
     }
 
+    /// WebGPT R3 M01.C: with the prior on, the summary must not call the
+    /// reweighted score a language-model likelihood, and it quotes the raw one.
+    #[test]
+    fn imagine_summary_names_the_score_it_reports() {
+        let result = crate::imagine::LookaheadResult {
+            best_action: 0,
+            principal_variation: Vec::new(),
+            root_visits: vec![8, 0],
+            root_values: vec![0.9, 0.0],
+            root_noisy_priors: vec![0.9, 0.1],
+            sequence_likelihood: 0.9,
+            confidence: 1.0,
+            oracle_calls: 2,
+            simulations: 8,
+            simulations_budget: 8,
+            early_stopped: false,
+        };
+        let raw = super::PlanLikelihood::over([0.5, 0.2].into_iter());
+        assert!((raw.log - (0.5f64.ln() + 0.2f64.ln())).abs() < 1e-12);
+        assert!((raw.likelihood() - 0.1).abs() < 1e-12);
+
+        // A step far below the old 1e-12 floor keeps its true value.
+        let tiny = super::PlanLikelihood::over([1e-15].into_iter());
+        assert!((tiny.likelihood() - 1e-15).abs() < 1e-27, "{tiny:?}");
+        assert_eq!(tiny.log, (1e-15_f64).ln());
+
+        let on = super::imagine_summary(2, &result, "wait", raw, true);
+        assert!(
+            on.contains("policy-prior-reweighted sequence score 0.900"),
+            "{on}"
+        );
+        assert!(
+            on.contains("raw language-model likelihood of the plan 0.1000"),
+            "{on}"
+        );
+        assert!(on.contains("raw log-likelihood -2.303"), "{on}");
+        assert!(!on.contains("a language-model likelihood"), "{on}");
+
+        let off = super::imagine_summary(2, &result, "wait", raw, false);
+        assert!(
+            off.contains("sequence likelihood 0.900; a language-model likelihood"),
+            "{off}"
+        );
+        assert!(!off.contains("reweighted"), "{off}");
+    }
+
     #[test]
     fn inspection_covers_state_candidates_tools_and_history() {
         for field in ["state", "candidates", "tools", "history"] {
@@ -5737,7 +5865,7 @@ mod tests {
             fn priors<'a>(&'a self, history: &'a [usize]) -> crate::imagine::PriorFuture<'a> {
                 Box::pin(async move {
                     assert!(history.iter().all(|action| *action == 1));
-                    Ok(vec![0.8, 0.1, 0.1])
+                    Ok(vec![0.8, 0.1, 0.1].into())
                 })
             }
         }

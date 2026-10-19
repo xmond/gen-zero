@@ -506,7 +506,9 @@ fn auto_and_other_modes_obey_the_same_caller_deadline() {
             "{mode:?}: {result:?}"
         );
         assert!(
-            start.elapsed() < Duration::from_millis(30),
+            // Loose ceiling: shared macOS CI VMs overshoot sleeps by 30-100ms.
+            // The call-count assert below is what proves the early stop.
+            start.elapsed() < Duration::from_millis(250),
             "elapsed={:?}",
             start.elapsed()
         );

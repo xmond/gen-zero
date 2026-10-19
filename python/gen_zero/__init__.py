@@ -14,16 +14,35 @@ package; they live in gen-zero-research.
 __version__ = "0.1.1"
 __author__ = "Gen-Zero Authors"
 
+_OPTIONAL_DEPS = {"torch", "scipy"}
+
+
+def _optional_dep_missing(exc):
+    # Only a missing torch/scipy is tolerated; any other missing module is a real bug.
+    return (exc.name or "").split(".")[0] in _OPTIONAL_DEPS
+
+
 from .config import GenZeroConfig
-from .client import GenZero
-from .manifold import (
-    MasterClosedFormSolver,
-    MultiModelGraphLaplacian,
-    CandidateSemanticPrior,
-    GCCAMidFusion,
-    RelativeAnchorEncoder,
-    InstanceAdaptiveRouter,
-)
+
+# torch/scipy are optional: light submodules such as the numpy-only
+# causal.nanocore_bridge must stay importable on hosts without them.
+try:
+    from .client import GenZero
+except ModuleNotFoundError as exc:
+    if not _optional_dep_missing(exc):
+        raise
+try:
+    from .manifold import (
+        MasterClosedFormSolver,
+        MultiModelGraphLaplacian,
+        CandidateSemanticPrior,
+        GCCAMidFusion,
+        RelativeAnchorEncoder,
+        InstanceAdaptiveRouter,
+    )
+except ModuleNotFoundError as exc:
+    if not _optional_dep_missing(exc):
+        raise
 
 __all__ = [
     "GenZero",

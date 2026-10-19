@@ -842,55 +842,14 @@ impl EpisodicManifoldMemory {
     /// With a centre, entry `i` and every other key are re-centred on
     /// `mu_-i = (sum - h_i) / (m - 1)`, the mean of the other `m - 1` states.
     pub fn loo_query(&self) -> Result<Vec<Vec<f64>>, ModelError> {
-        if self.center.is_none() {
-            return self
-                .keys
-                .iter()
-                .zip(&self.ids)
-                .map(|(k, &id)| self.read(k, Some(id)))
-                .collect();
-        }
-        let m = self.raw.len();
-        if m < 2 {
-            return Err(ModelError::Inference(
-                "leave-one-out removed every memory entry".into(),
-            ));
-        }
-        let sum: Vec<f64> = (0..self.dim)
-            .map(|j| self.raw.iter().map(|r| r[j]).sum())
-            .collect();
-        self.raw
-            .iter()
-            .zip(&self.ids)
-            .map(|(h, &id)| {
-                let mu: Vec<f64> = sum
-                    .iter()
-                    .zip(h)
-                    .map(|(s, v)| (s - v) / (m - 1) as f64)
-                    .collect();
-                // Entries sharing id with h are masked, so their keys never
-                // count; a placeholder skips encoding a possibly zero vector.
-                let keys = self
-                    .raw
-                    .iter()
-                    .zip(&self.ids)
-                    .map(|(r, &other)| {
-                        if other == id {
-                            Ok(vec![0.0; self.dim])
-                        } else {
-                            self.encode_with(r, Some(&mu))
-                        }
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-                self.read_keys(&keys, &self.encode_with(h, Some(&mu))?, Some(id))
-            })
-            .collect()
+        self.loo_query_for_all_anchors(&self.raw, &self.ids)
     }
 
-    /// One out-of-fold read per written anchor, in `ids` order, even when
-    /// the FIFO kept only the last `capacity` of them. An anchor still in
-    /// the store gets its [`Self::loo_query`] row (itself masked, centre
-    /// `mu_-i`). An anchor the FIFO already dropped is not in the store, so
+    /// One out-of-fold read per supplied state, in `ids` order, even when
+    /// the FIFO kept only the last `capacity` of the written anchors. A
+    /// retained ID masks its stored entry and centres the supplied state
+    /// on the remaining anchors' mean `mu_-i`; the supplied state need not
+    /// equal the stored anchor. An ID the FIFO already dropped is absent, so
     /// it reads every retained entry, centred on the retained mean. The rows
     /// stay 1-to-1 with the anchors' labels and base probabilities. Both
     /// row kinds are out-of-fold (no row reads its own entry), but a dropped
@@ -912,42 +871,46 @@ impl EpisodicManifoldMemory {
         if self.is_empty() {
             return Err(ModelError::Inference("memory is empty".into()));
         }
-        let retained: BTreeMap<usize, usize> = self
-            .ids
+        if self.center.is_none() {
+            return hidden
+                .iter()
+                .zip(ids)
+                .map(|(h, &id)| self.read(&self.encode(h)?, Some(id)))
+                .collect();
+        }
+        hidden
             .iter()
-            .enumerate()
-            .map(|(j, &id)| (id, j))
-            .collect();
-        let in_store = ids.iter().any(|id| retained.contains_key(id));
-        let loo = if in_store {
-            self.loo_query()?
-        } else {
-            Vec::new()
-        };
-        let dropped = match &self.center {
-            None => None,
-            Some(_) => {
-                let m = self.raw.len() as f64;
+            .zip(ids)
+            .map(|(h, &id)| {
+                let kept: Vec<&Vec<f64>> = self
+                    .raw
+                    .iter()
+                    .zip(&self.ids)
+                    .filter_map(|(r, &other)| (other != id).then_some(r))
+                    .collect();
+                if kept.is_empty() {
+                    return Err(ModelError::Inference(
+                        "leave-one-out removed every memory entry".into(),
+                    ));
+                }
+                let m = kept.len() as f64;
                 let mu: Vec<f64> = (0..self.dim)
-                    .map(|j| self.raw.iter().map(|r| r[j]).sum::<f64>() / m)
+                    .map(|j| kept.iter().map(|r| r[j]).sum::<f64>() / m)
                     .collect();
                 let keys = self
                     .raw
                     .iter()
-                    .map(|r| self.encode_with(r, Some(&mu)))
+                    .zip(&self.ids)
+                    .map(|(r, &other)| {
+                        if other == id {
+                            Ok(vec![0.0; self.dim])
+                        } else {
+                            self.encode_with(r, Some(&mu))
+                        }
+                    })
                     .collect::<Result<Vec<_>, _>>()?;
-                Some((mu, keys))
-            }
-        };
-        hidden
-            .iter()
-            .zip(ids)
-            .map(|(h, id)| match (retained.get(id), &dropped) {
-                (Some(&j), _) => Ok(loo[j].clone()),
-                (None, None) => self.read(&self.encode(h)?, None),
-                (None, Some((mu, keys))) => {
-                    self.read_keys(keys, &self.encode_with(h, Some(mu))?, None)
-                }
+                let q_enc = self.encode_with(h, Some(&mu))?;
+                self.read_keys(&keys, &q_enc, Some(id))
             })
             .collect()
     }
@@ -4194,6 +4157,96 @@ mod tests {
         assert!(mem
             .loo_query_for_all_anchors(&states[..2], &ids[..1])
             .is_err());
+    }
+
+    /// M08: retained IDs select the excluded entry, not a cached query.
+    #[test]
+    fn loo_query_for_all_anchors_uses_supplied_states() {
+        let states = vec![
+            vec![1.0, 2.0, 4.0],
+            vec![3.0, -1.0, 2.0],
+            vec![-2.0, 4.0, 1.0],
+            vec![2.0, 3.0, -1.0],
+        ];
+        let labels = [0, 1, 0, 1];
+        let ids = [10, 11, 12, 13];
+        let mut memory = EpisodicManifoldMemory::new(3, 2, 8, 4.0, None).unwrap();
+        memory.write(&states, &labels, &ids).unwrap();
+        let queries = vec![vec![-3.0, 2.0, 1.0], vec![2.0, -1.0, 3.0]];
+        let query_ids = [10, 99];
+        let rows = memory
+            .loo_query_for_all_anchors(&queries, &query_ids)
+            .unwrap();
+        assert_eq!(rows.len(), queries.len());
+        assert!((rows[0][0] - memory.loo_query().unwrap()[0][0]).abs() > 1e-3);
+        for (i, &id) in query_ids.iter().enumerate() {
+            let kept: Vec<usize> = (0..ids.len()).filter(|&j| ids[j] != id).collect();
+            let raw: Vec<Vec<f64>> = kept.iter().map(|&j| states[j].clone()).collect();
+            let ys: Vec<usize> = kept.iter().map(|&j| labels[j]).collect();
+            let retained_ids: Vec<usize> = kept.iter().map(|&j| ids[j]).collect();
+            let mut refit = EpisodicManifoldMemory::new(3, 2, 8, 4.0, None).unwrap();
+            refit.write(&raw, &ys, &retained_ids).unwrap();
+            let expected = refit.query(&queries[i], None).unwrap();
+            assert_eq!(rows[i].len(), expected.len());
+            for (a, b) in rows[i].iter().zip(expected) {
+                assert!((a - b).abs() < 1e-12, "query {id}: {a} vs {b}");
+            }
+        }
+    }
+
+    /// M08's two-dimensional query geometry must agree with delete-and-refit.
+    #[test]
+    fn loo_query_for_all_anchors_two_dimensional_reproducer() {
+        let states = [vec![0.0, 0.0], vec![1.0, 0.0], vec![0.0, 1.0]];
+        let labels = [0, 1, 0];
+        let ids = [0, 1, 2];
+        let queries = [vec![-3.0, 2.0], vec![2.0, -1.0]];
+        // This API takes inverse temperature beta, so temperature 0.5 is beta 2.
+        let mut memory = EpisodicManifoldMemory::new(2, 2, 8, 2.0, None).unwrap();
+        memory.write(&states, &labels, &ids).unwrap();
+        let rows = memory
+            .loo_query_for_all_anchors(&queries, &[0, 99])
+            .unwrap();
+        assert_eq!(rows.len(), 2);
+        let mut refit = EpisodicManifoldMemory::new(2, 2, 8, 2.0, None).unwrap();
+        refit.write(&states[1..], &labels[1..], &ids[1..]).unwrap();
+        assert_eq!(refit.center.as_deref(), Some([0.5, 0.5].as_slice()));
+        let expected = [
+            refit.query(&queries[0], None).unwrap(),
+            memory.query(&queries[1], None).unwrap(),
+        ];
+        for (row, want) in rows.iter().zip(expected) {
+            assert_eq!(row.len(), 2);
+            for (a, b) in row.iter().zip(want) {
+                assert!((a - b).abs() < 1e-12, "{a} vs {b}");
+            }
+        }
+        assert!((rows[0][0] - memory.loo_query().unwrap()[0][0]).abs() > 0.4);
+    }
+
+    #[test]
+    fn loo_query_for_all_anchors_validates_retained_query_states() {
+        let mut memory = EpisodicManifoldMemory::new(2, 2, 8, 2.0, None).unwrap();
+        memory
+            .write(
+                &[vec![0.0, 0.0], vec![1.0, 0.0], vec![0.0, 1.0]],
+                &[0, 1, 0],
+                &[0, 1, 2],
+            )
+            .unwrap();
+        for invalid in [
+            vec![f64::NAN, 0.0],
+            vec![f64::INFINITY, 0.0],
+            vec![1.0],
+            vec![],
+        ] {
+            assert!(
+                memory
+                    .loo_query_for_all_anchors(std::slice::from_ref(&invalid), &[0])
+                    .is_err(),
+                "accepted invalid retained-ID query {invalid:?}"
+            );
+        }
     }
 
     /// M07: more training anchors than memory slots (256) must fit, with the

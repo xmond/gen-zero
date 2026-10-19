@@ -72,6 +72,11 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Install Python numpy for bridge contract tests
+        run: |
+          python3 -m pip install --break-system-packages numpy || python3 -m pip install numpy
+          python3 -c "import numpy; print('numpy', numpy.__version__)"
+
       # Stable satisfies the workspace Rust >=1.88 requirement; this is not an MSRV test.
       - name: Install Rust toolchain
         run: |
@@ -103,6 +108,7 @@ jobs:
           sparse-checkout: |
             crates
             python
+            benchmarks/results
 
       - name: Install Rust toolchain
         run: |
@@ -130,6 +136,11 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           persist-credentials: false
+
+      - name: Install Python numpy for bridge contract tests
+        run: |
+          python3 -m pip install --break-system-packages numpy || python3 -m pip install numpy
+          python3 -c "import numpy; print('numpy', numpy.__version__)"
 
       - name: Install Rust 1.88
         run: rustup toolchain install 1.88.0 --profile minimal
