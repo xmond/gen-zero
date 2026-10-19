@@ -24743,7 +24743,7 @@
     {
       "file": "crates/gen-zero-service/src/bridge.rs",
       "declared_modules": [],
-      "public_symbols": 27
+      "public_symbols": 28
     },
     {
       "file": "crates/gen-zero-service/src/closed_loop.rs",

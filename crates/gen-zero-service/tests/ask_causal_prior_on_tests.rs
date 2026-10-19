@@ -6,64 +6,12 @@
 //! A local stub scorer answers with canned probabilities. This checks the
 //! plumbing (scorer -> policy prior -> confirmation gate), not a model.
 
-use axum::routing::post;
-use axum::{Json, Router};
-use gen_zero_service::{
-    BridgeConfig, PolymorphicZeroEngine, SemanticBackend, SemanticBridgeClient, ServiceError,
-};
-use serde_json::{json, Value};
-use std::sync::Arc;
+#[path = "support/stub_scorer.rs"]
+mod support;
 
-/// `semantic_ask` answers `probs` in candidate order; `semantic_risk`
-/// always answers p_dangerous = 0.001.
-async fn stub_scorer(probs: Vec<f64>) -> String {
-    let app = Router::new()
-        .route(
-            "/v1/semantic_risk",
-            post(|| async {
-                Json(json!({
-                    "p_dangerous": 0.001, "log_odds": 0.0, "windows": 1,
-                    "thresholds": {"escalate": 0.4, "hard_stop": 0.8},
-                    "classifier": {"name": "test-stub"}, "forward_ms": 0.0,
-                }))
-            }),
-        )
-        .route(
-            "/v1/semantic_ask",
-            post(move |Json(req): Json<Value>| {
-                let probs = probs.clone();
-                async move {
-                    let names: Vec<String> = req["candidates"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|c| c.as_str().unwrap().to_string())
-                        .collect();
-                    let scores: Vec<Value> = names
-                        .iter()
-                        .zip(&probs)
-                        .map(|(name, p)| {
-                            json!({
-                                "name": name, "log_likelihood": p.ln(),
-                                "baseline_log_likelihood": 0.0, "pmi": p.ln(), "probability": p,
-                            })
-                        })
-                        .collect();
-                    let entropy =
-                        -probs.iter().map(|p| p * p.ln()).sum::<f64>() / (names.len() as f64).ln();
-                    Json(json!({
-                        "chosen": names[0], "chosen_index": 0, "candidates": scores,
-                        "entropy": entropy, "scorer": {"name": "test-stub"},
-                        "embedding_dim": 0, "timing_ms": 0.0,
-                    }))
-                }
-            }),
-        );
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-    tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
-    format!("http://{addr}")
-}
+use gen_zero_service::ServiceError;
+use serde_json::json;
+use support::{assert_raw_rejected, engine_with, milk_ask, milk_imagine, BAD_RAW};
 
 /// WebGPT R3 M01.A: the hazard is only in `state`. The scorer's prior sees
 /// context + state and penalises both candidates by -16, so the ranking
@@ -72,10 +20,7 @@ async fn stub_scorer(probs: Vec<f64>) -> String {
 #[tokio::test]
 async fn ask_gate_sees_the_state_the_policy_prior_scored() {
     std::env::set_var("GENZERO_CAUSAL_PRIOR", "on");
-    let client =
-        SemanticBridgeClient::new(BridgeConfig::new(stub_scorer(vec![0.99, 0.01]).await)).unwrap();
-    let engine =
-        PolymorphicZeroEngine::new().with_semantic(Some(Arc::new(SemanticBackend::Remote(client))));
+    let engine = engine_with(vec![0.99, 0.01], None).await;
 
     let hazard = json!({
         "action": "ask", "context": "select storage",
@@ -107,10 +52,7 @@ async fn ask_gate_sees_the_state_the_policy_prior_scored() {
 #[tokio::test]
 async fn imagine_reports_raw_likelihood_beside_the_reweighted_score() {
     std::env::set_var("GENZERO_CAUSAL_PRIOR", "on");
-    let client =
-        SemanticBridgeClient::new(BridgeConfig::new(stub_scorer(vec![0.99, 0.01]).await)).unwrap();
-    let engine =
-        PolymorphicZeroEngine::new().with_semantic(Some(Arc::new(SemanticBackend::Remote(client))));
+    let engine = engine_with(vec![0.99, 0.01], None).await;
     let out = engine
         .execute(&json!({
             "action": "imagine", "scenario": "The milk is expired",
@@ -151,4 +93,47 @@ async fn imagine_reports_raw_likelihood_beside_the_reweighted_score() {
         "{text}"
     );
     assert!(!text.contains("a language-model likelihood"), "{text}");
+}
+
+/// WebGPT R4 M11: a valid `probability: [0.99, 0.01]` next to an explicit
+/// invalid `raw_probability` used to pass, and the prior re-ranked on the
+/// raw value (`[1e100, 2.0]` or `[0.01, 0.99]` flipped expired milk to
+/// "drink it"). Both `ask` and `imagine` must reject it.
+#[tokio::test]
+async fn invalid_raw_probability_is_rejected_with_the_prior_on() {
+    std::env::set_var("GENZERO_CAUSAL_PRIOR", "on");
+    for raw in BAD_RAW {
+        let engine = engine_with(vec![0.99, 0.01], Some(raw.to_vec())).await;
+        let out = engine.execute(&milk_ask()).await.expect("ask outcome");
+        assert_raw_rejected(&out, &format!("ask {raw:?}"));
+        assert!(out.meta.get("chosen_action").is_none(), "{}", out.meta);
+
+        let engine = engine_with(vec![0.99, 0.01], Some(raw.to_vec())).await;
+        let out = engine
+            .execute(&milk_imagine())
+            .await
+            .expect("imagine outcome");
+        assert_raw_rejected(&out, &format!("imagine {raw:?}"));
+        assert!(out.meta.get("best_action").is_none(), "{}", out.meta);
+    }
+}
+
+/// Control: the legacy bridge omits `raw_probability`, or sends one equal
+/// to `probability`. The prior still moves expired milk to "throw it away".
+#[tokio::test]
+async fn omitted_or_matching_raw_probability_still_works_with_the_prior_on() {
+    std::env::set_var("GENZERO_CAUSAL_PRIOR", "on");
+    for raw in [None, Some(vec![0.99, 0.01])] {
+        let engine = engine_with(vec![0.99, 0.01], raw.clone()).await;
+        let out = engine.execute(&milk_ask()).await.expect("ask runs");
+        assert!(!out.is_error, "{raw:?}: {}", out.meta);
+        assert_eq!(out.meta["chosen_action"], "throw it away", "{}", out.meta);
+
+        let engine = engine_with(vec![0.99, 0.01], raw.clone()).await;
+        let out = engine.execute(&milk_imagine()).await.expect("imagine runs");
+        assert!(!out.is_error, "{raw:?}: {}", out.meta);
+        assert_eq!(out.meta["best_action"], "throw it away", "{}", out.meta);
+        let raw_likelihood = out.meta["raw_sequence_likelihood"].as_f64().unwrap();
+        assert!((raw_likelihood - 1e-4).abs() < 1e-9, "{}", out.meta);
+    }
 }

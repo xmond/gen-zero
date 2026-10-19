@@ -325,13 +325,17 @@ async fn expand<O: PriorOracle>(
     k: usize,
 ) -> Result<Node, BridgeError> {
     let priors = oracle.priors(history).await?;
-    let bad = |v: &[f64]| v.len() != k || v.iter().any(|p| !p.is_finite() || *p < 0.0);
-    if bad(&priors.probability) || bad(&priors.raw_probability) {
+    // Both vectors must be a distribution over the k actions: the search
+    // runs on `probability` and reports `raw_probability` as a likelihood.
+    let simplex = |v: &[f64]| {
+        v.len() == k
+            && v.iter().all(|p| p.is_finite() && (0.0..=1.0).contains(p))
+            && (v.iter().sum::<f64>() - 1.0).abs() <= 1e-3
+    };
+    if !simplex(&priors.probability) || !simplex(&priors.raw_probability) {
         return Err(BridgeError::InvalidResponse(format!(
-            "oracle returned {} priors ({} raw) for {} actions",
-            priors.probability.len(),
-            priors.raw_probability.len(),
-            k
+            "oracle priors {:?} (raw {:?}) are not a distribution over {} actions",
+            priors.probability, priors.raw_probability, k
         )));
     }
     Ok(Node::new(priors))
@@ -690,6 +694,62 @@ mod tests {
 
     /// WebGPT R3 M01.C: the plan carries the model's raw step probability
     /// next to the reweighted one the search ran on.
+    /// Answers the same priors at every node.
+    struct FixedOracle(StepPriors);
+
+    impl PriorOracle for FixedOracle {
+        fn priors<'a>(&'a self, _history: &'a [usize]) -> PriorFuture<'a> {
+            let p = self.0.clone();
+            Box::pin(async move { Ok(p) })
+        }
+    }
+
+    /// WebGPT R4 M11: `expand` accepted values above 1 and vectors that do
+    /// not sum to 1, in both `probability` and `raw_probability`.
+    #[tokio::test]
+    async fn priors_must_be_a_distribution() {
+        let good = vec![0.6, 0.4];
+        let bad = [
+            vec![2.0, 2.0],
+            vec![0.8, 0.8],
+            vec![-0.1, -0.1],
+            vec![-0.1, 1.1],
+            vec![1e100, 2.0],
+            vec![f64::NAN, 0.5],
+            vec![f64::INFINITY, 0.0],
+            vec![f64::NEG_INFINITY, 1.0],
+            vec![1.0],
+            vec![0.5, 0.3, 0.2],
+        ];
+        for v in &bad {
+            for priors in [
+                StepPriors {
+                    probability: v.clone(),
+                    raw_probability: good.clone(),
+                },
+                StepPriors {
+                    probability: good.clone(),
+                    raw_probability: v.clone(),
+                },
+            ] {
+                let err = run_lookahead(&FixedOracle(priors.clone()), &[true, true], cfg(2, 8))
+                    .await
+                    .unwrap_err();
+                assert!(
+                    matches!(err, BridgeError::InvalidResponse(_)),
+                    "{priors:?}: {err}"
+                );
+            }
+        }
+        let ok = StepPriors {
+            probability: vec![0.1, 0.9],
+            raw_probability: good,
+        };
+        run_lookahead(&FixedOracle(ok), &[true, true], cfg(2, 8))
+            .await
+            .unwrap();
+    }
+
     #[tokio::test]
     async fn plan_steps_keep_the_raw_probability() {
         struct Reweighted;

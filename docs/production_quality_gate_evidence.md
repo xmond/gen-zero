@@ -21,15 +21,18 @@ that the section 2 and 3 gates ran on; rows marked "unchanged" were re-hashed an
 |---|---|---|
 | `crates/gen-zero-model/src/semantic_qwen.rs` | Round 3 M01.B (poison markers, direct-object rule in `acts_on_safe_object()`) | `01320a642132ee3dfb8d1dd9283a8ae05f86d2773c040ccbf0f0d825f7474658` |
 | `crates/gen-zero-model/src/inter_layer_mcts.rs` | Round 3 M08 (`loo_query_for_all_anchors` reads the supplied states) | `426fe45e74790b66f5bee8cfe6683e9ce5f6887276715fbc9d3c8aef717f40f1` |
-| `crates/gen-zero-service/src/semantic.rs` | unchanged from `674071f` (Round 2 M01) | `3df1ce41e6d0bdec55d403aad2429bb0427b4746f61ce515e474aa54dcc40f5c` |
+| `crates/gen-zero-service/src/bridge.rs` | Round 4 M11 (`check_raw_probabilities()`, new public symbol) | `75e6ed2d27c7072ba49e202885c57d630a00ba9e8407e7a603bcb626d372d48b` |
+| `crates/gen-zero-service/src/semantic.rs` | Round 4 M11 (`apply_policy_prior()` validates raw probabilities before the prior) | `f419edc5349f625b0424556cd08283324f6e3456591804762190f995abccad40` |
 | `crates/gen-zero-service/src/zero.rs` | Round 3 M01.A (ask gate sees context + `state`), M01.C (raw likelihood, `PlanLikelihood`) | `9fabef985de3dd4c7506e195722ef5780bd214a36cc37830de5ca053f9bd16c6` |
-| `crates/gen-zero-service/src/imagine.rs` | Round 3 M01.C (`StepPriors`, per-step `raw_probability`) | `daf1b3e458b7063a142b61dc03dd16119e8f0b6cf1bb714e59b479639c52eaac` |
-| `crates/gen-zero-service/tests/ask_causal_prior_on_tests.rs` | Round 3 M01.A/C regression tests (new file, prior switched on) | `fddcd0244130b9962ee9096d324ca342da3930879936b53ddafde072750e052d` |
+| `crates/gen-zero-service/src/imagine.rs` | Round 3 M01.C (`StepPriors`, per-step `raw_probability`); Round 4 M11 (simplex check in `expand()`) | `2d63dc708cc55b8c122a457da8fab020296fbfa049d67cddb827c0f5b7e14b09` |
+| `crates/gen-zero-service/tests/ask_causal_prior_on_tests.rs` | Round 3 M01.A/C regression tests (prior switched on); Round 4 M11 test added | `d62dd3d3818c6c922990ce5e3ef11d27339a08b0b5db14b902001714b3d3d493` |
+| `crates/gen-zero-service/tests/ask_raw_probability_off_tests.rs` | Round 4 M11 regression test (new file, prior switched off) | `6b2c328c0437f40cf7dedeb0778c8341b81bbc7e52d6c60554ebb954dd1f6a17` |
+| `crates/gen-zero-service/tests/support/stub_scorer.rs` | Round 4 M11 shared stub scorer (new file) | `0fddf97c4b094260d43a05abb6dbdcc84fee3ef2fa629de8b8f96c372bd20867` |
 | `crates/gen-zero-service/tests/worldmodel_verbs_tests.rs` | unchanged from `674071f` (Round 2 M01/M02 tests) | `191fdf725a310304d31e26bf47e2999d51803f6af5e150b1062a9a45c15db0fe` |
 | `crates/gen-zero-planner/tests/deadline_anytime_tests.rs` | Round 3 G04 (wall ceiling 30 ms to 250 ms in one deadline test) | `bb7933728611f00dcb72f83f6204fa21a32cd691e2c781fca95cc37738ccaaec` |
-| `python/gen_zero/__init__.py` | Round 3 G04.A (torch/scipy-optional imports) | `f3c4008bb48a5d7066ce3bf6aeacb9ae5245e18a64e1475933e5a051083be8fc` |
-| `.github/workflows/ci.yml` | Round 3 G04.A/B (numpy step, Windows sparse checkout) | `5a0a14a7b9b36e0325c496112ef15af42ca6e1ba9c745202f345de17a7354683` |
-| `benchmarks/results/reachability.json` | Round 3 G04.C (regenerated; 219/271 Python modules reachable) | `7fea754fc0f74b6bf9e2006400dd587e8cfa7585063a5414231337f63135a55b` |
+| `python/gen_zero/__init__.py` | Round 3 G04.B (torch/scipy-optional imports) | `f3c4008bb48a5d7066ce3bf6aeacb9ae5245e18a64e1475933e5a051083be8fc` |
+| `.github/workflows/ci.yml` | Round 3 G04.A/B (Windows sparse checkout, numpy step) | `5a0a14a7b9b36e0325c496112ef15af42ca6e1ba9c745202f345de17a7354683` |
+| `benchmarks/results/reachability.json` | Round 3 G04.C (regenerated; 219/271 Python modules reachable); Round 4 M11 (`bridge.rs` public symbols 27 to 28) | `3cdde01734e2a4eb802220f4139ea5f17eaa35724598e8cb9379627d92e7a9eb` |
 | `python/gen_zero/causal/qwen_inter_layer_mcts.py` | Round 2 M07/M08 fixes + `ablation_predict` | `5879755e83b8c0cf50fc2513162a3134f69767a03a50681e51743835ec49c888` |
 | `python/gen_zero/causal/latent_mcts.py` | unchanged from `f78bfcc` | `613a68d0e2483266896f4de69d79f6cfb9fc9da4546b6a4f61f5a8fa81c2a0fb` |
 | `python/gen_zero/tests/test_qwen_inter_layer_mcts.py` | Round 2 M07/M08 regression tests | `6f134ae55f7f08ab9b15c78989dcbea629e6538f4958aa30bfb0448648bc1e83` |
@@ -47,9 +50,10 @@ The three Python/benchmark files above are not modified in Round 3. Their `sha25
 | M01.B | `semantic_qwen.rs`: food-domain spoiled markers add poison, toxic, contaminated and similar words; `acts_on_safe_object()` exempts an action only when the safe name is its direct object (after `OBJECT_FILLERS`), not anywhere in the clause. The Round 2 `negated_before()` rule is unchanged, so a negated hazard still scores +8. | `semantic_qwen::causal_prior_binding_tests::poison_markers_and_direct_object_bind_the_hazard` |
 | M01.C | `imagine.rs`: `StepPriors { probability, raw_probability }` keeps the unreweighted model probability per step. `zero.rs`: `imagine` reports `raw_sequence_likelihood` and `raw_sequence_log_likelihood` beside `plan_sequence_*`, via `PlanLikelihood`. Dual-review fix: `PlanLikelihood::over` now stores the true unclamped product as the likelihood, and floors `p` at `1e-300` only inside `ln`, so a `1e-15` step reports `1e-15`, not `1e-12`. | `zero::tests::imagine_summary_names_the_score_it_reports` (asserts the `1e-15` case), `ask_causal_prior_on_tests::imagine_reports_raw_likelihood_beside_the_reweighted_score`, `imagine::tests::plan_steps_keep_the_raw_probability` |
 | M08 | `inter_layer_mcts.rs` `EpisodicManifoldMemory::loo_query_for_all_anchors`: each supplied state is read around the mean of the entries with a different ID; a retained ID no longer returns its cached stored-anchor query. `loo_query()` delegates to it. | `inter_layer_mcts::tests::loo_query_for_all_anchors_uses_supplied_states`, `..._two_dimensional_reproducer`, `..._validates_retained_query_states` |
-| G04.A | `python/gen_zero/__init__.py` keeps the real `from .client import ...` / `from .manifold import ...` statements, each in `try`/`except ModuleNotFoundError` that re-raises unless the missing module is `torch` or `scipy`. `python/gen_zero/causal/__init__.py` is byte-identical to `674071f`: all 13 of its submodules import with torch and scipy blocked, so it needs no guard. `ci.yml` installs numpy in the `test` (ubuntu, macos) and `msrv` jobs, both of which run `cargo test`. | `test_nanocore_live::legacy_fixture_artifact_is_rejected_by_the_python_bridge` (dev `python3` has no torch) |
-| G04.B | `ci.yml` `windows-check` sparse checkout: `crates`, `python`, `benchmarks/results` (the last for the `include_str!` of `qwen15b_risk_heldout_report.json` in `semantic_qwen.rs` tests). | Not run in this pass (no Windows runner, section 7) |
+| G04.A | `ci.yml` `windows-check` sparse checkout: `crates`, `python`, `benchmarks/results` (the last for the `include_str!` of `qwen15b_risk_heldout_report.json` in `semantic_qwen.rs` tests). | Not run in this pass (no Windows runner, section 7) |
+| G04.B | `python/gen_zero/__init__.py` keeps the real `from .client import ...` / `from .manifold import ...` statements, each in `try`/`except ModuleNotFoundError` that re-raises unless the missing module is `torch` or `scipy`. `python/gen_zero/causal/__init__.py` is byte-identical to `674071f`: all 13 of its submodules import with torch and scipy blocked, so it needs no guard. `ci.yml` installs numpy in the `test` (ubuntu, macos) and `msrv` jobs, both of which run `cargo test`. | `test_nanocore_live::legacy_fixture_artifact_is_rejected_by_the_python_bridge` (dev `python3` has no torch) |
 | G04.C | `benchmarks/results/reachability.json` regenerated: 219/271 Python modules reachable, the same 219-module set as `674071f`'s own code produces (0 lost, 0 gained). A second run, and runs on dev with CPython 3.11.16 and 3.14.4, give the same SHA-256. | section 3.2 |
+| M11 | `bridge.rs`: new `check_raw_probabilities()` validates each raw model probability. `semantic.rs::apply_policy_prior()` runs that check on the raw values before the causal prior reweights them. `imagine.rs::expand()` checks the probability simplex on both `probability` and `raw_probability`: every value in `0.0..=1.0`, and the sum is `1.0`. | `bridge::tests` (new tests for `check_raw_probabilities()`), `semantic::causal_prior_tests::invalid_raw_probability_is_rejected_before_the_prior`, `imagine::tests::priors_must_be_a_distribution`, `ask_causal_prior_on_tests::invalid_raw_probability_is_rejected_with_the_prior_on`, `ask_raw_probability_off_tests::invalid_raw_probability_is_rejected_with_the_prior_off` |
 
 The Round 2 risk-inspection path is unchanged in Round 3: `inspection_text()` still returns
 `risk_checked_fields` and `risk_checked_sha256`, and `handle_latent_plan()` still inspects latent
@@ -73,6 +77,17 @@ Run on the dev build host (`TMPDIR=$HOME/.cache/tmp-cargo`, `cargo 1.98.1`).
 - `cargo test`: 85 test targets (75 test binaries + 10 doc-test targets), **1455 passed, 0 failed, 31 ignored**; every `test result:` line shows `0 failed`.
   The named tests in section 1.1 each print `... ok`, and so does
   `semantic_qwen::risk_split_tests::pinned_measurements_match_heldout_report_json`.
+
+### 2.1b Round 4 (M11) gates, run on the dev build host, 2026-10-19
+
+| Gate | Log | Result |
+|---|---|---|
+| Red check (new tests against the old code) | `/tmp/fleet/b1019r4-w1.red.log` | `RED_RC=101`: 3 targets fail (`gen-zero-service --lib`, `--test ask_causal_prior_on_tests`, `--test ask_raw_probability_off_tests`), as required |
+| Green: fmt, clippy, `cargo test -p gen-zero-service --locked --no-fail-fast` | `/tmp/fleet/b1019r4-w1.gates.log` | `FMT_RC=0`, `CLIPPY_RC=0`, `TEST_RC=0` |
+
+GitHub Actions CI run `39183678764` on `badf720ee4bf2645562cdbfd9e9ed871866d9138` passed all 8 jobs:
+`117841554368`, `117841554483`, `117841554416`, `117841554310`, `117841554480`, `117841554446`,
+`117841554539`, `117841554432`.
 
 ### 2.1a Integrated Round 2 tree (all changes merged), run on the dev build host, 2026-10-19 (superseded)
 
@@ -127,8 +142,9 @@ OMP_NUM_THREADS=2 MKL_NUM_THREADS=2 PYTHONPATH=$PWD/python \
 - `python3 scripts/reachability_audit.py`: `219/271 Python modules import-reachable; 106 Rust files inventoried; 0 deletion claims`.
 - The reached set equals the one `674071f`'s own code produces in a clean worktree: 219 and 219, 0 lost, 0 gained.
   The committed file at `674071f` was stale (211 reached).
-- Re-running leaves `benchmarks/results/reachability.json` byte-identical (SHA-256 `7fea754f...5a55b`
-  on claw, and on dev under CPython 3.11.16 and 3.14.4).
+- Re-running leaves `benchmarks/results/reachability.json` byte-identical (SHA-256 `3cdde017...7a9eb`
+after Round 4 M11; the Round 3 value `7fea754f...5a55b` changed only because `bridge.rs` gained one public symbol, 27 to 28).
+  Two runs on claw on 2026-10-19 gave the same bytes. The file differs from the committed one until the Round 4 commit lands.
 
 ### 3.3 Integrated Round 2 tree, dev build host, CPython 3.11.16 (superseded)
 
@@ -271,8 +287,8 @@ Source: `/tmp/fleet/b1019r1-awswin-deploy.report.md`, probes at 2026-10-18T19:49
 - **GGUF vs SafeTensors bitwise parity**: Not run in this pass. The Rust BoolQ run used Q4_K_M GGUF,
   the Python runs used fp32 SafeTensors, so their accuracies are not bit-comparable.
 - **Python 3.10 / 3.12 matrix**: Not run in this pass. Only CPython 3.11.16 ran.
-- **GitHub Actions CI on the Round 3 tree** (macOS `test`, `msrv`, `windows-check`, and the G04.A numpy
-  step and G04.B sparse checkout themselves): Not run in this pass. `ci.yml` parses as YAML; no runner executed it.
+- **GitHub Actions CI on the Round 3 tree** (macOS `test`, `msrv`, `windows-check`, and the G04.B numpy
+  step and G04.A sparse checkout themselves): Not run in this pass. `ci.yml` parses as YAML; no runner executed it.
 - **MSRV 1.88 check** (`cargo +1.88.0 check`): Not run in this pass.
 - **Windows compile check of the Round 3 tree**: Not run in this pass (aws-win built `f78bfcc`).
 - **Python suite with 0 failures**: not reached. Three tests fail on dev for host reasons, identically or

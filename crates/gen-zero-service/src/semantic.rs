@@ -14,9 +14,9 @@
 //! ([`crate::bridge::validate_ask`] and friends), so the gate sees one contract.
 
 use crate::bridge::{
-    validate_ask, validate_risk, validate_route, AskInput, BridgeError, CandidateScore,
-    RiskThresholds, SemanticAskResponse, SemanticBridgeClient, SemanticRiskResponse,
-    SemanticRouteResponse,
+    check_raw_probabilities, validate_ask, validate_risk, validate_route, AskInput, BridgeError,
+    CandidateScore, RiskThresholds, SemanticAskResponse, SemanticBridgeClient,
+    SemanticRiskResponse, SemanticRouteResponse,
 };
 use crate::error::ServiceError;
 use gen_zero_model::semantic_qwen::{
@@ -70,6 +70,9 @@ fn apply_policy_prior(
     response: &mut SemanticAskResponse,
     enabled: bool,
 ) -> Result<(), BridgeError> {
+    // Before any adjustment, so an explicit raw value must equal `probability`.
+    // A bad one never reaches `get_or_insert` or the prior's `ln()`.
+    check_raw_probabilities(&response.candidates, true)?;
     for candidate in &mut response.candidates {
         candidate
             .raw_probability
@@ -402,6 +405,70 @@ mod causal_prior_tests {
         assert_eq!(response.chosen, "drink it");
         let candidates: Vec<String> = names.iter().map(|n| (*n).to_string()).collect();
         crate::bridge::validate_ask(&response, &candidates).unwrap();
+    }
+
+    /// WebGPT R4 M11: `apply_policy_prior` kept an explicit raw value as is
+    /// and the prior re-ranked on its `ln()`. A bad one is now rejected before
+    /// `get_or_insert`, `ln()` or re-ranking, and is left untouched.
+    #[test]
+    fn invalid_raw_probability_is_rejected_before_the_prior() {
+        let names = ["drink it", "throw it away"];
+        let bad: [[Option<f64>; 2]; 12] = [
+            [Some(2.0), Some(2.0)],
+            [Some(0.8), Some(0.8)],
+            [Some(-0.1), Some(-0.1)],
+            [Some(-0.1), Some(1.1)],
+            [Some(1e100), Some(2.0)],
+            [Some(f64::NAN), Some(0.05)],
+            [Some(f64::INFINITY), Some(0.05)],
+            [Some(f64::NEG_INFINITY), Some(0.05)],
+            [Some(0.95), None],
+            [None, Some(0.05)],
+            // Valid distribution, but not the unadjusted `probability` [0.95, 0.05].
+            [Some(0.05), Some(0.95)],
+            [Some(0.94), Some(0.06)],
+        ];
+        for enabled in [false, true] {
+            for raw in bad {
+                let mut response = raw_response(&names);
+                for (candidate, value) in response.candidates.iter_mut().zip(raw) {
+                    candidate.raw_probability = value;
+                }
+                let before = response.candidates.clone();
+                let err =
+                    apply_policy_prior("The milk is expired", &mut response, enabled).unwrap_err();
+                assert!(
+                    matches!(err, BridgeError::InvalidResponse(_)),
+                    "{enabled} {raw:?}: {err}"
+                );
+                assert_eq!(response.chosen, "drink it", "{enabled} {raw:?}");
+                for (after, before) in response.candidates.iter().zip(&before) {
+                    assert_eq!(after.probability, before.probability);
+                    assert_eq!(
+                        after.raw_probability.map(f64::to_bits),
+                        before.raw_probability.map(f64::to_bits),
+                        "{enabled} {raw:?}: raw_probability was overwritten"
+                    );
+                }
+            }
+        }
+    }
+
+    /// Control: an explicit raw distribution equal to `probability` (the
+    /// native scorer) and an omitted one (the Python bridge) both pass.
+    #[test]
+    fn matching_or_omitted_raw_probability_passes() {
+        let names = ["drink it", "throw it away"];
+        for raw in [[None, None], [Some(0.95), Some(0.05)]] {
+            let mut response = raw_response(&names);
+            for (candidate, value) in response.candidates.iter_mut().zip(raw) {
+                candidate.raw_probability = value;
+            }
+            apply_policy_prior("The milk is expired", &mut response, true).unwrap();
+            assert_eq!(response.chosen, "throw it away");
+            assert_eq!(response.candidates[0].raw_probability, Some(0.95));
+            assert_eq!(response.candidates[1].raw_probability, Some(0.05));
+        }
     }
 
     #[test]

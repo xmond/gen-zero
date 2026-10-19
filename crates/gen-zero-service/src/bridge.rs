@@ -303,6 +303,49 @@ fn check_probabilities(scores: &[CandidateScore], expected: &[String]) -> Result
             "probabilities sum to {sum}"
         )));
     }
+    let unadjusted = scores.iter().all(|c| c.policy_prior_adjustment == 0.0);
+    check_raw_probabilities(scores, unadjusted)
+}
+
+/// Contract of the raw model distribution (`raw_probability`, or
+/// `probability` where a backend omits it): all candidates report it or none
+/// do, each value is in [0, 1], and they sum to 1. With `unadjusted` (no
+/// policy prior has run) an explicit raw value must equal `probability`.
+/// A bad value is rejected, never clamped or renormalized: the causal prior
+/// takes its `ln()` and re-ranks on it.
+pub(crate) fn check_raw_probabilities(
+    scores: &[CandidateScore],
+    unadjusted: bool,
+) -> Result<(), BridgeError> {
+    if scores.iter().any(|s| s.raw_probability.is_some())
+        && scores.iter().any(|s| s.raw_probability.is_none())
+    {
+        return Err(BridgeError::InvalidResponse(
+            "partial raw_probability across candidates".into(),
+        ));
+    }
+    let mut raw_sum = 0.0;
+    for s in scores {
+        let raw = s.raw_probability.unwrap_or(s.probability);
+        if !raw.is_finite() || !(0.0..=1.0).contains(&raw) {
+            return Err(BridgeError::InvalidResponse(format!(
+                "raw_probability {} for '{}' is outside [0, 1]",
+                raw, s.name
+            )));
+        }
+        if unadjusted && s.raw_probability.is_some() && (raw - s.probability).abs() > 1e-6 {
+            return Err(BridgeError::InvalidResponse(format!(
+                "raw_probability {} for '{}' disagrees with unadjusted probability {}",
+                raw, s.name, s.probability
+            )));
+        }
+        raw_sum += raw;
+    }
+    if (raw_sum - 1.0).abs() > 1e-3 {
+        return Err(BridgeError::InvalidResponse(format!(
+            "raw_probabilities sum to {raw_sum}"
+        )));
+    }
     Ok(())
 }
 
@@ -819,6 +862,139 @@ mod tests {
             .await
             .unwrap_err();
         assert!(matches!(err, BridgeError::InvalidResponse(_)), "{err}");
+    }
+
+    /// `probability: [0.99, 0.01]` (chosen "delete") with the given
+    /// `raw_probability` per candidate; `None` omits the field.
+    fn confident_with_raw(raw: [Option<f64>; 2]) -> Value {
+        let p = [0.99, 0.01];
+        let entropy = -(p[0] * f64::ln(p[0]) + p[1] * f64::ln(p[1])) / f64::ln(2.0);
+        let mut body = json!({
+            "chosen": "delete", "chosen_index": 0, "entropy": entropy,
+            "candidates": [
+                {"name": "delete", "log_likelihood": -1.0, "baseline_log_likelihood": -1.0, "pmi": 0.0, "probability": p[0]},
+                {"name": "backup", "log_likelihood": -2.0, "baseline_log_likelihood": -1.0, "pmi": -1.0, "probability": p[1]}
+            ],
+            "scorer": {"id": "stub"}, "embedding_dim": 896, "timing_ms": 1.0
+        });
+        for (index, value) in raw.iter().enumerate() {
+            if let Some(value) = value {
+                body["candidates"][index]["raw_probability"] = json!(value);
+            }
+        }
+        body
+    }
+
+    fn with_raw(raw: [Option<f64>; 2]) -> SemanticAskResponse {
+        let mut response: SemanticAskResponse =
+            serde_json::from_value(confident_with_raw([None, None])).unwrap();
+        for (candidate, value) in response.candidates.iter_mut().zip(raw) {
+            candidate.raw_probability = value;
+        }
+        response
+    }
+
+    /// WebGPT R4 M11: `probability` alone was checked; an explicit invalid
+    /// `raw_probability` passed `validate_ask` and later fed the prior's `ln()`.
+    #[test]
+    fn rejects_invalid_raw_probability() {
+        let names = cands();
+        let bad: [[Option<f64>; 2]; 13] = [
+            [Some(2.0), Some(2.0)],
+            [Some(0.8), Some(0.8)],
+            [Some(-0.1), Some(-0.1)],
+            [Some(-0.1), Some(1.1)],
+            [Some(1e100), Some(2.0)],
+            [Some(f64::NAN), Some(0.01)],
+            [Some(f64::INFINITY), Some(0.01)],
+            [Some(f64::NEG_INFINITY), Some(0.01)],
+            [Some(0.99), None],
+            [None, Some(0.01)],
+            [Some(0.01), Some(0.99)],
+            [Some(0.98), Some(0.02)],
+            [Some(0.99), Some(0.0)],
+        ];
+        for raw in bad {
+            let err = validate_ask(&with_raw(raw), &names).unwrap_err();
+            assert!(
+                matches!(err, BridgeError::InvalidResponse(_)),
+                "{raw:?}: {err}"
+            );
+        }
+        let err = validate_ask(&with_raw([Some(0.99), None]), &names).unwrap_err();
+        assert!(err.to_string().contains("partial raw_probability"), "{err}");
+        let err = validate_ask(&with_raw([Some(0.01), Some(0.99)]), &names).unwrap_err();
+        assert!(err.to_string().contains("disagrees"), "{err}");
+
+        // Omitted or equal to `probability`: the legacy and native contracts.
+        validate_ask(&with_raw([None, None]), &names).unwrap();
+        validate_ask(&with_raw([Some(0.99), Some(0.01)]), &names).unwrap();
+    }
+
+    /// After a policy prior ran, `raw_probability` may differ from
+    /// `probability` but must still be a distribution.
+    #[test]
+    fn adjusted_raw_probability_must_still_be_a_distribution() {
+        let names = cands();
+        let adjusted = |raw: [Option<f64>; 2]| {
+            let mut response = with_raw(raw);
+            response.candidates[1].policy_prior_adjustment = -16.0;
+            response
+        };
+        validate_ask(&adjusted([Some(0.6), Some(0.4)]), &names).unwrap();
+        for raw in [
+            [Some(2.0), Some(2.0)],
+            [Some(0.8), Some(0.8)],
+            [Some(-0.1), Some(1.1)],
+            [Some(f64::NAN), Some(0.5)],
+            [Some(0.6), None],
+        ] {
+            let err = validate_ask(&adjusted(raw), &names).unwrap_err();
+            assert!(
+                matches!(err, BridgeError::InvalidResponse(_)),
+                "{raw:?}: {err}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn remote_rejects_valid_probability_with_invalid_raw_probability() {
+        let c = cands();
+        for raw in [
+            [Some(2.0), Some(2.0)],
+            [Some(0.8), Some(0.8)],
+            [Some(-0.1), Some(-0.1)],
+            [Some(1e100), Some(2.0)],
+            [Some(0.01), Some(0.99)],
+        ] {
+            let (endpoint, hits) = transport_stub(StatusCode::OK, confident_with_raw(raw)).await;
+            let client = SemanticBridgeClient::new(BridgeConfig::new(endpoint)).unwrap();
+            let err = client
+                .semantic_ask(&AskInput {
+                    context: "x",
+                    candidates: &c,
+                    ..Default::default()
+                })
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(err, BridgeError::InvalidResponse(_)),
+                "{raw:?}: {err}"
+            );
+            assert!(err.to_string().contains("raw_probabilit"), "{raw:?}: {err}");
+            assert_eq!(hits.load(Ordering::SeqCst), 1, "{raw:?}");
+        }
+        let (endpoint, _) = transport_stub(StatusCode::OK, confident_with_raw([None, None])).await;
+        let client = SemanticBridgeClient::new(BridgeConfig::new(endpoint)).unwrap();
+        let r = client
+            .semantic_ask(&AskInput {
+                context: "x",
+                candidates: &c,
+                ..Default::default()
+            })
+            .await
+            .unwrap();
+        assert_eq!(r.candidates[0].raw_probability, None);
     }
 
     #[tokio::test]
